@@ -1,0 +1,12 @@
+{
+  "name": "spark-school",
+  "version": "1.0.0",
+  "private": true,
+  "description": "проект «так называемый SPARK» Platform",
+  "scripts": {
+    "dev": "pnpm --filter frontend dev",
+    "build": "pnpm --filter frontend build",
+    "package:deploy": "node scripts/package-deploy.js",
+    "deploy:pack": "node scripts/package-deploy.js"
+  }
+}

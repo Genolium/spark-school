@@ -1,0 +1,279 @@
+"use client";
+
+import React, { useState } from "react";
+import { PromoCode, api } from "@/lib/api";
+import { Tag, Plus, CheckCircle, XCircle, Search, RefreshCw, Copy, Check } from "lucide-react";
+
+interface PromosTableProps {
+  promos: PromoCode[];
+  onRefresh: () => void;
+}
+
+export function PromosTable({ promos, onRefresh }: PromosTableProps) {
+  const [search, setSearch] = useState("");
+  const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // Form states
+  const [newCode, setNewCode] = useState("");
+  const [newOwner, setNewOwner] = useState("");
+  const [newDiscount, setNewDiscount] = useState(5);
+  const [newReward, setNewReward] = useState(1000);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const filtered = promos.filter(
+    (p) =>
+      p.code.toLowerCase().includes(search.toLowerCase()) ||
+      (p.owner_username && p.owner_username.toLowerCase().includes(search.toLowerCase()))
+  );
+
+  const handleCopy = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setCopiedCode(code);
+    setTimeout(() => setCopiedCode(null), 2000);
+  };
+
+  const handleToggle = async (id: number) => {
+    await api.toggleAdminPromoCode(id);
+    onRefresh();
+  };
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCode.trim()) return;
+    setCreating(true);
+    setError(null);
+
+    const res = await api.createAdminPromoCode({
+      code: newCode.trim().toUpperCase(),
+      owner_username: newOwner.trim(),
+      discount_percent: newDiscount,
+      reward_amount: newReward,
+    });
+
+    setCreating(false);
+    if (res.success) {
+      setNewCode("");
+      setNewOwner("");
+      setShowCreateModal(false);
+      onRefresh();
+    } else {
+      setError(res.error || "Не удалось создать промокод");
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Top Bar: Search + Create Button */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 rounded-2xl bg-white/[0.03] border border-white/10">
+        <div className="relative flex-1 max-w-md">
+          <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Поиск по коду или амбассадору..."
+            className="w-full pl-10 pr-4 py-2 text-xs font-mono bg-black/40 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/50"
+          />
+        </div>
+
+        <button
+          onClick={() => setShowCreateModal(true)}
+          className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-mono font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-amber-500/10"
+        >
+          <Plus className="w-4 h-4" />
+          <span>Создать промокод</span>
+        </button>
+      </div>
+
+      {/* Promos Table */}
+      <div className="overflow-x-auto rounded-2xl border border-white/10 bg-black/30">
+        <table className="w-full text-left text-xs font-mono">
+          <thead>
+            <tr className="border-b border-white/10 bg-white/[0.02] text-slate-400">
+              <th className="py-3 px-4">Код скидки</th>
+              <th className="py-3 px-4">Скидка студенту</th>
+              <th className="py-3 px-4">Амбассадор / Партнёр</th>
+              <th className="py-3 px-4">Использований</th>
+              <th className="py-3 px-4">Вознаграждение</th>
+              <th className="py-3 px-4">Статус</th>
+              <th className="py-3 px-4 text-right">Действие</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-white/5 text-slate-300">
+            {filtered.length === 0 ? (
+              <tr>
+                <td colSpan={7} className="py-8 text-center text-slate-500 font-mono">
+                  Промокоды не найдены
+                </td>
+              </tr>
+            ) : (
+              filtered.map((promo) => (
+                <tr key={promo.id} className="hover:bg-white/[0.02] transition-colors">
+                  <td className="py-3.5 px-4">
+                    <div className="flex items-center gap-2">
+                      <span className="font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">
+                        {promo.code}
+                      </span>
+                      <button
+                        onClick={() => handleCopy(promo.code)}
+                        className="text-slate-400 hover:text-white p-1 rounded transition-colors"
+                        title="Скопировать"
+                      >
+                        {copiedCode === promo.code ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+                    </div>
+                  </td>
+                  <td className="py-3.5 px-4 font-bold text-emerald-400">
+                    -{promo.discount_percent || 5}% (345 ₽)
+                  </td>
+                  <td className="py-3.5 px-4">
+                    {promo.owner_username ? (
+                      <span className="text-sky-400">@{promo.owner_username}</span>
+                    ) : (
+                      <span className="text-slate-500">—</span>
+                    )}
+                  </td>
+                  <td className="py-3.5 px-4">
+                    <span className="px-2 py-0.5 rounded-full bg-white/5 border border-white/10 font-bold text-white">
+                      {promo.uses_count}
+                    </span>
+                  </td>
+                  <td className="py-3.5 px-4 text-amber-300">
+                    {promo.reward_amount.toLocaleString("ru-RU")} ₽
+                  </td>
+                  <td className="py-3.5 px-4">
+                    {promo.is_active ? (
+                      <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400 font-bold">
+                        <CheckCircle className="w-3.5 h-3.5" />
+                        <span>Активен</span>
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-[11px] text-slate-500">
+                        <XCircle className="w-3.5 h-3.5" />
+                        <span>Отключен</span>
+                      </span>
+                    )}
+                  </td>
+                  <td className="py-3.5 px-4 text-right">
+                    <button
+                      onClick={() => handleToggle(promo.id)}
+                      className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all border ${
+                        promo.is_active
+                          ? "bg-rose-500/10 text-rose-300 border-rose-500/20 hover:bg-rose-500/20"
+                          : "bg-emerald-500/10 text-emerald-300 border-emerald-500/20 hover:bg-emerald-500/20"
+                      }`}
+                    >
+                      {promo.is_active ? "Деактивировать" : "Активировать"}
+                    </button>
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Modal: Create Promo Code */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-[#12161D] border border-white/20 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+              <div className="flex items-center gap-2">
+                <Tag className="w-4 h-4 text-amber-400" />
+                <h3 className="font-editorial text-lg font-bold text-white">Новый промокод</h3>
+              </div>
+              <button
+                onClick={() => setShowCreateModal(false)}
+                className="text-slate-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+
+            {error && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded-xl text-xs font-mono">
+                {error}
+              </div>
+            )}
+
+            <form onSubmit={handleCreate} className="space-y-4 text-xs font-mono">
+              <div>
+                <label className="block text-slate-400 mb-1">Код промокода (на латинице):</label>
+                <input
+                  type="text"
+                  required
+                  value={newCode}
+                  onChange={(e) => setNewCode(e.target.value.toUpperCase())}
+                  placeholder="НАПРИМЕР: ALEX5 или BESTSTUDENT"
+                  className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-xl text-white font-bold uppercase focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-slate-400 mb-1">Telegram амбассадора / владельца:</label>
+                <input
+                  type="text"
+                  value={newOwner}
+                  onChange={(e) => setNewOwner(e.target.value)}
+                  placeholder="@username партнера"
+                  className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-amber-500"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-slate-400 mb-1">Скидка клиенту (%):</label>
+                  <input
+                    type="number"
+                    min="1"
+                    max="50"
+                    value={newDiscount}
+                    onChange={(e) => setNewDiscount(parseInt(e.target.value) || 5)}
+                    className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-amber-500"
+                  />
+                  <span className="text-[10px] text-emerald-400 mt-1 block">
+                    Цена: {(6900 * (1 - newDiscount / 100)).toFixed(0)} ₽
+                  </span>
+                </div>
+                <div>
+                  <label className="block text-slate-400 mb-1">Выплата партнеру (₽):</label>
+                  <input
+                    type="number"
+                    min="100"
+                    step="50"
+                    value={newReward}
+                    onChange={(e) => setNewReward(parseFloat(e.target.value) || 1000)}
+                    className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowCreateModal(false)}
+                  className="px-4 py-2 rounded-xl text-slate-400 hover:text-white"
+                >
+                  Отмена
+                </button>
+                <button
+                  type="submit"
+                  disabled={creating}
+                  className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold disabled:opacity-50"
+                >
+                  {creating ? "Создание..." : "Создать промокод"}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

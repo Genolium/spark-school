@@ -1,0 +1,458 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --bg-base: #F8FAF9;
+    --bg-surface: #FFFFFF;
+    --text-main: #0F172A;
+    --text-muted: #475569;
+    --emerald-primary: #059669;
+    --emerald-surface: #ECFDF5;
+    --emerald-border: rgba(16, 185, 129, 0.2);
+  }
+
+  .dark {
+    --bg-base: #121316;
+    --bg-surface: #181A20;
+    --text-main: #F8F9FA;
+    --text-muted: #94A3B8;
+    --emerald-primary: #10B981;
+    --emerald-surface: rgba(16, 185, 129, 0.08);
+    --emerald-border: rgba(16, 185, 129, 0.22);
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  html,
+  body,
+  main {
+    background-color: var(--bg-base);
+    color: var(--text-main);
+  }
+
+  body {
+    font-family: var(--font-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+    transition: background-color 0.25s ease, color 0.25s ease;
+  }
+
+  /* Any italic accent across headings and text automatically uses the Serif font (Spectral) */
+  em,
+  i,
+  .italic,
+  h1 .italic,
+  h2 .italic,
+  h3 .italic,
+  h4 .italic {
+    font-family: var(--font-serif), Georgia, serif;
+  }
+
+  ::selection {
+    background-color: rgba(16, 185, 129, 0.25);
+    color: #064E3B;
+  }
+
+  .dark ::selection {
+    background-color: rgba(255, 255, 255, 0.25);
+    color: #FFFFFF;
+  }
+
+  /* Minimal Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: var(--bg-base);
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: rgba(16, 185, 129, 0.25);
+    border-radius: 9999px;
+  }
+
+  .dark ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(16, 185, 129, 0.45);
+  }
+
+  .dark ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.4);
+  }
+}
+
+@layer components {
+  /* ========================================================================= */
+  /* SPATIAL BENTO-GLASS DESIGN SYSTEM (LIGHT & DARK THEMES)                   */
+  /* ========================================================================= */
+
+  /* Detached Floating Navigation Pill */
+  .bento-nav-pill {
+    background: rgba(255, 255, 255, 0.9);
+    backdrop-filter: blur(28px);
+    -webkit-backdrop-filter: blur(28px);
+    border: 1px solid rgba(16, 185, 129, 0.22);
+    box-shadow: 
+      0 16px 40px -8px rgba(16, 185, 129, 0.09),
+      0 2px 10px rgba(0, 0, 0, 0.04);
+    transition: all 0.25s ease;
+  }
+
+  .dark .bento-nav-pill {
+    background: rgba(20, 22, 28, 0.72);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    box-shadow: 
+      0 20px 45px -10px rgba(0, 0, 0, 0.6),
+      inset 0 1px 1px rgba(255, 255, 255, 0.2);
+  }
+
+  /* Master Bento Surface */
+  .bento-card-dark {
+    background: #FFFFFF;
+    border: 1px solid rgba(16, 185, 129, 0.18);
+    border-radius: 20px;
+    box-shadow: 
+      0 12px 35px -8px rgba(16, 185, 129, 0.07),
+      0 2px 10px rgba(0, 0, 0, 0.03);
+    transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease;
+  }
+
+  .bento-card-dark:hover {
+    border-color: rgba(16, 185, 129, 0.38);
+    box-shadow: 
+      0 16px 42px -8px rgba(16, 185, 129, 0.12),
+      0 4px 14px rgba(0, 0, 0, 0.04);
+  }
+
+  .dark .bento-card-dark {
+    background: rgba(24, 26, 32, 0.75);
+    backdrop-filter: blur(28px);
+    -webkit-backdrop-filter: blur(28px);
+    border: 1px solid rgba(16, 185, 129, 0.16);
+    box-shadow: 
+      0 20px 50px -12px rgba(0, 0, 0, 0.5),
+      inset 0 1px 1px rgba(255, 255, 255, 0.1);
+  }
+
+  .dark .bento-card-dark:hover {
+    background: rgba(28, 31, 38, 0.85);
+    border-color: rgba(16, 185, 129, 0.32);
+  }
+
+  /* Spatial Glass Frosted Overlay Card */
+  .bento-card-glass {
+    background: rgba(236, 253, 245, 0.9);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    border-radius: 18px;
+    box-shadow: 0 12px 30px rgba(16, 185, 129, 0.08);
+    color: #064E3B;
+    transition: border-color 0.25s ease, background 0.25s ease;
+  }
+
+  .bento-card-glass:hover {
+    background: rgba(209, 250, 229, 0.95);
+    border-color: rgba(16, 185, 129, 0.4);
+  }
+
+  .dark .bento-card-glass {
+    background: rgba(255, 255, 255, 0.08);
+    backdrop-filter: blur(24px);
+    -webkit-backdrop-filter: blur(24px);
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    color: #FFFFFF;
+    box-shadow: 
+      0 16px 40px rgba(0, 0, 0, 0.3),
+      inset 0 1px 1px rgba(255, 255, 255, 0.2);
+  }
+
+  .dark .bento-card-glass:hover {
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.26);
+  }
+
+  /* Tag Pills & Badges */
+  .bento-pill {
+    border-radius: 9999px;
+    background: rgba(16, 185, 129, 0.08);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    color: #065F46;
+    box-shadow: 0 2px 10px rgba(16, 185, 129, 0.04);
+  }
+
+  .dark .bento-pill {
+    background: rgba(16, 185, 129, 0.1);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    color: #34D399;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+  }
+
+  /* Contextual Data Hotspot Badge */
+  .hotspot-chip {
+    border-radius: 9999px;
+    background: #FFFFFF;
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: #0F172A;
+    box-shadow: 0 10px 25px rgba(16, 185, 129, 0.15);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 0.4rem 0.9rem;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    pointer-events: auto;
+  }
+
+  .dark .hotspot-chip {
+    background: rgba(255, 255, 255, 0.94);
+    border: 1px solid rgba(255, 255, 255, 1);
+    color: #121316;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+  }
+
+  /* High-Contrast Buttons */
+  .btn-primary-mono {
+    border-radius: 9999px;
+    background: #059669;
+    color: #FFFFFF;
+    font-weight: 700;
+    box-shadow: 0 8px 24px rgba(5, 150, 105, 0.28);
+    transition: background-color 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
+  }
+
+  .btn-primary-mono:hover {
+    background: #047857;
+  }
+
+  .dark .btn-primary-mono {
+    background: #059669;
+    color: #FFFFFF;
+    box-shadow: 0 8px 24px rgba(5, 150, 105, 0.35);
+  }
+
+  .dark .btn-primary-mono:hover {
+    background: #10B981;
+  }
+
+  .btn-secondary-frosted {
+    border-radius: 9999px;
+    background: rgba(16, 185, 129, 0.08);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    color: #065F46;
+    font-weight: 600;
+    transition: background-color 0.2s ease, border-color 0.2s ease;
+  }
+
+  .btn-secondary-frosted:hover {
+    background: rgba(16, 185, 129, 0.16);
+    border-color: rgba(16, 185, 129, 0.4);
+  }
+
+  .dark .btn-secondary-frosted {
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.28);
+    color: #34D399;
+  }
+
+  .dark .btn-secondary-frosted:hover {
+    background: rgba(16, 185, 129, 0.2);
+    border-color: rgba(16, 185, 129, 0.45);
+    color: #FFFFFF;
+  }
+
+  .btn-circle-arrow {
+    width: 2.75rem;
+    height: 2.75rem;
+    border-radius: 9999px;
+    background: rgba(16, 185, 129, 0.1);
+    backdrop-filter: blur(16px);
+    border: 1px solid rgba(16, 185, 129, 0.25);
+    color: #059669;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  .btn-circle-arrow:hover {
+    background: #059669;
+    color: #FFFFFF;
+  }
+
+  .dark .btn-circle-arrow {
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.28);
+    color: #10B981;
+  }
+
+  .dark .btn-circle-arrow:hover {
+    background: #059669;
+    color: #FFFFFF;
+  }
+
+  /* Disciplined Status Badges */
+  .tag-neutral {
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    color: #065F46;
+  }
+
+  .dark .tag-neutral {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: #E2E8F0;
+  }
+
+  .tag-lavender,
+  .tag-sky {
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.2);
+    color: #065F46;
+  }
+
+  .dark .tag-lavender,
+  .dark .tag-sky {
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    color: #E2E8F0;
+  }
+
+  .tag-olive {
+    background: rgba(16, 185, 129, 0.12);
+    border: 1px solid rgba(16, 185, 129, 0.3);
+    color: #047857;
+  }
+
+  .dark .tag-olive {
+    background: rgba(16, 185, 129, 0.08);
+    border: 1px solid rgba(16, 185, 129, 0.22);
+    color: #6EE7B7;
+  }
+
+  .tag-amber {
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    color: #B45309;
+  }
+
+  .dark .tag-amber {
+    background: rgba(245, 158, 11, 0.08);
+    border: 1px solid rgba(245, 158, 11, 0.22);
+    color: #FDE68A;
+  }
+
+  /* ========================================================================= */
+  /* LIGHT THEME (WHITE-GREEN) TEXT & ELEMENT STYLING ADAPTATIONS             */
+  /* ========================================================================= */
+
+  /* All main headings outside the dark photo banner in Hero */
+  html:not(.dark) section:not(#hero-canvas) h1:not([class*="keep-white"]),
+  html:not(.dark) section:not(#hero-canvas) h2:not([class*="keep-white"]),
+  html:not(.dark) section:not(#hero-canvas) h3:not([class*="keep-white"]),
+  html:not(.dark) section:not(#hero-canvas) h4:not([class*="keep-white"]),
+  html:not(.dark) section:not(#hero-canvas) .font-editorial {
+    color: #0F172A;
+  }
+
+  /* Distinctive Emerald Accent for Italic Serif Quotes & Headings in Both Themes */
+  html:not(.dark) section:not(#hero-canvas) .font-serif.italic {
+    color: #059669;
+  }
+
+  .dark section:not(#hero-canvas) .font-serif.italic,
+  .dark .font-serif.italic {
+    color: #10B981 !important;
+  }
+
+  /* Bento Pill badge color in light mode */
+  html:not(.dark) section:not(#hero-canvas) .bento-pill {
+    color: #065F46 !important;
+    background: rgba(16, 185, 129, 0.08);
+    border-color: rgba(16, 185, 129, 0.22);
+  }
+
+  /* Body and subtitle text legibility in Light Theme */
+  html:not(.dark) section:not(#hero-canvas) p.text-slate-300,
+  html:not(.dark) section:not(#hero-canvas) div.text-slate-300,
+  html:not(.dark) section:not(#hero-canvas) span.text-slate-300,
+  html:not(.dark) .bento-card-dark .text-slate-300 {
+    color: #334155;
+  }
+
+  html:not(.dark) section:not(#hero-canvas) span.text-slate-400,
+  html:not(.dark) section:not(#hero-canvas) div.text-slate-400,
+  html:not(.dark) section:not(#hero-canvas) p.text-slate-400,
+  html:not(.dark) .bento-card-dark .text-slate-400 {
+    color: #64748B;
+  }
+
+  html:not(.dark) section:not(#hero-canvas) span.text-slate-200,
+  html:not(.dark) section:not(#hero-canvas) div.text-slate-200,
+  html:not(.dark) .bento-card-dark .text-slate-200 {
+    color: #1E293B;
+  }
+
+  /* Text inside bento cards that had text-white */
+  html:not(.dark) .bento-card-dark .text-white:not([class*="btn"]):not([class*="badge"]):not(.keep-white) {
+    color: #0F172A;
+  }
+
+  /* Re-color internal white borders to delicate emerald borders in Light Mode */
+  html:not(.dark) .bento-card-dark .border-white\/5,
+  html:not(.dark) .bento-card-dark .border-white\/10,
+  html:not(.dark) .bento-card-dark .border-white\/15,
+  html:not(.dark) .bento-card-dark .border-white\/20,
+  html:not(.dark) .bento-card-dark .border-white\/30,
+  html:not(.dark) .bento-card-dark .border-white\/40 {
+    border-color: rgba(16, 185, 129, 0.18);
+  }
+
+  /* Re-color internal white tints to soft emerald tints in Light Mode */
+  html:not(.dark) .bento-card-dark .bg-white\/\[0\.04\],
+  html:not(.dark) .bento-card-dark .bg-white\/\[0\.05\],
+  html:not(.dark) .bento-card-dark .bg-white\/\[0\.06\],
+  html:not(.dark) .bento-card-dark .bg-white\/\[0\.07\],
+  html:not(.dark) .bento-card-dark .bg-white\/5,
+  html:not(.dark) .bento-card-dark .bg-white\/10,
+  html:not(.dark) .bento-card-dark .bg-white\/20 {
+    background-color: rgba(16, 185, 129, 0.05);
+  }
+
+  /* Nav Links in Light Mode */
+  html:not(.dark) header nav a.hover\:text-white:hover {
+    color: #059669;
+  }
+
+  html:not(.dark) header nav .text-slate-300 {
+    color: #334155;
+  }
+
+  html:not(.dark) header nav .text-white {
+    color: #0F172A;
+  }
+
+  /* Modal Surface in Light Mode */
+  html:not(.dark) .modal-surface {
+    background: #FFFFFF;
+    border-color: rgba(16, 185, 129, 0.25);
+    color: #0F172A;
+  }
+}

@@ -1,0 +1,39 @@
+# Caddyfile for проект «так называемый SPARK» (Reverse-Proxied Mode)
+
+{
+    admin off
+    auto_https off
+}
+
+# Handles both direct IP queries and reverse-proxied domain traffic from host Nginx
+http://so-called-spark.ru, http://www.so-called-spark.ru, http://sparkprep.ru, :80 {
+    # Block suspicious scanner queries, hidden files, and exploit probes
+    @blocked {
+        path *.env* *.git* /wp-* /phpmyadmin* *.sql /xmlrpc.php /admin.php /.aws*
+    }
+    respond @blocked "Access Denied" 403
+
+    # Limit request payload size to 5MB
+    request_body {
+        max_size 5MB
+    }
+
+    # Reverse proxy API requests to Go Backend
+    handle /api/* {
+        reverse_proxy backend:8080
+    }
+
+    # All frontend pages and static files served by Next.js
+    handle {
+        reverse_proxy frontend:3000
+    }
+
+    encode zstd gzip
+
+    # Modern Security Headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options SAMEORIGIN
+        -Server
+    }
+}
