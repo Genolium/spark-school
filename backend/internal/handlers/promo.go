@@ -1,6 +1,8 @@
 package handlers
 
 import (
+	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 
@@ -10,11 +12,18 @@ import (
 )
 
 type PromoHandler struct {
-	db *gorm.DB
+	db         *gorm.DB
+	redeemFunc func(code string) (*models.PromoCode, error)
 }
 
 func NewPromoHandler(db *gorm.DB) *PromoHandler {
 	return &PromoHandler{db: db}
+}
+
+// WithCustomRedeem sets a custom redemption function (useful for unit testing without a live db).
+func (h *PromoHandler) WithCustomRedeem(fn func(code string) (*models.PromoCode, error)) *PromoHandler {
+	h.redeemFunc = fn
+	return h
 }
 
 type ValidatePromoRequest struct {
@@ -192,4 +201,89 @@ func (h *PromoHandler) ToggleStatus(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, promo)
+}
+
+// RedeemPromoCode atomically redeems a promo code and increments uses_count in a single SQL statement.
+// It eliminates lost updates under concurrent transactions and verifies code existence and active status.
+func RedeemPromoCode(tx *gorm.DB, code string) (*models.PromoCode, error) {
+	cleanCode := strings.ToUpper(strings.TrimSpace(code))
+	if cleanCode == "" {
+		return nil, errors.New("empty promo code")
+	}
+	if tx == nil {
+		return nil, errors.New("database transaction is not initialized")
+	}
+
+	// Atomic SQL increment: eliminates lost updates under concurrent transactions
+	res := tx.Model(&models.PromoCode{}).
+		Where("UPPER(code) = ? AND is_active = ?", cleanCode, true).
+		Update("uses_count", gorm.Expr("uses_count + 1"))
+
+	if res.Error != nil {
+		return nil, fmt.Errorf("failed to increment promo code uses: %w", res.Error)
+	}
+	if res.RowsAffected == 0 {
+		return nil, errors.New("promo code not found or inactive")
+	}
+
+	var updated models.PromoCode
+	if err := tx.Where("UPPER(code) = ?", cleanCode).First(&updated).Error; err != nil {
+		return nil, fmt.Errorf("failed to fetch updated promo code: %w", err)
+	}
+	return &updated, nil
+}
+
+type RedeemPromoRequest struct {
+	Code string `json:"code" binding:"required"`
+}
+
+type RedeemPromoResponse struct {
+	Success         bool    `json:"success"`
+	Code            string  `json:"code"`
+	UsesCount       int     `json:"uses_count"`
+	DiscountPercent int     `json:"discount_percent"`
+	OwnerUsername   string  `json:"owner_username,omitempty"`
+	Message         string  `json:"message,omitempty"`
+}
+
+// Redeem handles public promo code redemption requests atomically.
+// POST /api/v1/promo/redeem
+func (h *PromoHandler) Redeem(c *gin.Context) {
+	var req RedeemPromoRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Поле code обязательно для заполнения"})
+		return
+	}
+
+	cleanCode := strings.ToUpper(strings.TrimSpace(req.Code))
+	if cleanCode == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Поле code обязательно для заполнения"})
+		return
+	}
+
+	var promo *models.PromoCode
+	var err error
+	if h.redeemFunc != nil {
+		promo, err = h.redeemFunc(cleanCode)
+	} else {
+		if h.db == nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "База данных не инициализирована"})
+			return
+		}
+		promo, err = RedeemPromoCode(h.db, cleanCode)
+	}
+
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, RedeemPromoResponse{
+		Success:         true,
+		Code:            promo.Code,
+		UsesCount:       promo.UsesCount,
+		DiscountPercent: promo.DiscountPercent,
+		OwnerUsername:   promo.OwnerUsername,
+		Message:         "Промокод успешно применён!",
+	})
 }

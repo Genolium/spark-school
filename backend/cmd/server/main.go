@@ -119,6 +119,7 @@ func main() {
 
 		// Promo Codes Public API
 		api.POST("/promo/validate", promoHandler.Validate)
+		api.POST("/promo/redeem", promoHandler.Redeem)
 
 		// Admin Public Login (Username + Password -> JWT) with strict brute-force rate limiting (5 req/min)
 		adminLoginLimiter := security.RateLimitMiddleware(5, 1*time.Minute, "Слишком много попыток входа (максимум 5 в минуту). Пожалуйста, подождите 60 секунд.")

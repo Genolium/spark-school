@@ -405,3 +405,38 @@ func TestAdminToggleAccess_DynamicInviteLinkAndRebranding(t *testing.T) {
 	}
 }
 
+func TestAdminToggleAccess_WithPromoCode_Mock(t *testing.T) {
+	cfg := &config.Config{
+		TelegramInviteLink: "https://t.me/+static_fallback",
+	}
+	handler := NewAdminHandler(nil, cfg, nil, nil)
+
+	r := gin.New()
+	r.POST("/admin/users/:id/access", handler.ToggleAccess)
+
+	payload, _ := json.Marshal(map[string]interface{}{
+		"has_access": true,
+		"promo_code": "spark5",
+	})
+	req := httptest.NewRequest("POST", "/admin/users/99/access", bytes.NewReader(payload))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var res map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatalf("failed to decode response: %v", err)
+	}
+
+	if res["has_access"] != true {
+		t.Errorf("expected has_access=true, got %v", res["has_access"])
+	}
+	if res["promo_code"] != "SPARK5" {
+		t.Errorf("expected promo_code=SPARK5, got %v", res["promo_code"])
+	}
+}
+

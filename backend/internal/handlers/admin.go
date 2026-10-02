@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -15,6 +16,7 @@ import (
 	"github.com/spark-school/backend/internal/services"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type AdminHandler struct {
@@ -155,7 +157,7 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 	})
 }
 
-// ToggleAccess updates has_access and processes affiliate commissions on initial activation.
+// ToggleAccess updates has_access, redeems promo codes atomically, and processes affiliate commissions.
 func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 	userIDStr := c.Param("id")
 	userID, err := strconv.ParseUint(userIDStr, 10, 32)
@@ -165,17 +167,20 @@ func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 	}
 
 	var req struct {
-		HasAccess bool `json:"has_access"`
+		HasAccess bool   `json:"has_access"`
+		PromoCode string `json:"promo_code,omitempty"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
 		return
 	}
 
+	cleanPromo := strings.ToUpper(strings.TrimSpace(req.PromoCode))
+
 	// Support mock / unit testing when db is nil
 	if h.db == nil {
+		inviteLink := ""
 		if req.HasAccess {
-			inviteLink := ""
 			if h.cfg != nil {
 				inviteLink = h.cfg.TelegramInviteLink
 			}
@@ -192,32 +197,74 @@ func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 				_ = h.notifyFunc(12345678, msg)
 			}
 		}
-		c.JSON(http.StatusOK, gin.H{
+		resp := gin.H{
 			"message":    "Статус доступа успешно обновлён",
 			"has_access": req.HasAccess,
-		})
+		}
+		if inviteLink != "" {
+			resp["invite_link"] = inviteLink
+		}
+		if cleanPromo != "" {
+			resp["promo_code"] = cleanPromo
+		}
+		c.JSON(http.StatusOK, resp)
 		return
 	}
 
 	var user models.User
-	if err := h.db.First(&user, userID).Error; err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+	var wasActive bool
+	var redeemedPromo *models.PromoCode
+
+	err = h.db.Transaction(func(tx *gorm.DB) error {
+		// Row-level lock via SELECT ... FOR UPDATE to eliminate concurrent access approval races
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).First(&user, userID).Error; err != nil {
+			return err
+		}
+
+		wasActive = user.HasAccess
+		user.HasAccess = req.HasAccess
+		if req.HasAccess && user.AccessGrantedAt == nil {
+			now := time.Now()
+			user.AccessGrantedAt = &now
+		}
+		if err := tx.Save(&user).Error; err != nil {
+			return err
+		}
+
+		// Only redeem promo and distribute commission on initial access activation
+		if req.HasAccess && !wasActive {
+			// 1. Atomic Promo Code Redemption (if provided)
+			if cleanPromo != "" {
+				promo, err := RedeemPromoCode(tx, cleanPromo)
+				if err != nil {
+					return err
+				}
+				redeemedPromo = promo
+			}
+
+			// 2. Affiliate Commission Settlement (inside same transaction)
+			if h.affiliateService != nil {
+				if err := h.affiliateService.ProcessCoursePurchaseTx(tx, user.ID, 6900.0); err != nil {
+					return err
+				}
+			}
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+			return
+		}
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	wasActive := user.HasAccess
-	user.HasAccess = req.HasAccess
-	if req.HasAccess && user.AccessGrantedAt == nil {
-		now := time.Now()
-		user.AccessGrantedAt = &now
-	}
-	h.db.Save(&user)
-
+	// External network operations (invite link generation and notification) occur strictly POST-COMMIT
+	var generatedInviteLink string
 	if req.HasAccess && !wasActive {
-		if h.affiliateService != nil {
-			_ = h.affiliateService.ProcessCoursePurchase(user.ID, 6900.0)
-		}
-
 		if h.notifyFunc != nil && user.TelegramID != 0 {
 			inviteLink := ""
 			if h.cfg != nil {
@@ -231,15 +278,24 @@ func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 			if inviteLink == "" {
 				inviteLink = "https://t.me/+so_called_spark_private"
 			}
+			generatedInviteLink = inviteLink
 			msg := "🎉 Поздравляем! Ваш доступ к закрытому Telegram-каналу и комьюнити проекта «так называемый SPARK» успешно активирован.\n\nСсылка-приглашение в канал: " + inviteLink
 			_ = h.notifyFunc(user.TelegramID, msg)
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	resp := gin.H{
 		"message":    "Статус доступа успешно обновлён",
 		"has_access": user.HasAccess,
-	})
+	}
+	if generatedInviteLink != "" {
+		resp["invite_link"] = generatedInviteLink
+	}
+	if redeemedPromo != nil {
+		resp["promo_code"] = redeemedPromo.Code
+		resp["promo_uses"] = redeemedPromo.UsesCount
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 // ListPayouts returns all affiliate payout requests.

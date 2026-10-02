@@ -223,3 +223,20 @@ func TestBot_CreateOneTimeInviteLink(t *testing.T) {
 		t.Fatal("expected error when context is canceled")
 	}
 }
+
+func TestBot_SendNotification_RateLimitQueue(t *testing.T) {
+	service := NewBotService(&config.Config{}, nil)
+	defer service.Stop()
+
+	// 1. Zero telegram ID returns nil immediately without blocking
+	if err := service.SendNotification(0, "Test message"); err != nil {
+		t.Errorf("expected nil error for zero telegram ID, got %v", err)
+	}
+
+	// 2. Mock send with uninitialized bot should be handled gracefully via queue worker
+	err := service.SendNotification(12345678, "Mock message via queue")
+	if err != nil {
+		t.Errorf("expected nil error for mock notification send, got %v", err)
+	}
+}
+

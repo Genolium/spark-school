@@ -212,6 +212,72 @@
           }
         ]
       ]
+    },
+    "Выдача гайда": {
+      "main": [
+        [
+          {
+            "node": "Drip: Пауза 24ч",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drip: Пауза 24ч": {
+      "main": [
+        [
+          {
+            "node": "Drip: Прогрев 24ч",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drip: Прогрев 24ч": {
+      "main": [
+        [
+          {
+            "node": "Drip: Пауза 48ч",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drip: Пауза 48ч": {
+      "main": [
+        [
+          {
+            "node": "Drip: Прогрев 48ч",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drip: Прогрев 48ч": {
+      "main": [
+        [
+          {
+            "node": "Drip: Пауза 72ч",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Drip: Пауза 72ч": {
+      "main": [
+        [
+          {
+            "node": "Drip: Прогрев 72ч",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
     }
   },
   "nodes": [
@@ -957,6 +1023,105 @@
       "position": [
         0,
         2880
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 24,
+        "unit": "hours"
+      },
+      "id": "drip-wait-24h",
+      "name": "Drip: Пауза 24ч",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        224,
+        192
+      ],
+      "webhookId": "drip-wait-24h"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.proxyUrl }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\\n  \"chat_id\": {{ $json.chatId }},\\n  \"text\": \"👋 Привет, <b>{{ $json.fullName }}</b>!\\n\\nТы изучил структуру победного эссе на 500 слов из гайда? Вот реальный абзац из эссе Ильи, с которого отборочная комиссия поставила максимальный балл:\\n\\n<i>\\\"While classical engineering curricula prioritize theoretical proofs, my focus was building real-world open-source tooling for 12,000 students across 4 universities...\\\"</i>\\n\\nПосмотри, в чём разница с шаблонными сочинениями без конкретики. В акселераторе мы разбираем каждое предложение твоей заявки.\\n\\nГотов начать подготовку?\",\\n  \"parse_mode\": \"HTML\",\\n  \"reply_markup\": {\\n    \"inline_keyboard\": [\\n      [\\n        {\\n          \"text\": \"💳 Забронировать место (от 2 900 ₽)\",\\n          \"callback_data\": \"action_payment\"\\n        }\\n      ],\\n      [\\n        {\\n          \"text\": \"💬 Задать вопрос Илье\",\\n          \"url\": \"https://t.me/ilyan_vas\"\\n        }\\n      ]\\n    ]\\n  }\\n}",
+        "options": {}
+      },
+      "id": "drip-nudge-24h",
+      "name": "Drip: Прогрев 24ч",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        448,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 24,
+        "unit": "hours"
+      },
+      "id": "drip-wait-48h",
+      "name": "Drip: Пауза 48ч",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        672,
+        192
+      ],
+      "webhookId": "drip-wait-48h"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.proxyUrl }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\\n  \"chat_id\": {{ $json.chatId }},\\n  \"text\": \"🔥 <b>На поток SPARK 2027 места тают!</b>\\n\\nИлья проводит личные 45-минутные симуляции Zoom-интервью 1-на-1 только для участников этого потока.\\n\\nАктивирован специальный промокод на скидку 5%: <code>START5</code>\\n\\n• Базовый: 2 900 ₽ ➔ <b>2 755 ₽</b>\\n• Акселератор: 6 900 ₽ ➔ <b>6 555 ₽</b>\\n• VIP: 14 900 ₽ ➔ <b>14 155 ₽</b>\\n\\nДействует ограниченное время:\",\\n  \"parse_mode\": \"HTML\",\\n  \"reply_markup\": {\\n    \"inline_keyboard\": [\\n      [\\n        {\\n          \"text\": \"🎟 Использовать промокод START5\",\\n          \"callback_data\": \"promo_enter\"\\n        }\\n      ],\\n      [\\n        {\\n          \"text\": \"💳 Оплатить тариф\",\\n          \"callback_data\": \"action_payment\"\\n        }\\n      ]\\n    ]\\n  }\\n}",
+        "options": {}
+      },
+      "id": "drip-nudge-48h",
+      "name": "Drip: Прогрев 48ч",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        896,
+        192
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 24,
+        "unit": "hours"
+      },
+      "id": "drip-wait-72h",
+      "name": "Drip: Пауза 72ч",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1120,
+        192
+      ],
+      "webhookId": "drip-wait-72h"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $json.proxyUrl }}/sendMessage",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\\n  \"chat_id\": {{ $json.chatId }},\\n  \"text\": \"💡 <b>Разбор факапа: почему кандидат с идеальным C1 завалил интервью?</b>\\n\\nРеальный кейс: парень свободно говорил по-английски, но растерялся на вопросе <i>\\\"Why this program and why now?\\\"</i>, дав шаблонный ответ из Википедии.\\n\\nАмериканская комиссия ищет не идеальный британский акцент, а <b>контекстные якоря</b> и лидерский потенциал в РФ.\\n\\nВ акселераторе мы отрабатываем 30+ стресс-вопросов до автоматизма. Не упусти свой шанс на грант $20,000!\",\\n  \"parse_mode\": \"HTML\",\\n  \"reply_markup\": {\\n    \"inline_keyboard\": [\\n      [\\n        {\\n          \"text\": \"🚀 Занять место в акселераторе\",\\n          \"callback_data\": \"action_payment\"\\n        }\\n      ],\\n      [\\n        {\\n          \"text\": \"💬 Написать Илье лично\",\\n          \"url\": \"https://t.me/ilyan_vas\"\\n        }\\n      ]\\n    ]\\n  }\\n}",
+        "options": {}
+      },
+      "id": "drip-nudge-72h",
+      "name": "Drip: Прогрев 72ч",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1344,
+        192
       ]
     }
   ],

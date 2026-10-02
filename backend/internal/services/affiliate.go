@@ -56,71 +56,83 @@ func (s *AffiliateService) TrackReferral(userID uint, refCode string) error {
 	return s.db.Create(&ref).Error
 }
 
+// ProcessCoursePurchaseTx calculates 15% and 5% commissions within an existing database transaction.
+func (s *AffiliateService) ProcessCoursePurchaseTx(tx *gorm.DB, buyerID uint, coursePrice float64) error {
+	if tx == nil {
+		return nil
+	}
+
+	// Prevent duplicate commission payouts if access was toggled or retried
+	var existingTx models.ReferralTransaction
+	if err := tx.Where("buyer_id = ?", buyerID).First(&existingTx).Error; err == nil {
+		// Commission already distributed for this buyer
+		return nil
+	}
+
+	var ref models.Referral
+	if err := tx.Where("user_id = ?", buyerID).First(&ref).Error; err != nil {
+		// Organic purchase without referrer
+		return nil
+	}
+
+	// Level 1: 15% Commission (1 035 ₽ on 6 900 ₽ base)
+	if ref.ReferredByID != nil {
+		l1Amount := coursePrice * 0.15
+		tx1 := models.ReferralTransaction{
+			AffiliateID: *ref.ReferredByID,
+			BuyerID:     buyerID,
+			Level:       1,
+			Amount:      l1Amount,
+			CreatedAt:   time.Now(),
+		}
+		if err := tx.Create(&tx1).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Model(&models.AffiliateProfile{}).
+			Where("user_id = ?", *ref.ReferredByID).
+			Updates(map[string]interface{}{
+				"current_balance": gorm.Expr("current_balance + ?", l1Amount),
+				"total_earned":    gorm.Expr("total_earned + ?", l1Amount),
+			}).Error; err != nil {
+			return err
+		}
+	}
+
+	// Level 2: 5% Commission (345 ₽ on 6 900 ₽ base)
+	if ref.ParentReferrerID != nil {
+		l2Amount := coursePrice * 0.05
+		tx2 := models.ReferralTransaction{
+			AffiliateID: *ref.ParentReferrerID,
+			BuyerID:     buyerID,
+			Level:       2,
+			Amount:      l2Amount,
+			CreatedAt:   time.Now(),
+		}
+		if err := tx.Create(&tx2).Error; err != nil {
+			return err
+		}
+
+		if err := tx.Model(&models.AffiliateProfile{}).
+			Where("user_id = ?", *ref.ParentReferrerID).
+			Updates(map[string]interface{}{
+				"current_balance": gorm.Expr("current_balance + ?", l2Amount),
+				"total_earned":    gorm.Expr("total_earned + ?", l2Amount),
+			}).Error; err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // ProcessCoursePurchase calculates 15% and 5% commissions upon student enrollment.
 func (s *AffiliateService) ProcessCoursePurchase(buyerID uint, coursePrice float64) error {
-	return s.db.Transaction(func(tx *gorm.DB) error {
-		// Prevent duplicate commission payouts if access was toggled or retried
-		var existingTx models.ReferralTransaction
-		if err := tx.Where("buyer_id = ?", buyerID).First(&existingTx).Error; err == nil {
-			// Commission already distributed for this buyer
-			return nil
-		}
-
-		var ref models.Referral
-		if err := tx.Where("user_id = ?", buyerID).First(&ref).Error; err != nil {
-			// Organic purchase without referrer
-			return nil
-		}
-
-		// Level 1: 15% Commission (1 035 ₽ on 6 900 ₽ base)
-		if ref.ReferredByID != nil {
-			l1Amount := coursePrice * 0.15
-			tx1 := models.ReferralTransaction{
-				AffiliateID: *ref.ReferredByID,
-				BuyerID:     buyerID,
-				Level:       1,
-				Amount:      l1Amount,
-				CreatedAt:   time.Now(),
-			}
-			if err := tx.Create(&tx1).Error; err != nil {
-				return err
-			}
-
-			if err := tx.Model(&models.AffiliateProfile{}).
-				Where("user_id = ?", *ref.ReferredByID).
-				Updates(map[string]interface{}{
-					"current_balance": gorm.Expr("current_balance + ?", l1Amount),
-					"total_earned":    gorm.Expr("total_earned + ?", l1Amount),
-				}).Error; err != nil {
-				return err
-			}
-		}
-
-		// Level 2: 5% Commission (345 ₽ on 6 900 ₽ base)
-		if ref.ParentReferrerID != nil {
-			l2Amount := coursePrice * 0.05
-			tx2 := models.ReferralTransaction{
-				AffiliateID: *ref.ParentReferrerID,
-				BuyerID:     buyerID,
-				Level:       2,
-				Amount:      l2Amount,
-				CreatedAt:   time.Now(),
-			}
-			if err := tx.Create(&tx2).Error; err != nil {
-				return err
-			}
-
-			if err := tx.Model(&models.AffiliateProfile{}).
-				Where("user_id = ?", *ref.ParentReferrerID).
-				Updates(map[string]interface{}{
-					"current_balance": gorm.Expr("current_balance + ?", l2Amount),
-					"total_earned":    gorm.Expr("total_earned + ?", l2Amount),
-				}).Error; err != nil {
-				return err
-			}
-		}
-
+	if s.db == nil {
 		return nil
+	}
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		return s.ProcessCoursePurchaseTx(tx, buyerID, coursePrice)
 	})
 }
 

@@ -16,34 +16,95 @@ import (
 	"gorm.io/gorm"
 )
 
+type queuedNotification struct {
+	telegramID int64
+	message    string
+	respChan   chan error
+}
+
 type BotService struct {
 	bot              *telego.Bot
 	db               *gorm.DB
 	cfg              *config.Config
 	affiliateService *services.AffiliateService
+	notifyQueue      chan queuedNotification
+	quitChan         chan struct{}
 }
 
 func NewBotService(cfg *config.Config, db *gorm.DB) *BotService {
 	affService := services.NewAffiliateService(db)
-	if cfg.TelegramBotToken == "" {
+	s := &BotService{
+		db:               db,
+		cfg:              cfg,
+		affiliateService: affService,
+		notifyQueue:      make(chan queuedNotification, 500),
+		quitChan:         make(chan struct{}),
+	}
+
+	if cfg.TelegramBotToken != "" {
+		var botOpts []telego.BotOption
+		botOpts = append(botOpts, telego.WithDefaultLogger(false, true))
+		if cfg.TelegramAPIServer != "" {
+			botOpts = append(botOpts, telego.WithAPIServer(cfg.TelegramAPIServer))
+			log.Printf("Telegram Bot initialized with custom API server: %s", cfg.TelegramAPIServer)
+		}
+
+		b, err := telego.NewBot(cfg.TelegramBotToken, botOpts...)
+		if err != nil {
+			log.Printf("Failed to initialize Telego bot: %v. Running in disabled mode.", err)
+		} else {
+			s.bot = b
+		}
+	} else {
 		log.Println("TELEGRAM_BOT_TOKEN not provided. Bot service is running in mock/dry-run mode.")
-		return &BotService{bot: nil, db: db, cfg: cfg, affiliateService: affService}
 	}
 
-	var botOpts []telego.BotOption
-	botOpts = append(botOpts, telego.WithDefaultLogger(false, true))
-	if cfg.TelegramAPIServer != "" {
-		botOpts = append(botOpts, telego.WithAPIServer(cfg.TelegramAPIServer))
-		log.Printf("Telegram Bot initialized with custom API server: %s", cfg.TelegramAPIServer)
-	}
+	// Start rate-limited outbound message worker
+	go s.startQueueWorker()
 
-	b, err := telego.NewBot(cfg.TelegramBotToken, botOpts...)
-	if err != nil {
-		log.Printf("Failed to initialize Telego bot: %v. Running in disabled mode.", err)
-		return &BotService{bot: nil, db: db, cfg: cfg, affiliateService: affService}
-	}
+	return s
+}
 
-	return &BotService{bot: b, db: db, cfg: cfg, affiliateService: affService}
+// startQueueWorker drains the outbound message queue with a 35ms rate limit (~28 msgs/sec max)
+// to prevent Telegram API HTTP 429 Too Many Requests errors.
+func (s *BotService) startQueueWorker() {
+	ticker := time.NewTicker(35 * time.Millisecond)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-s.quitChan:
+			return
+		case item, ok := <-s.notifyQueue:
+			if !ok {
+				return
+			}
+			<-ticker.C
+
+			var err error
+			if s.bot != nil && item.telegramID != 0 {
+				chatID := tu.ID(item.telegramID)
+				m := tu.Message(chatID, item.message)
+				_, err = s.bot.SendMessage(m)
+			} else if item.telegramID != 0 {
+				log.Printf("[Bot Notification Mock] to %d: %s", item.telegramID, item.message)
+			}
+
+			if item.respChan != nil {
+				item.respChan <- err
+			}
+		}
+	}
+}
+
+// Stop gracefully stops the outbound queue worker.
+func (s *BotService) Stop() {
+	select {
+	case <-s.quitChan:
+		// already closed
+	default:
+		close(s.quitChan)
+	}
 }
 
 // Start launches the bot polling worker.
@@ -376,9 +437,38 @@ func (s *BotService) handleWithdraw(chatID telego.ChatID, from *telego.User) {
 	}
 }
 
-// SendNotification sends a direct message to a user by Telegram ID.
+// SendNotification queues an outbound direct message through the rate-limited worker.
 func (s *BotService) SendNotification(telegramID int64, message string) error {
-	if s.bot == nil || telegramID == 0 {
+	if telegramID == 0 {
+		return nil
+	}
+
+	// If queue is initialized, route message through rate limiter
+	if s.notifyQueue != nil {
+		respChan := make(chan error, 1)
+		item := queuedNotification{
+			telegramID: telegramID,
+			message:    message,
+			respChan:   respChan,
+		}
+
+		select {
+		case s.notifyQueue <- item:
+			// Wait for worker result with reasonable timeout
+			select {
+			case err := <-respChan:
+				return err
+			case <-time.After(3 * time.Second):
+				// Return nil after enqueue to avoid blocking caller indefinitely during massive bursts
+				return nil
+			}
+		default:
+			// If queue buffer is full, fallback to direct send or log
+			log.Printf("[Bot Rate Limiter] Queue buffer full, sending directly to %d", telegramID)
+		}
+	}
+
+	if s.bot == nil {
 		log.Printf("[Bot Notification Mock] to %d: %s", telegramID, message)
 		return nil
 	}
