@@ -85,7 +85,7 @@ export default function PrivacyPage() {
                 1.1. Настоящая Политика конфиденциальности определяет порядок обработки и защиты персональных данных пользователей сайта <code className="text-emerald-700 dark:text-emerald-300 font-mono bg-emerald-500/10 dark:bg-white/10 px-1.5 py-0.5 rounded">so-called-spark.ru</code> (далее — «Сайт») и участников проекта «так называемый SPARK».
               </p>
               <p>
-                1.2. Оператором персональных данных является физическое лицо, применяющее специальный налоговый режим НПД: <strong className="text-slate-900 dark:text-white">Иль О. В. (так называемый Иль)</strong> (ИНН: 780739313219), email: <code className="text-emerald-700 dark:text-emerald-300 font-mono bg-emerald-500/10 dark:bg-white/10 px-1.5 py-0.5 rounded">vas.ilyan@icloud.com</code>.
+                1.2. Оператором персональных данных является физическое лицо, применяющее специальный налоговый режим НПД: <strong className="text-slate-900 dark:text-white">Васюнин Илья Олегович</strong> (ИНН: 780739313219), email: <code className="text-emerald-700 dark:text-emerald-300 font-mono bg-emerald-500/10 dark:bg-white/10 px-1.5 py-0.5 rounded">vas.ilyan@icloud.com</code>.
               </p>
               <p>
                 1.3. Использование функционала Сайта, отправка заявок или оплата услуг означает безоговорочное согласие Пользователя с настоящей Политикой и условиями обработки его персональных данных.
@@ -192,7 +192,7 @@ export default function PrivacyPage() {
               <span className="text-emerald-600 dark:text-emerald-400 font-mono text-sm">7.</span> Контакты Оператора
             </h2>
             <div className="text-xs sm:text-sm font-mono text-slate-700 dark:text-slate-300 space-y-2 bg-slate-500/5 dark:bg-white/5 p-4 rounded-2xl border border-emerald-500/15 dark:border-white/10">
-              <div><strong className="text-slate-900 dark:text-white">Оператор:</strong> Самозанятый Иль О. В. (так называемый Иль)</div>
+              <div><strong className="text-slate-900 dark:text-white">Оператор:</strong> Самозанятый Васюнин Илья Олегович</div>
               <div><strong className="text-slate-900 dark:text-white">ИНН:</strong> 780739313219</div>
               <div><strong className="text-slate-900 dark:text-white">Email:</strong> vas.ilyan@icloud.com</div>
               <div><strong className="text-slate-900 dark:text-white">Telegram:</strong> @ilyan_vas</div>

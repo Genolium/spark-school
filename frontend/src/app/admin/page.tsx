@@ -106,13 +106,13 @@ export default function AdminPage() {
     <main className="min-h-screen bg-[var(--bg-base)] text-[var(--text-main)] relative selection:bg-emerald-500/20 selection:text-emerald-900 dark:selection:bg-white/20 dark:selection:text-white transition-colors duration-300">
       <Header />
 
-      <div className="max-w-[1520px] mx-auto px-4 sm:px-6 pt-28 pb-20">
+      <div className="max-w-[1520px] mx-auto px-4 sm:px-6 pt-36 pb-20">
         {!unlocked ? (
           <AdminLogin onUnlock={handleUnlock} />
         ) : (
           <div>
             {/* Header / Admin Navigation Bar */}
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-6 rounded-[32px] bento-card-dark border border-white/20 mb-8">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-6 rounded-[32px] bg-slate-900 text-white dark:bg-black/60 dark:border-white/20 border border-slate-800 shadow-xl mb-8">
               <div>
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold border border-amber-500/30">
@@ -128,7 +128,7 @@ export default function AdminPage() {
                       </span>
                     </div>
                     <p className="text-xs font-mono text-slate-400 mt-0.5">
-                      Управление студентами и выплаты партнёрам • Куратор: так называемый Иль
+                      Управление студентами и промокоды • Куратор: Илья Васюнин
                     </p>
                   </div>
                 </div>
@@ -156,18 +156,18 @@ export default function AdminPage() {
             </div>
 
             {/* Navigation Tabs */}
-            <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-white/[0.04] border border-white/10 mb-8 max-w-fit overflow-x-auto">
+            <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-slate-200/80 dark:bg-white/[0.04] border border-slate-300 dark:border-white/10 mb-8 max-w-fit overflow-x-auto shadow-sm">
               <button
                 onClick={() => setActiveTab("students")}
                 className={`px-5 py-2.5 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
                   activeTab === "students"
                     ? "bg-amber-500 text-black shadow-lg"
-                    : "text-slate-400 hover:text-white hover:bg-white/5"
+                    : "text-slate-700 dark:text-slate-300 hover:text-black dark:hover:text-white hover:bg-slate-300/70 dark:hover:bg-white/10"
                 }`}
               >
                 <Users className="w-4 h-4" />
                 <span>Студенты и доступы</span>
-                <span className="px-1.5 py-0.2 rounded bg-black/20 text-[10px]">
+                <span className="px-1.5 py-0.2 rounded bg-black/10 dark:bg-black/20 text-[10px]">
                   {students.length}
                 </span>
               </button>
@@ -177,12 +177,12 @@ export default function AdminPage() {
                 className={`px-5 py-2.5 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
                   activeTab === "promos"
                     ? "bg-amber-500 text-black shadow-lg"
-                    : "text-slate-400 hover:text-white hover:bg-white/5"
+                    : "text-slate-700 dark:text-slate-300 hover:text-black dark:hover:text-white hover:bg-slate-300/70 dark:hover:bg-white/10"
                 }`}
               >
                 <Tag className="w-4 h-4" />
                 <span>Промокоды (-5%)</span>
-                <span className="px-1.5 py-0.2 rounded bg-black/20 text-[10px]">
+                <span className="px-1.5 py-0.2 rounded bg-black/10 dark:bg-black/20 text-[10px]">
                   {promos.length}
                 </span>
               </button>

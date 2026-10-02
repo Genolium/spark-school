@@ -66,7 +66,7 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
   return (
     <div className="space-y-6">
       {/* Top Bar: Search + Create Button */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 rounded-2xl bg-white/[0.03] border border-white/10">
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 p-4 rounded-2xl bg-white/70 dark:bg-white/[0.03] border border-slate-200 dark:border-white/10 shadow-sm">
         <div className="relative flex-1 max-w-md">
           <Search className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
@@ -74,13 +74,13 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Поиск по коду или амбассадору..."
-            className="w-full pl-10 pr-4 py-2 text-xs font-mono bg-black/40 border border-white/10 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-amber-500/50"
+            className="w-full pl-10 pr-4 py-2 text-xs font-mono bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 focus:outline-none focus:border-amber-500"
           />
         </div>
 
         <button
           onClick={() => setShowCreateModal(true)}
-          className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-mono font-bold flex items-center justify-center gap-2 transition-all shadow-lg shadow-amber-500/10"
+          className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-mono font-bold flex items-center justify-center gap-2 transition-all shadow-md active:scale-95"
         >
           <Plus className="w-4 h-4" />
           <span>Создать промокод</span>
@@ -88,10 +88,10 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
       </div>
 
       {/* Promos Table */}
-      <div className="overflow-x-auto rounded-2xl border border-white/10 bg-black/30">
+      <div className="overflow-x-auto rounded-2xl border border-slate-200 dark:border-white/10 bg-white dark:bg-black/30 shadow-sm">
         <table className="w-full text-left text-xs font-mono">
           <thead>
-            <tr className="border-b border-white/10 bg-white/[0.02] text-slate-400">
+            <tr className="border-b border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/[0.02] text-slate-600 dark:text-slate-400 font-semibold">
               <th className="py-3 px-4">Код скидки</th>
               <th className="py-3 px-4">Скидка студенту</th>
               <th className="py-3 px-4">Амбассадор / Партнёр</th>
@@ -101,7 +101,7 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
               <th className="py-3 px-4 text-right">Действие</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/5 text-slate-300">
+          <tbody className="divide-y divide-slate-100 dark:divide-white/5 text-slate-800 dark:text-slate-300">
             {filtered.length === 0 ? (
               <tr>
                 <td colSpan={7} className="py-8 text-center text-slate-500 font-mono">
@@ -110,51 +110,51 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
               </tr>
             ) : (
               filtered.map((promo) => (
-                <tr key={promo.id} className="hover:bg-white/[0.02] transition-colors">
+                <tr key={promo.id} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
                   <td className="py-3.5 px-4">
                     <div className="flex items-center gap-2">
-                      <span className="font-bold text-amber-400 bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded">
+                      <span className="font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/25 px-2 py-0.5 rounded">
                         {promo.code}
                       </span>
                       <button
                         onClick={() => handleCopy(promo.code)}
-                        className="text-slate-400 hover:text-white p-1 rounded transition-colors"
+                        className="text-slate-400 hover:text-slate-700 dark:hover:text-white p-1 rounded transition-colors"
                         title="Скопировать"
                       >
                         {copiedCode === promo.code ? (
-                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <Check className="w-3.5 h-3.5 text-emerald-500" />
                         ) : (
                           <Copy className="w-3.5 h-3.5" />
                         )}
                       </button>
                     </div>
                   </td>
-                  <td className="py-3.5 px-4 font-bold text-emerald-400">
+                  <td className="py-3.5 px-4 font-bold text-emerald-600 dark:text-emerald-400">
                     -{promo.discount_percent || 5}% (345 ₽)
                   </td>
                   <td className="py-3.5 px-4">
                     {promo.owner_username ? (
-                      <span className="text-sky-400">@{promo.owner_username}</span>
+                      <span className="text-sky-600 dark:text-sky-400 font-medium">@{promo.owner_username}</span>
                     ) : (
-                      <span className="text-slate-500">—</span>
+                      <span className="text-slate-400">—</span>
                     )}
                   </td>
                   <td className="py-3.5 px-4">
-                    <span className="px-2 py-0.5 rounded-full bg-white/5 border border-white/10 font-bold text-white">
+                    <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 font-bold text-slate-800 dark:text-white">
                       {promo.uses_count}
                     </span>
                   </td>
-                  <td className="py-3.5 px-4 text-amber-300">
+                  <td className="py-3.5 px-4 text-amber-700 dark:text-amber-300 font-semibold">
                     {promo.reward_amount.toLocaleString("ru-RU")} ₽
                   </td>
                   <td className="py-3.5 px-4">
                     {promo.is_active ? (
-                      <span className="inline-flex items-center gap-1 text-[11px] text-emerald-400 font-bold">
+                      <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400 font-bold">
                         <CheckCircle className="w-3.5 h-3.5" />
                         <span>Активен</span>
                       </span>
                     ) : (
-                      <span className="inline-flex items-center gap-1 text-[11px] text-slate-500">
+                      <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 dark:text-slate-500">
                         <XCircle className="w-3.5 h-3.5" />
                         <span>Отключен</span>
                       </span>
@@ -165,8 +165,8 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
                       onClick={() => handleToggle(promo.id)}
                       className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all border ${
                         promo.is_active
-                          ? "bg-rose-500/10 text-rose-300 border-rose-500/20 hover:bg-rose-500/20"
-                          : "bg-emerald-500/10 text-emerald-300 border-emerald-500/20 hover:bg-emerald-500/20"
+                          ? "bg-rose-500/10 text-rose-600 dark:text-rose-300 border-rose-500/20 hover:bg-rose-500/20"
+                          : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border-emerald-500/20 hover:bg-emerald-500/20"
                       }`}
                     >
                       {promo.is_active ? "Деактивировать" : "Активировать"}
@@ -181,75 +181,75 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
 
       {/* Modal: Create Promo Code */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
-          <div className="bg-[#12161D] border border-white/20 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-white/10 pb-3">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white dark:bg-[#12161D] border border-slate-200 dark:border-white/20 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-slate-900 dark:text-white">
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-3">
               <div className="flex items-center gap-2">
-                <Tag className="w-4 h-4 text-amber-400" />
-                <h3 className="font-editorial text-lg font-bold text-white">Новый промокод</h3>
+                <Tag className="w-4 h-4 text-amber-500" />
+                <h3 className="font-editorial text-lg font-bold text-slate-900 dark:text-white">Новый промокод</h3>
               </div>
               <button
                 onClick={() => setShowCreateModal(false)}
-                className="text-slate-400 hover:text-white"
+                className="text-slate-400 hover:text-slate-700 dark:hover:text-white"
               >
                 ✕
               </button>
             </div>
 
             {error && (
-              <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-300 rounded-xl text-xs font-mono">
+              <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-300 rounded-xl text-xs font-mono">
                 {error}
               </div>
             )}
 
             <form onSubmit={handleCreate} className="space-y-4 text-xs font-mono">
               <div>
-                <label className="block text-slate-400 mb-1">Код промокода (на латинице):</label>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1">Код промокода (на латинице):</label>
                 <input
                   type="text"
                   required
                   value={newCode}
                   onChange={(e) => setNewCode(e.target.value.toUpperCase())}
                   placeholder="НАПРИМЕР: ALEX5 или BESTSTUDENT"
-                  className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-xl text-white font-bold uppercase focus:outline-none focus:border-amber-500"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-xl text-slate-900 dark:text-white font-bold uppercase focus:outline-none focus:border-amber-500"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-400 mb-1">Telegram амбассадора / владельца:</label>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1">Telegram амбассадора / владельца:</label>
                 <input
                   type="text"
                   value={newOwner}
                   onChange={(e) => setNewOwner(e.target.value)}
                   placeholder="@username партнера"
-                  className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-amber-500"
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-slate-400 mb-1">Скидка клиенту (%):</label>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1">Скидка клиенту (%):</label>
                   <input
                     type="number"
                     min="1"
                     max="50"
                     value={newDiscount}
                     onChange={(e) => setNewDiscount(parseInt(e.target.value) || 5)}
-                    className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-amber-500"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
                   />
-                  <span className="text-[10px] text-emerald-400 mt-1 block">
+                  <span className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 block">
                     Цена: {(6900 * (1 - newDiscount / 100)).toFixed(0)} ₽
                   </span>
                 </div>
                 <div>
-                  <label className="block text-slate-400 mb-1">Выплата партнеру (₽):</label>
+                  <label className="block text-slate-600 dark:text-slate-400 mb-1">Выплата партнеру (₽):</label>
                   <input
                     type="number"
                     min="100"
                     step="50"
                     value={newReward}
                     onChange={(e) => setNewReward(parseFloat(e.target.value) || 1000)}
-                    className="w-full px-3 py-2 bg-black/50 border border-white/10 rounded-xl text-white focus:outline-none focus:border-amber-500"
+                    className="w-full px-3 py-2 bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
                   />
                 </div>
               </div>
@@ -258,7 +258,7 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
                 <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
-                  className="px-4 py-2 rounded-xl text-slate-400 hover:text-white"
+                  className="px-4 py-2 rounded-xl text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-white"
                 >
                   Отмена
                 </button>

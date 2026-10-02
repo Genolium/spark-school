@@ -9,9 +9,10 @@ import { api, PlacesStats } from "@/lib/api";
 interface HeroProps {
   onOpenPayment?: () => void;
   onOpenLeadMagnet?: () => void;
+  onOpenChances?: () => void;
 }
 
-export function Hero({ onOpenPayment, onOpenLeadMagnet }: HeroProps) {
+export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroProps) {
   const [places, setPlaces] = useState<PlacesStats>({
     total_capacity: 25,
     active_students: 16,
@@ -75,7 +76,7 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet }: HeroProps) {
             className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-black/50 hover:bg-black/60 backdrop-blur-xl border border-white/25 text-xs font-mono text-white shadow-lg transition-all"
           >
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-semibold text-white">Набор в проект «так называемый SPARK» 2027 открыт</span>
+            <span className="font-semibold text-white">Набор на обучение открыт</span>
             <span className="text-white/40">•</span>
             <span className="text-slate-200">Старт заявочной кампании: Октябрь 2026</span>
           </motion.div>
@@ -113,7 +114,7 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet }: HeroProps) {
 
               {/* Subtitle */}
               <p className="mt-6 text-base sm:text-lg text-white max-w-2xl leading-relaxed font-medium drop-shadow-[0_2px_10px_rgba(0,0,0,0.7)]">
-                Практический проект от финалиста программы SPARK 2026 так называемого Иля. Разборы победных заявок, шаблоны документов, персональная 45-минутная симуляция интервью в Zoom и закрытые инсайды отбора.
+                Практический проект от финалиста программы SPARK 2026. Разборы победных заявок, шаблоны документов, персональная 45-минутная симуляция интервью в Zoom и закрытые инсайды отбора.
               </p>
 
               {/* High-Contrast Action Buttons */}
@@ -126,12 +127,13 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet }: HeroProps) {
                   <ArrowUpRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 stroke-[2.5]" />
                 </a>
 
-                <a
-                  href="/#calculator"
-                  className="px-7 py-4 rounded-full text-xs sm:text-sm flex items-center justify-center gap-2.5 active:scale-95 transition-all font-semibold bg-white/20 hover:bg-white/30 text-white border border-white/35 backdrop-blur-xl shadow-xl group"
+                <button
+                  type="button"
+                  onClick={onOpenChances}
+                  className="px-7 py-4 rounded-full text-xs sm:text-sm flex items-center justify-center gap-2.5 active:scale-95 transition-all font-semibold bg-white/20 hover:bg-white/30 text-white border border-white/35 backdrop-blur-xl shadow-xl group cursor-pointer"
                 >
                   <span>Рассчитать шансы</span>
-                </a>
+                </button>
               </div>
 
               {/* Trust Indicators with live database spots count */}

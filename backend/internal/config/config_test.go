@@ -14,8 +14,8 @@ func TestConfigLoadDefaults(t *testing.T) {
 	if cfg.Port != "8080" {
 		t.Errorf("expected default port 8080, got %s", cfg.Port)
 	}
-	if cfg.TelegramInviteLink != "https://t.me/+spark_prep_private" {
-		t.Errorf("expected default invite link https://t.me/+spark_prep_private, got %s", cfg.TelegramInviteLink)
+	if cfg.TelegramInviteLink != "" {
+		t.Errorf("expected empty default invite link, got %s", cfg.TelegramInviteLink)
 	}
 }
 

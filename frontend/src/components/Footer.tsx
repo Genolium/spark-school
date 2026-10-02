@@ -130,7 +130,7 @@ export function Footer() {
             Юридическая информация
           </div>
           <div className="text-xs font-doc text-slate-600 dark:text-slate-400 space-y-1.5 mb-6">
-            <div>Самозанятый Иль О. В. (так называемый Иль)</div>
+            <div>Самозанятый Васюнин Илья Олегович</div>
             <div>ИНН: 780739313219</div>
             <div>Email поддержки: vas.ilyan@icloud.com</div>
           </div>

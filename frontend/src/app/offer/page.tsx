@@ -72,7 +72,7 @@ export default function OfferPage() {
             </h2>
             <div className="space-y-3 text-xs sm:text-sm text-slate-600 dark:text-slate-300">
               <p>
-                1.1. Настоящий документ представляет собой официальное предложение (публичную оферту в соответствии с п. 2 ст. 437 Гражданского кодекса Российской Федерации) физического лица, применяющего специальный налоговый режим «Налог на профессиональный доход» — <strong className="text-slate-900 dark:text-white">Иль О. В. (так называемый Иль)</strong> (ИНН: 780739313219), именуемого в дальнейшем «<strong className="text-slate-900 dark:text-white">Исполнитель</strong>».
+                1.1. Настоящий документ представляет собой официальное предложение (публичную оферту в соответствии с п. 2 ст. 437 Гражданского кодекса Российской Федерации) физического лица, применяющего специальный налоговый режим «Налог на профессиональный доход» — <strong className="text-slate-900 dark:text-white">Васюнина Ильи Олеговича</strong> (ИНН: 780739313219), именуемого в дальнейшем «<strong className="text-slate-900 dark:text-white">Исполнитель</strong>».
               </p>
               <p>
                 1.2. Оферта адресована любому дееспособному физическому лицу (гражданину), именуемому в дальнейшем «<strong className="text-slate-900 dark:text-white">Заказчик</strong>», выразившему готовность воспользоваться услугами Исполнителя на условиях настоящего Договора.
@@ -100,10 +100,10 @@ export default function OfferPage() {
                   <strong className="text-slate-900 dark:text-white">Тариф «Базовый» (2 900 ₽):</strong> бессрочный доступ в закрытый Telegram-канал со всеми обучающими материалами, видеоразборами и апдейтами отбора; шаблоны Google XYZ резюме и победные структуры эссе на 500 слов; доступ в закрытый Telegram-чат участников потока.
                 </li>
                 <li>
-                  <strong className="text-slate-900 dark:text-white">Тариф «Акселератор» (6 900 ₽):</strong> всё из тарифа «Базовый» + персональный аудит материалов (эссе, резюме, видеовизитка) + одна персональная 45-минутная онлайн-симуляция собеседования (мок-интервью) в Zoom с так называемым Илем + пошаговый визовый гайд J-1.
+                  <strong className="text-slate-900 dark:text-white">Тариф «Акселератор» (6 900 ₽):</strong> всё из тарифа «Базовый» + персональный аудит материалов (эссе, резюме, видеовизитка) + одна персональная 45-минутная онлайн-симуляция собеседования (мок-интервью) в Zoom с финалистом программы SPARK 2026 + пошаговый визовый гайд J-1.
                 </li>
                 <li>
-                  <strong className="text-slate-900 dark:text-white">Тариф «VIP» (14 900 ₽):</strong> всё из тарифа «Акселератор» + 3 индивидуальных Zoom-симуляции интервью с детальным разбором + приоритетный личный чат с так называемым Илем до вылета в США + персональный контроль всех дедлайнов и вычитка всех полей заявки + помощь с подбором курсов и адаптацией на кампусе.
+                  <strong className="text-slate-900 dark:text-white">Тариф «VIP» (14 900 ₽):</strong> всё из тарифа «Акселератор» + 3 индивидуальных Zoom-симуляции интервью с детальным разбором + приоритетный личный чат с финалистом SPARK 2026 до вылета в США + персональный контроль всех дедлайнов и вычитка всех полей заявки + помощь с подбором курсов и адаптацией на кампусе.
                 </li>
               </ul>
             </div>
@@ -209,7 +209,7 @@ export default function OfferPage() {
               <span className="text-amber-600 dark:text-amber-400 font-mono text-sm">8.</span> Реквизиты и контакты Исполнителя
             </h2>
             <div className="text-xs sm:text-sm font-mono text-slate-700 dark:text-slate-300 space-y-2 bg-slate-500/5 dark:bg-white/5 p-4 rounded-2xl border border-emerald-500/15 dark:border-white/10">
-              <div><strong className="text-slate-900 dark:text-white">Исполнитель:</strong> Самозанятый Иль О. В. (так называемый Иль)</div>
+              <div><strong className="text-slate-900 dark:text-white">Исполнитель:</strong> Самозанятый Васюнин Илья Олегович</div>
               <div><strong className="text-slate-900 dark:text-white">ИНН:</strong> 780739313219</div>
               <div><strong className="text-slate-900 dark:text-white">Режим налогообложения:</strong> Налог на профессиональный доход (НПД)</div>
               <div><strong className="text-slate-900 dark:text-white">Email для обращений:</strong> vas.ilyan@icloud.com</div>

@@ -80,7 +80,7 @@ func (h *AdminHandler) Login(c *gin.Context) {
 		ID:         1,
 		TelegramID: h.cfg.AdminTelegramID,
 		Username:   h.cfg.AdminUsername,
-		FirstName:  "так называемый Иль",
+		FirstName:  "Васюнин Илья",
 		LastName:   "",
 		Role:       "admin",
 		HasAccess:  true,
@@ -103,10 +103,10 @@ func (h *AdminHandler) Login(c *gin.Context) {
 // GetStats returns revenue, enrollments, and conversion metrics for the admin dashboard.
 func (h *AdminHandler) GetStats(c *gin.Context) {
 	var totalUsers int64
-	h.db.Model(&models.User{}).Count(&totalUsers)
+	h.db.Model(&models.User{}).Where("role != ?", "admin").Count(&totalUsers)
 
 	var activeStudents int64
-	h.db.Model(&models.User{}).Where("has_access = true").Count(&activeStudents)
+	h.db.Model(&models.User{}).Where("has_access = true AND role != ?", "admin").Count(&activeStudents)
 
 	var pendingPayoutsCount int64
 	h.db.Model(&models.PayoutRequest{}).Where("status = 'pending'").Count(&pendingPayoutsCount)
@@ -190,7 +190,7 @@ func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 				}
 			}
 			if inviteLink == "" {
-				inviteLink = "https://t.me/+so_called_spark_private"
+				inviteLink = ""
 			}
 			if h.notifyFunc != nil {
 				msg := "🎉 Поздравляем! Ваш доступ к закрытому Telegram-каналу и комьюнити проекта «так называемый SPARK» успешно активирован.\n\nСсылка-приглашение в канал: " + inviteLink
@@ -276,7 +276,7 @@ func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 				}
 			}
 			if inviteLink == "" {
-				inviteLink = "https://t.me/+so_called_spark_private"
+				inviteLink = ""
 			}
 			generatedInviteLink = inviteLink
 			msg := "🎉 Поздравляем! Ваш доступ к закрытому Telegram-каналу и комьюнити проекта «так называемый SPARK» успешно активирован.\n\nСсылка-приглашение в канал: " + inviteLink

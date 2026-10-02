@@ -3,7 +3,6 @@
 import React, { useState, useEffect } from "react";
 import { Header } from "@/components/Header";
 import { Hero } from "@/components/Hero";
-import { ChancesCalculator } from "@/components/ChancesCalculator";
 import { SocialProofStrip } from "@/components/SocialProofStrip";
 import { HardTruth } from "@/components/HardTruth";
 import { KibiRoadmap } from "@/components/KibiRoadmap";
@@ -14,10 +13,12 @@ import { PricingSection } from "@/components/PricingSection";
 import { FaqSection } from "@/components/FaqSection";
 import { Footer } from "@/components/Footer";
 import { PaymentModal, PricingTier } from "@/components/Modals/PaymentModal";
+import { ChancesModal } from "@/components/Modals/ChancesModal";
 import { ReferralTracker } from "@/components/ReferralTracker";
 
 export default function HomePage() {
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
+  const [isChancesOpen, setIsChancesOpen] = useState(false);
   const [selectedTier, setSelectedTier] = useState<PricingTier>("accelerator");
 
   const handleOpenPayment = (tier?: PricingTier) => {
@@ -60,13 +61,11 @@ export default function HomePage() {
       {/* Screen 1: Spatial Bento-Glass Hero */}
       <Hero
         onOpenPayment={() => handleOpenPayment("accelerator")}
+        onOpenChances={() => setIsChancesOpen(true)}
       />
 
-      {/* Interactive Chances Calculator directly below Hero */}
-      <ChancesCalculator />
-
-      {/* Social Proof Strip: 5 Capsules */}
-      <SocialProofStrip />
+      {/* Social Proof Strip: 5 Capsules (Инфо о программе $20,000) */}
+      <SocialProofStrip onOpenChances={() => setIsChancesOpen(true)} />
 
       {/* Screen 2: Hard Truth (Why 90% Fail) */}
       <HardTruth />
@@ -91,6 +90,12 @@ export default function HomePage() {
 
       {/* Screen 9: Legal Footer & Disclaimer */}
       <Footer />
+
+      {/* Interactive Chances Evaluation Modal */}
+      <ChancesModal
+        isOpen={isChancesOpen}
+        onClose={() => setIsChancesOpen(false)}
+      />
 
       {/* Payment Checkout Modal with Multi-Tier Support */}
       <PaymentModal

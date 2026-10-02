@@ -56,7 +56,7 @@ export function AuthorSection() {
               </div>
 
               <h3 className="font-editorial text-3xl sm:text-4xl font-bold text-slate-900 dark:text-white mb-3">
-                так называемый Иль
+                Васюнин Илья
               </h3>
               
               <div className="text-xs sm:text-sm font-mono text-slate-600 dark:text-slate-300 mb-6 flex flex-wrap items-center gap-3">

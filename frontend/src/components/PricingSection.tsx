@@ -33,7 +33,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
           <span className="text-emerald-600 dark:text-emerald-400 font-serif italic">выиграть грант $20,000</span>
         </h2>
         <p className="mt-4 text-base text-slate-600 dark:text-slate-300 leading-relaxed font-normal">
-          Выбери комфортный формат подготовки: самостоятельный по проверенным шаблонам, полное персональное менторство от так называемого Иля или VIP-сопровождение под ключ.
+          Выбери комфортный формат подготовки: самостоятельный по проверенным шаблонам, полное персональное менторство от финалиста SPARK 2026 или VIP-сопровождение под ключ.
         </p>
 
         {/* Live Scarcity Counter Bar */}
@@ -83,9 +83,6 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
               <div className="text-3xl sm:text-4xl font-black font-mono text-slate-900 dark:text-white tracking-tight">
                 2 900 ₽
               </div>
-              <div className="text-xs font-mono text-emerald-600 dark:text-emerald-400 mt-1 font-semibold">
-                С промокодом -5%: 2 755 ₽
-              </div>
             </div>
 
             {/* Features */}
@@ -109,6 +106,10 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
               <div className="flex items-start gap-2.5 text-slate-400">
                 <span className="w-4 h-4 text-center shrink-0">—</span>
                 <span className="line-through">Без личного мок-интервью в Zoom</span>
+              </div>
+              <div className="flex items-start gap-2.5 text-slate-400">
+                <span className="w-4 h-4 text-center shrink-0">—</span>
+                <span className="line-through">Без обратной связи по заявке</span>
               </div>
             </div>
           </div>
@@ -161,9 +162,6 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
               <div className="text-3xl sm:text-4xl font-black font-mono text-emerald-600 dark:text-emerald-400 tracking-tight">
                 6 900 ₽
               </div>
-              <div className="text-xs font-mono text-emerald-600 dark:text-emerald-400 mt-1 font-semibold">
-                С промокодом -5%: 6 555 ₽
-              </div>
             </div>
 
             {/* Features */}
@@ -178,7 +176,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
               </div>
               <div className="flex items-start gap-2.5 font-medium text-emerald-800 dark:text-emerald-300">
                 <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                <span>45-мин персональное Zoom-интервью 1-на-1 с так называемым Илем</span>
+                <span>45-мин персональное Zoom-интервью 1-на-1 с финалистом SPARK 2026</span>
               </div>
               <div className="flex items-start gap-2.5">
                 <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
@@ -233,9 +231,6 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
               <div className="text-3xl sm:text-4xl font-black font-mono text-amber-600 dark:text-amber-400 tracking-tight">
                 14 900 ₽
               </div>
-              <div className="text-xs font-mono text-amber-600 dark:text-amber-400 mt-1 font-semibold">
-                С промокодом -5%: 14 155 ₽
-              </div>
             </div>
 
             {/* Features */}
@@ -250,7 +245,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
               </div>
               <div className="flex items-start gap-2.5 font-medium text-amber-800 dark:text-amber-300">
                 <Check className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                <span>Приоритетный личный чат с так называемым Илем до самого вылета в США</span>
+                <span>Приоритетный личный чат с финалистом SPARK 2026 до самого вылета в США</span>
               </div>
               <div className="flex items-start gap-2.5">
                 <Check className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
@@ -275,33 +270,11 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
 
       </div>
 
-      {/* Reverse Risk Guarantee Banner */}
-      <div className="mt-10 max-w-4xl mx-auto p-6 sm:p-7 rounded-3xl bento-card-dark border border-amber-500/30 bg-gradient-to-r from-amber-500/[0.07] via-transparent to-emerald-500/[0.07] shadow-lg">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-          <div className="w-12 h-12 rounded-2xl bg-amber-500/15 border border-amber-500/30 flex items-center justify-center shrink-0 text-amber-500">
-            <ShieldCheck className="w-6 h-6" />
-          </div>
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="font-editorial text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
-                Обратная гарантия риска: 100% возврат или перенос
-              </span>
-              <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-700 dark:text-amber-300 font-bold border border-amber-500/30">
-                Pied Piper Guarantee
-              </span>
-            </div>
-            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-doc leading-relaxed">
-              Если ты пройдешь все модули акселератора, выполнишь практические задания, и приёмная комиссия не примет твою заявку к рассмотрению — мы возвращаем 100% стоимости или бесплатно переносим участие на следующий сезон. Мы разделяем риск вместе с тобой.
-            </p>
-          </div>
-        </div>
-      </div>
-
       {/* Security & Guarantees Footer Bar */}
-      <div className="mt-6 max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 p-5 rounded-2xl bento-card-dark border border-emerald-500/15 dark:border-white/10 text-xs font-mono text-slate-600 dark:text-slate-400">
+      <div className="mt-12 max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 p-5 rounded-2xl bento-card-dark border border-emerald-500/15 dark:border-white/10 text-xs font-mono text-slate-600 dark:text-slate-400">
         <div className="flex items-center gap-2">
           <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
-          <span>Официальный фискальный чек ФНС РФ (Самозанятый Иль О. В.)</span>
+          <span>Официальный фискальный чек ФНС РФ (Самозанятый Васюнин Илья Олегович)</span>
         </div>
         <div className="flex items-center gap-2">
           <CreditCard className="w-4 h-4 text-sky-500 shrink-0" />

@@ -34,7 +34,7 @@ func Load() *Config {
 		DatabaseURL:        getEnv("DATABASE_URL", "postgres://spark_user:StrongPassword2026@postgres:5432/spark_db?sslmode=disable"),
 		TelegramBotToken:   getEnv("TELEGRAM_BOT_TOKEN", ""),
 		TelegramAPIServer:  getEnv("TELEGRAM_API_SERVER", ""),
-		TelegramInviteLink: getEnv("TELEGRAM_INVITE_LINK", "https://t.me/+spark_prep_private"),
+		TelegramInviteLink: getEnv("TELEGRAM_INVITE_LINK", ""),
 		TelegramChannelID:  tgChannelID,
 		JWTSecret:          getEnv("JWT_SECRET", "super-secret-spark-jwt-key-2027"),
 		AdminTelegramID:    adminTGID,

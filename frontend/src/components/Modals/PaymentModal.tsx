@@ -147,12 +147,13 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
           transition={{ duration: 0.25 }}
-          className="relative w-full max-w-lg bento-card-dark p-6 sm:p-8 rounded-3xl border border-emerald-500/25 dark:border-white/20 shadow-2xl z-10 overflow-hidden bg-white dark:bg-[#12161f] my-auto max-h-[92vh] overflow-y-auto"
+          className="relative w-full max-w-lg p-5 sm:p-7 rounded-3xl border border-emerald-500/25 dark:border-white/20 shadow-2xl z-10 bg-white dark:bg-[#12161f] text-slate-900 dark:text-white my-auto max-h-[92vh] overflow-y-auto"
         >
           {/* Close Button */}
           <button
+            type="button"
             onClick={onClose}
-            className="absolute top-5 right-5 w-8 h-8 rounded-full bg-emerald-500/10 dark:bg-white/10 flex items-center justify-center text-slate-500 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-emerald-500/20 dark:hover:bg-white/20 transition-all z-20"
+            className="sticky top-0 float-right -mt-1 -mr-1 w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/20 flex items-center justify-center text-slate-600 dark:text-slate-300 hover:text-slate-950 dark:hover:text-white border border-slate-200 dark:border-white/10 transition-all z-20 shadow-sm cursor-pointer"
             aria-label="Закрыть"
           >
             <X className="w-4 h-4" />
@@ -161,20 +162,20 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
           {!submitted ? (
             <div>
               {/* Header */}
-              <div className="mb-5">
-                <span className="bento-pill px-3 py-1 rounded-full text-xs font-mono font-medium text-slate-700 dark:text-slate-200 mb-2 inline-block">
+              <div className="mb-4 pr-8">
+                <span className="bento-pill px-3 py-1 rounded-full text-xs font-mono font-medium text-emerald-800 dark:text-emerald-300 mb-2 inline-block">
                   Лимит потока • Осталось {places.spots_left} мест
                 </span>
-                <h3 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white">
+                <h3 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
                   Оформление участия
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-1 font-doc">
-                  Проект «так называемый SPARK» • Куратор: так называемый Иль
+                  Проект «так называемый SPARK» • Куратор: Васюнин Илья
                 </p>
               </div>
 
               {/* Tier Selection Tabs */}
-              <div className="mb-5">
+              <div className="mb-4">
                 <label className="block text-xs font-mono text-slate-700 dark:text-slate-300 mb-1.5 font-semibold">
                   Выбери тариф:
                 </label>
@@ -193,10 +194,10 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                             api.validatePromoCode(promoResult.code, t, cfg.price).then(setPromoResult).catch(() => {});
                           }
                         }}
-                        className={`p-2.5 rounded-2xl border text-center transition-all flex flex-col items-center justify-center gap-1 text-xs font-mono relative ${
+                        className={`p-2.5 rounded-2xl border text-center transition-all flex flex-col items-center justify-center gap-1 text-xs font-mono relative cursor-pointer ${
                           isSelected
                             ? "bg-emerald-600 text-white font-bold border-emerald-600 shadow-md dark:bg-white dark:text-[#121316] dark:border-white"
-                            : "bg-emerald-500/[0.04] border-emerald-500/15 text-slate-700 dark:bg-white/5 dark:border-white/10 dark:text-slate-300 hover:bg-emerald-500/10 dark:hover:bg-white/10"
+                            : "bg-slate-50 border-slate-200 text-slate-700 dark:bg-white/5 dark:border-white/10 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10"
                         }`}
                       >
                         <span className="text-[11px] leading-tight truncate w-full">{cfg.name}</span>
@@ -210,12 +211,12 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
               </div>
 
               {/* Active Tier Price Summary Banner */}
-              <div className="p-3.5 rounded-2xl bg-emerald-500/[0.06] border border-emerald-500/20 dark:bg-white/[0.04] dark:border-white/10 mb-5 flex items-center justify-between">
+              <div className="p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 dark:bg-white/[0.04] dark:border-white/10 mb-4 flex items-center justify-between">
                 <div>
-                  <div className="text-xs font-mono uppercase text-emerald-700 dark:text-emerald-400 font-bold">
+                  <div className="text-xs font-mono uppercase text-emerald-800 dark:text-emerald-400 font-bold">
                     {activeTierConfig.name}
                   </div>
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400 font-doc">
+                  <div className="text-[11px] text-slate-600 dark:text-slate-400 font-doc">
                     {activeTierConfig.tag}
                   </div>
                 </div>
@@ -238,51 +239,51 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
               </div>
 
               {/* Payment Methods Tabs */}
-              <div className="grid grid-cols-3 gap-2 mb-5">
+              <div className="grid grid-cols-3 gap-2 mb-4">
                 <button
                   type="button"
                   onClick={() => setMethod("sbp")}
-                  className={`p-2 rounded-xl border text-center transition-all flex flex-col items-center gap-1 text-[11px] font-mono ${
+                  className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1.5 text-xs font-mono cursor-pointer ${
                     method === "sbp"
-                      ? "bg-slate-900 text-white font-bold border-slate-900 dark:bg-white dark:text-[#121316] dark:border-white"
-                      : "bg-emerald-500/[0.04] border-emerald-500/15 text-slate-700 dark:bg-white/5 dark:border-white/10 dark:text-slate-300 hover:bg-emerald-500/10 dark:hover:bg-white/10"
+                      ? "bg-emerald-600 text-white font-bold border-emerald-600 shadow-sm dark:bg-white dark:text-[#121316] dark:border-white"
+                      : "bg-slate-50 border-slate-200 text-slate-700 dark:bg-white/5 dark:border-white/10 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10"
                   }`}
                 >
-                  <QrCode className="w-3.5 h-3.5" />
-                  <span>СБП 0%</span>
+                  <QrCode className="w-4 h-4 text-current" />
+                  <span className="text-current font-semibold">СБП 0%</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setMethod("card")}
-                  className={`p-2 rounded-xl border text-center transition-all flex flex-col items-center gap-1 text-[11px] font-mono ${
+                  className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1.5 text-xs font-mono cursor-pointer ${
                     method === "card"
-                      ? "bg-slate-900 text-white font-bold border-slate-900 dark:bg-white dark:text-[#121316] dark:border-white"
-                      : "bg-emerald-500/[0.04] border-emerald-500/15 text-slate-700 dark:bg-white/5 dark:border-white/10 dark:text-slate-300 hover:bg-emerald-500/10 dark:hover:bg-white/10"
+                      ? "bg-emerald-600 text-white font-bold border-emerald-600 shadow-sm dark:bg-white dark:text-[#121316] dark:border-white"
+                      : "bg-slate-50 border-slate-200 text-slate-700 dark:bg-white/5 dark:border-white/10 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10"
                   }`}
                 >
-                  <CreditCard className="w-3.5 h-3.5" />
-                  <span>Карты РФ</span>
+                  <CreditCard className="w-4 h-4 text-current" />
+                  <span className="text-current font-semibold">Карты РФ</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setMethod("foreign")}
-                  className={`p-2 rounded-xl border text-center transition-all flex flex-col items-center gap-1 text-[11px] font-mono ${
+                  className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1.5 text-xs font-mono cursor-pointer ${
                     method === "foreign"
-                      ? "bg-slate-900 text-white font-bold border-slate-900 dark:bg-white dark:text-[#121316] dark:border-white"
-                      : "bg-emerald-500/[0.04] border-emerald-500/15 text-slate-700 dark:bg-white/5 dark:border-white/10 dark:text-slate-300 hover:bg-emerald-500/10 dark:hover:bg-white/10"
+                      ? "bg-emerald-600 text-white font-bold border-emerald-600 shadow-sm dark:bg-white dark:text-[#121316] dark:border-white"
+                      : "bg-slate-50 border-slate-200 text-slate-700 dark:bg-white/5 dark:border-white/10 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10"
                   }`}
                 >
-                  <CreditCard className="w-3.5 h-3.5" />
-                  <span>Зарубежные</span>
+                  <CreditCard className="w-4 h-4 text-current" />
+                  <span className="text-current font-semibold">Зарубежные</span>
                 </button>
               </div>
 
               {/* Form */}
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-3.5">
                 <div>
-                  <label className="block text-xs font-mono text-slate-700 dark:text-slate-300 mb-1.5">
+                  <label className="block text-xs font-mono text-slate-700 dark:text-slate-300 mb-1.5 font-medium">
                     Твой Telegram Username (для выдачи доступа) *
                   </label>
                   <div className="relative">
@@ -293,13 +294,13 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                       placeholder="@username"
                       value={tgUsername}
                       onChange={(e) => setTgUsername(e.target.value)}
-                      className="w-full pl-10 pr-4 py-2.5 text-sm font-mono bg-emerald-500/[0.04] dark:bg-white/10 border border-emerald-500/20 dark:border-white/15 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500 dark:focus:border-white/40"
+                      className="w-full pl-10 pr-4 py-2.5 text-sm font-mono bg-slate-50 dark:bg-white/10 border border-slate-200 dark:border-white/15 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white dark:focus:border-white/40 transition-colors"
                     />
                   </div>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-mono text-slate-700 dark:text-slate-300 mb-1.5">
+                  <label className="block text-xs font-mono text-slate-700 dark:text-slate-300 mb-1.5 font-medium">
                     Email (для отправки электронного чека)
                   </label>
                   <input
@@ -307,16 +308,16 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                     placeholder="student@example.com"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    className="w-full px-4 py-2.5 text-sm font-mono bg-emerald-500/[0.04] dark:bg-white/10 border border-emerald-500/20 dark:border-white/15 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500 dark:focus:border-white/40"
+                    className="w-full px-4 py-2.5 text-sm font-mono bg-slate-50 dark:bg-white/10 border border-slate-200 dark:border-white/15 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white dark:focus:border-white/40 transition-colors"
                   />
                 </div>
 
                 {/* Promo Code Input */}
                 <div>
-                  <label className="block text-xs font-mono text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between">
+                  <label className="block text-xs font-mono text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between font-medium">
                     <span>Промокод на скидку 5% (если есть)</span>
                     {promoResult?.valid && (
-                      <span className="text-emerald-500 font-bold text-[11px] flex items-center gap-1">
+                      <span className="text-emerald-600 dark:text-emerald-400 font-bold text-[11px] flex items-center gap-1">
                         <Check className="w-3 h-3" /> Применён (-{currentDiscountAmount} ₽)
                       </span>
                     )}
@@ -332,16 +333,16 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                           setPromoCode(e.target.value.toUpperCase());
                           if (promoResult) setPromoResult(null);
                         }}
-                        className="w-full pl-10 pr-4 py-2 text-xs font-mono uppercase bg-emerald-500/[0.04] dark:bg-white/10 border border-emerald-500/20 dark:border-white/15 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-amber-500"
+                        className="w-full pl-10 pr-4 py-2 text-xs font-mono uppercase bg-slate-50 dark:bg-white/10 border border-slate-200 dark:border-white/15 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-emerald-500 focus:bg-white transition-colors"
                       />
                     </div>
                     <button
                       type="button"
                       onClick={handleApplyPromo}
                       disabled={validatingPromo || !promoCode.trim()}
-                      className="px-4 py-2 rounded-xl bg-slate-900 text-white dark:bg-white/15 dark:text-white hover:bg-slate-800 border border-transparent dark:border-white/15 text-xs font-mono font-bold disabled:opacity-40 transition-all"
+                      className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-mono text-xs font-bold border border-emerald-600 dark:bg-white/15 dark:text-white dark:hover:bg-white/25 dark:border-white/15 disabled:opacity-40 transition-all shadow-sm cursor-pointer"
                     >
-                      {validatingPromo ? "..." : "Применить"}
+                      <span className="text-white font-bold">{validatingPromo ? "..." : "Применить"}</span>
                     </button>
                   </div>
                   {promoResult && !promoResult.valid && (
@@ -352,7 +353,7 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                 <div className="pt-2">
                   <button
                     type="submit"
-                    className="btn-primary-mono w-full py-4 text-base font-bold flex items-center justify-center gap-2 shadow-xl active:scale-95"
+                    className="btn-primary-mono w-full py-3.5 text-base font-bold flex items-center justify-center gap-2 shadow-xl active:scale-95 cursor-pointer"
                   >
                     <span>Перейти к оплате {finalPrice.toLocaleString("ru-RU")} ₽</span>
                     <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
@@ -372,13 +373,13 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
 
                 <div className="flex items-center justify-center gap-2 text-[11px] font-mono text-slate-500 dark:text-slate-400 pt-1">
                   <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>Безопасный эквайринг • Фискальный чек ФНС РФ (Иль О. В.)</span>
+                  <span>Безопасный эквайринг • Фискальный чек ФНС РФ (Васюнин Илья Олегович)</span>
                 </div>
               </form>
             </div>
           ) : (
-            <div className="text-center py-6">
-              <div className="w-14 h-14 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto mb-4">
+            <div className="text-center py-5">
+              <div className="w-14 h-14 rounded-full bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto mb-3">
                 <Check className="w-8 h-8 stroke-[3]" />
               </div>
 
@@ -393,16 +394,16 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
               </p>
 
               {/* Payment Details Card */}
-              <div className="p-4 rounded-2xl bg-emerald-500/[0.05] border border-emerald-500/20 dark:bg-white/[0.04] dark:border-white/10 text-left text-xs font-mono space-y-1.5 mb-6 max-w-sm mx-auto">
-                <div className="text-slate-500 text-[11px] uppercase font-bold">Реквизиты для перевода (СБП 0%):</div>
-                <div>• Банк: <b>Т-Банк (Тинькофф)</b></div>
-                <div>• Телефон: <code>+7 999 000-00-00</code></div>
-                <div>• Получатель: <b>Иль О. В.</b> (так называемый Иль)</div>
-                <div>• Назначение: <code>SPARK {tier.toUpperCase()}</code></div>
+              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 dark:bg-white/[0.04] dark:border-white/10 text-left text-xs font-mono space-y-1.5 mb-5 max-w-sm mx-auto text-slate-800 dark:text-slate-200">
+                <div className="text-slate-500 dark:text-slate-400 text-[11px] uppercase font-bold">Реквизиты для перевода (СБП 0%):</div>
+                <div>• Банк: <b className="text-slate-900 dark:text-white">Т-Банк (Тинькофф)</b></div>
+                <div>• Телефон: <code className="bg-emerald-100/70 dark:bg-white/10 px-1 py-0.5 rounded text-emerald-900 dark:text-emerald-300 font-bold">+7 999 000-00-00</code></div>
+                <div>• Получатель: <b className="text-slate-900 dark:text-white">Васюнин Илья Олегович</b></div>
+                <div>• Назначение: <code className="bg-emerald-100/70 dark:bg-white/10 px-1 py-0.5 rounded text-emerald-900 dark:text-emerald-300 font-bold">SPARK {tier.toUpperCase()}</code></div>
               </div>
 
-              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs mx-auto mb-6">
-                После перевода отправь чек через официального бота или напрямую так называемому Илю:
+              <p className="text-xs text-slate-600 dark:text-slate-400 max-w-xs mx-auto mb-5 font-doc">
+                После перевода отправь чек через официального бота или напрямую куратору в Telegram:
               </p>
 
               <div className="flex flex-col gap-3 max-w-xs mx-auto">
@@ -410,7 +411,7 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                   href={botPayUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="btn-primary-mono inline-flex items-center justify-center gap-2 px-6 py-3.5 text-xs font-bold shadow-xl"
+                  className="btn-primary-mono inline-flex items-center justify-center gap-2 px-6 py-3.5 text-xs font-bold shadow-xl cursor-pointer"
                 >
                   <Send className="w-4 h-4" />
                   <span>Оплатить через Telegram-бота</span>
@@ -420,9 +421,9 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                   href="https://t.me/ilyan_vas"
                   target="_blank"
                   rel="noreferrer"
-                  className="px-6 py-3 rounded-xl bg-white/5 hover:bg-white/10 text-xs font-mono text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-emerald-500/20 dark:border-white/10 flex items-center justify-center gap-2 transition-all"
+                  className="px-6 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-mono text-slate-800 dark:bg-white/5 dark:hover:bg-white/10 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-white/10 flex items-center justify-center gap-2 transition-all font-semibold cursor-pointer"
                 >
-                  <span>Написать так называемому Илю (@ilyan_vas)</span>
+                  <span>Написать куратору (@ilyan_vas)</span>
                 </a>
               </div>
             </div>

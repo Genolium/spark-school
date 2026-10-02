@@ -16,7 +16,6 @@ export function KibiRoadmap() {
       subtitle: "Фундамент и позиционирование",
       tag: "Stage 01 • Анализ",
       tagClass: "bento-pill text-slate-300",
-      status: "Подготовка",
       image: "/stage-01.jpg",
       shortDesc: "Распаковка твоего бэкграунда, поиск уникального угла подачи и миссии, которая отзовётся у американской комиссии.",
       deliverables: [
@@ -33,7 +32,6 @@ export function KibiRoadmap() {
       subtitle: "Резюме и эссе",
       tag: "Stage 02 • Копирайтинг",
       tagClass: "bento-pill text-slate-300",
-      status: "Критично",
       image: "/stage-02.jpg",
       shortDesc: "Создание документов американского стандарта. Никаких шаблонных фраз и сухого перечисления оценок.",
       deliverables: [
@@ -50,7 +48,6 @@ export function KibiRoadmap() {
       subtitle: "Режиссура и хук 5 секунд",
       tag: "Stage 03 • Продакшн",
       tagClass: "bento-pill text-slate-300",
-      status: "Решает всё",
       image: "/stage-03.jpg",
       shortDesc: "Съемка и монтаж видеовизитки на обычный смартфон. Удержание внимания комиссии с первых 5 секунд.",
       deliverables: [
@@ -67,7 +64,6 @@ export function KibiRoadmap() {
       subtitle: "Боевая Zoom-симуляция 45 минут",
       tag: "Stage 04 • Практика",
       tagClass: "bento-pill text-slate-300",
-      status: "Практика",
       image: "/stage-04.jpg",
       shortDesc: "Полноценная репетиция собеседования на программу в формате 1-на-1 с разбором.",
       deliverables: [
@@ -84,7 +80,6 @@ export function KibiRoadmap() {
       subtitle: "DS-160, Посольство, Вылет в США",
       tag: "Stage 05 • Финал",
       tagClass: "bento-pill text-slate-300",
-      status: "Вылет",
       image: "/stage-05.jpg",
       shortDesc: "Пошаговый план прохождения американского консульства, получение визы J-1 и логистика перелёта на кампус.",
       deliverables: [
@@ -149,9 +144,6 @@ export function KibiRoadmap() {
                 <div className="flex items-center justify-between mb-4">
                   <span className="w-8 h-8 rounded-full bg-emerald-500/10 dark:bg-white/10 flex items-center justify-center font-mono font-bold text-xs text-emerald-800 dark:text-white">
                     {st.index}
-                  </span>
-                  <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${st.tagClass}`}>
-                    {st.status}
                   </span>
                 </div>
 

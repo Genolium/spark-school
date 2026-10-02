@@ -74,9 +74,9 @@ func SeedDefaultData(db *gorm.DB, cfg *config.Config) {
 			now := time.Now()
 			admin = models.User{
 				TelegramID:      cfg.AdminTelegramID,
-				Username:        "spark_admin",
-				FirstName:       "так называемый Иль",
-				LastName:        "",
+				Username:        cfg.AdminUsername,
+				FirstName:       "Илья",
+				LastName:        "Васюнин",
 				Role:            "admin",
 				HasAccess:       true,
 				AccessGrantedAt: &now,
