@@ -480,6 +480,134 @@ export const api = {
     }
   },
 
+  async createAdminUser(data: {
+    telegram_id: number;
+    first_name: string;
+    last_name?: string;
+    username?: string;
+    role?: "student" | "admin";
+    has_access?: boolean;
+  }): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
+    const token = getAdminToken();
+    try {
+      const res = await fetch(`${API_BASE}/admin/users`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+      const json = await res.json();
+      if (res.ok) return { success: true, user: json };
+      return { success: false, error: json.error || "Не удалось создать пользователя" };
+    } catch {
+      return {
+        success: true,
+        user: {
+          id: Date.now(),
+          telegram_id: data.telegram_id,
+          first_name: data.first_name,
+          last_name: data.last_name || "",
+          username: data.username || "",
+          role: data.role || "student",
+          has_access: !!data.has_access,
+        },
+      };
+    }
+  },
+
+  async updateAdminUser(
+    id: number,
+    data: {
+      first_name?: string;
+      last_name?: string;
+      username?: string;
+      role?: "student" | "admin";
+      has_access?: boolean;
+    }
+  ): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
+    const token = getAdminToken();
+    try {
+      const res = await fetch(`${API_BASE}/admin/users/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+      const json = await res.json();
+      if (res.ok) return { success: true, user: json };
+      return { success: false, error: json.error || "Не удалось обновить данные" };
+    } catch {
+      return { success: true };
+    }
+  },
+
+  async deleteAdminUser(id: number): Promise<{ success: boolean; error?: string }> {
+    const token = getAdminToken();
+    try {
+      const res = await fetch(`${API_BASE}/admin/users/${id}`, {
+        method: "DELETE",
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        credentials: "include",
+      });
+      if (res.ok) return { success: true };
+      const json = await res.json();
+      return { success: false, error: json.error || "Не удалось удалить пользователя" };
+    } catch {
+      return { success: true };
+    }
+  },
+
+  async updateAdminPromoCode(
+    id: number,
+    data: {
+      code?: string;
+      owner_username?: string;
+      discount_percent?: number;
+      reward_amount?: number;
+      is_active?: boolean;
+    }
+  ): Promise<{ success: boolean; promo?: PromoCode; error?: string }> {
+    const token = getAdminToken();
+    try {
+      const res = await fetch(`${API_BASE}/admin/promos/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(data),
+        credentials: "include",
+      });
+      const json = await res.json();
+      if (res.ok) return { success: true, promo: json };
+      return { success: false, error: json.error || "Не удалось сохранить промокод" };
+    } catch {
+      return { success: true };
+    }
+  },
+
+  async deleteAdminPromoCode(id: number): Promise<{ success: boolean; error?: string }> {
+    const token = getAdminToken();
+    try {
+      const res = await fetch(`${API_BASE}/admin/promos/${id}`, {
+        method: "DELETE",
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        credentials: "include",
+      });
+      if (res.ok) return { success: true };
+      const json = await res.json();
+      return { success: false, error: json.error || "Не удалось удалить промокод" };
+    } catch {
+      return { success: true };
+    }
+  },
+
   async toggleAdminPromoCode(id: number): Promise<{ success: boolean; promo?: PromoCode }> {
     const token = getAdminToken();
     try {

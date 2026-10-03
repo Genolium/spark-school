@@ -157,6 +157,113 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 	})
 }
 
+// CreateUserRequest payload for manually adding a user/student
+type CreateUserRequest struct {
+	TelegramID int64  `json:"telegram_id" binding:"required"`
+	Username   string `json:"username"`
+	FirstName  string `json:"first_name" binding:"required"`
+	LastName   string `json:"last_name"`
+	Role       string `json:"role"`
+	HasAccess  bool   `json:"has_access"`
+}
+
+// CreateUser handles admin manual creation of a user/student
+func (h *AdminHandler) CreateUser(c *gin.Context) {
+	var req CreateUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Укажите Telegram ID и имя пользователя"})
+		return
+	}
+
+	role := req.Role
+	if role == "" {
+		role = "student"
+	}
+
+	user := models.User{
+		TelegramID: req.TelegramID,
+		Username:   strings.TrimPrefix(req.Username, "@"),
+		FirstName:  req.FirstName,
+		LastName:   req.LastName,
+		Role:       role,
+		HasAccess:  req.HasAccess,
+	}
+
+	if req.HasAccess {
+		now := time.Now()
+		user.AccessGrantedAt = &now
+	}
+
+	if err := h.db.Create(&user).Error; err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Ошибка создания пользователя: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusCreated, user)
+}
+
+// UpdateUserRequest payload for updating user profile
+type UpdateUserRequest struct {
+	Username  string `json:"username"`
+	FirstName string `json:"first_name"`
+	LastName  string `json:"last_name"`
+	Role      string `json:"role"`
+	HasAccess *bool  `json:"has_access"`
+}
+
+// UpdateUser updates user details
+func (h *AdminHandler) UpdateUser(c *gin.Context) {
+	id := c.Param("id")
+	var user models.User
+	if err := h.db.First(&user, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Пользователь не найден"})
+		return
+	}
+
+	var req UpdateUserRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный формат запроса"})
+		return
+	}
+
+	if req.FirstName != "" {
+		user.FirstName = req.FirstName
+	}
+	if req.LastName != "" {
+		user.LastName = req.LastName
+	}
+	if req.Username != "" {
+		user.Username = strings.TrimPrefix(req.Username, "@")
+	}
+	if req.Role != "" {
+		user.Role = req.Role
+	}
+	if req.HasAccess != nil {
+		user.HasAccess = *req.HasAccess
+		if *req.HasAccess && user.AccessGrantedAt == nil {
+			now := time.Now()
+			user.AccessGrantedAt = &now
+		}
+	}
+
+	if err := h.db.Save(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, user)
+}
+
+// DeleteUser removes a user
+func (h *AdminHandler) DeleteUser(c *gin.Context) {
+	id := c.Param("id")
+	if err := h.db.Delete(&models.User{}, id).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Пользователь удалён"})
+}
+
 // ToggleAccess updates has_access, redeems promo codes atomically, and processes affiliate commissions.
 func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 	userIDStr := c.Param("id")

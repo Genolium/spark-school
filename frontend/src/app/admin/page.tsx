@@ -216,6 +216,7 @@ export default function AdminPage() {
                 <StudentsTable
                   students={students}
                   onToggleAccess={handleToggleAccess}
+                  onRefresh={loadAdminData}
                 />
               </div>
             )}

@@ -203,6 +203,74 @@ func (h *PromoHandler) ToggleStatus(c *gin.Context) {
 	c.JSON(http.StatusOK, promo)
 }
 
+type UpdatePromoRequest struct {
+	Code            string   `json:"code"`
+	OwnerTelegramID *int64   `json:"owner_telegram_id"`
+	OwnerUsername   *string  `json:"owner_username"`
+	DiscountPercent *int     `json:"discount_percent"`
+	RewardAmount    *float64 `json:"reward_amount"`
+	IsActive        *bool    `json:"is_active"`
+}
+
+// Update modifies an existing promo code.
+func (h *PromoHandler) Update(c *gin.Context) {
+	id := c.Param("id")
+	var promo models.PromoCode
+	if err := h.db.First(&promo, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Промокод не найден"})
+		return
+	}
+
+	var req UpdatePromoRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный формат запроса: " + err.Error()})
+		return
+	}
+
+	if req.Code != "" {
+		cleanCode := strings.ToUpper(strings.TrimSpace(req.Code))
+		var existing models.PromoCode
+		if err := h.db.Where("UPPER(code) = ? AND id != ?", cleanCode, promo.ID).First(&existing).Error; err == nil {
+			c.JSON(http.StatusConflict, gin.H{"error": "Промокод с таким названием уже существует"})
+			return
+		}
+		promo.Code = cleanCode
+	}
+
+	if req.OwnerTelegramID != nil {
+		promo.OwnerTelegramID = *req.OwnerTelegramID
+	}
+	if req.OwnerUsername != nil {
+		promo.OwnerUsername = strings.TrimPrefix(*req.OwnerUsername, "@")
+	}
+	if req.DiscountPercent != nil && *req.DiscountPercent > 0 {
+		promo.DiscountPercent = *req.DiscountPercent
+	}
+	if req.RewardAmount != nil && *req.RewardAmount >= 0 {
+		promo.RewardAmount = *req.RewardAmount
+	}
+	if req.IsActive != nil {
+		promo.IsActive = *req.IsActive
+	}
+
+	if err := h.db.Save(&promo).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения промокода: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, promo)
+}
+
+// Delete removes a promo code.
+func (h *PromoHandler) Delete(c *gin.Context) {
+	id := c.Param("id")
+	if err := h.db.Delete(&models.PromoCode{}, id).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка удаления: " + err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Промокод удалён"})
+}
+
 // RedeemPromoCode atomically redeems a promo code and increments uses_count in a single SQL statement.
 // It eliminates lost updates under concurrent transactions and verifies code existence and active status.
 func RedeemPromoCode(tx *gorm.DB, code string) (*models.PromoCode, error) {

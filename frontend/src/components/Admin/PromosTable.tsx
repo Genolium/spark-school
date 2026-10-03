@@ -13,6 +13,8 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
   const [search, setSearch] = useState("");
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<PromoCode | null>(null);
 
   // Form states
   const [newCode, setNewCode] = useState("");
@@ -39,29 +41,61 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
     onRefresh();
   };
 
+  const openCreate = () => {
+    setEditingId(null);
+    setNewCode("");
+    setNewOwner("");
+    setNewDiscount(5);
+    setNewReward(1000);
+    setError(null);
+    setShowCreateModal(true);
+  };
+
+  const openEdit = (p: PromoCode) => {
+    setEditingId(p.id);
+    setNewCode(p.code);
+    setNewOwner(p.owner_username || "");
+    setNewDiscount(p.discount_percent || 5);
+    setNewReward(p.reward_amount);
+    setError(null);
+    setShowCreateModal(true);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    await api.deleteAdminPromoCode(deleteTarget.id);
+    setDeleteTarget(null);
+    onRefresh();
+  };
+
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newCode.trim()) return;
     setCreating(true);
     setError(null);
 
-    const res = await api.createAdminPromoCode({
+    const payload = {
       code: newCode.trim().toUpperCase(),
       owner_username: newOwner.trim(),
       discount_percent: newDiscount,
       reward_amount: newReward,
-    });
+    };
+    const res = editingId
+      ? await api.updateAdminPromoCode(editingId, payload)
+      : await api.createAdminPromoCode(payload);
 
     setCreating(false);
     if (res.success) {
       setNewCode("");
       setNewOwner("");
+      setEditingId(null);
       setShowCreateModal(false);
       onRefresh();
     } else {
-      setError(res.error || "Не удалось создать промокод");
+      setError(res.error || "Не удалось сохранить промокод");
     }
   };
+
 
   return (
     <div className="space-y-6">
@@ -79,7 +113,7 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
         </div>
 
         <button
-          onClick={() => setShowCreateModal(true)}
+          onClick={openCreate}
           className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-mono font-bold flex items-center justify-center gap-2 transition-all shadow-md active:scale-95"
         >
           <Plus className="w-4 h-4" />
@@ -161,17 +195,32 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
                     )}
                   </td>
                   <td className="py-3.5 px-4 text-right">
-                    <button
-                      onClick={() => handleToggle(promo.id)}
-                      className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all border ${
-                        promo.is_active
-                          ? "bg-rose-500/10 text-rose-600 dark:text-rose-300 border-rose-500/20 hover:bg-rose-500/20"
-                          : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border-emerald-500/20 hover:bg-emerald-500/20"
-                      }`}
-                    >
-                      {promo.is_active ? "Деактивировать" : "Активировать"}
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => handleToggle(promo.id)}
+                        className={`px-2.5 py-1 rounded text-[11px] font-bold transition-all border ${
+                          promo.is_active
+                            ? "bg-rose-500/10 text-rose-600 dark:text-rose-300 border-rose-500/20 hover:bg-rose-500/20"
+                            : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-300 border-emerald-500/20 hover:bg-emerald-500/20"
+                        }`}
+                      >
+                        {promo.is_active ? "Деактивировать" : "Активировать"}
+                      </button>
+                      <button
+                        onClick={() => openEdit(promo)}
+                        className="px-2.5 py-1 rounded text-[11px] font-bold border border-slate-300 dark:border-white/10 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10"
+                      >
+                        Редактировать
+                      </button>
+                      <button
+                        onClick={() => setDeleteTarget(promo)}
+                        className="px-2.5 py-1 rounded text-[11px] font-bold border border-rose-500/30 text-rose-600 dark:text-rose-300 hover:bg-rose-500/10"
+                      >
+                        Удалить
+                      </button>
+                    </div>
                   </td>
+
                 </tr>
               ))
             )}
@@ -186,7 +235,7 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
             <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-3">
               <div className="flex items-center gap-2">
                 <Tag className="w-4 h-4 text-amber-500" />
-                <h3 className="font-editorial text-lg font-bold text-slate-900 dark:text-white">Новый промокод</h3>
+                <h3 className="font-editorial text-lg font-bold text-slate-900 dark:text-white">{editingId ? "Редактирование промокода" : "Новый промокод"}</h3>
               </div>
               <button
                 onClick={() => setShowCreateModal(false)}
@@ -267,13 +316,39 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
                   disabled={creating}
                   className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-bold disabled:opacity-50"
                 >
-                  {creating ? "Создание..." : "Создать промокод"}
+                  {creating ? "Сохранение..." : editingId ? "Сохранить изменения" : "Создать промокод"}
                 </button>
               </div>
             </form>
           </div>
         </div>
       )}
+
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-[#12161D] border border-slate-200 dark:border-white/20 rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl text-slate-900 dark:text-white">
+            <h3 className="text-lg font-bold">Удалить промокод?</h3>
+            <p className="text-xs font-mono text-slate-500 dark:text-slate-400">
+              Промокод {deleteTarget.code} будет удалён без возможности восстановления.
+            </p>
+            <div className="flex gap-3 text-xs font-mono">
+              <button
+                onClick={() => setDeleteTarget(null)}
+                className="flex-1 px-4 py-2 rounded-xl border border-slate-200 dark:border-white/10"
+              >
+                Отмена
+              </button>
+              <button
+                onClick={handleDelete}
+                className="flex-1 px-4 py-2 rounded-xl bg-rose-500 hover:bg-rose-400 text-white font-bold"
+              >
+                Удалить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+
   );
 }

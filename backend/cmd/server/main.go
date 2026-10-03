@@ -131,12 +131,17 @@ func main() {
 		{
 			adminGroup.GET("/stats", adminHandler.GetStats)
 			adminGroup.GET("/users", adminHandler.ListUsers)
+			adminGroup.POST("/users", adminHandler.CreateUser)
+			adminGroup.PUT("/users/:id", adminHandler.UpdateUser)
+			adminGroup.DELETE("/users/:id", adminHandler.DeleteUser)
 			adminGroup.POST("/users/:id/access", adminHandler.ToggleAccess)
 			adminGroup.GET("/payouts", adminHandler.ListPayouts)
 			adminGroup.POST("/payouts/:id/approve", adminHandler.ApprovePayout)
 			adminGroup.POST("/payouts/:id/reject", adminHandler.RejectPayout)
 			adminGroup.GET("/promos", promoHandler.List)
 			adminGroup.POST("/promos", promoHandler.Create)
+			adminGroup.PUT("/promos/:id", promoHandler.Update)
+			adminGroup.DELETE("/promos/:id", promoHandler.Delete)
 			adminGroup.POST("/promos/:id/toggle", promoHandler.ToggleStatus)
 		}
 	}
