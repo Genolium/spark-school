@@ -61,6 +61,7 @@ services:
       - GENERIC_TIMEZONE=${TIMEZONE:-Europe/Moscow}
       - TZ=${TIMEZONE:-Europe/Moscow}
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
     volumes:
       - n8n_data:/home/node/.n8n
     dns:
