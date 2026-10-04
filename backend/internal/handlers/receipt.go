@@ -13,19 +13,30 @@ import (
 )
 
 type ReceiptHandler struct {
-	db                 *gorm.DB
-	checkDuplicateFunc func(fileHash, fileUniqueID string) (*models.PaymentReceipt, bool)
-	saveReceiptFunc    func(receipt *models.PaymentReceipt) error
+	db                   *gorm.DB
+	checkDuplicateFunc   func(fileHash, fileUniqueID string) (*models.PaymentReceipt, bool)
+	saveReceiptFunc      func(receipt *models.PaymentReceipt) error
+	sendReceiptAlertFunc func(receipt *models.PaymentReceipt) error
 }
 
-func NewReceiptHandler(db *gorm.DB) *ReceiptHandler {
-	return &ReceiptHandler{db: db}
+func NewReceiptHandler(db *gorm.DB, alertFunc ...func(receipt *models.PaymentReceipt) error) *ReceiptHandler {
+	var alert func(receipt *models.PaymentReceipt) error
+	if len(alertFunc) > 0 {
+		alert = alertFunc[0]
+	}
+	return &ReceiptHandler{db: db, sendReceiptAlertFunc: alert}
 }
 
 // WithCustomStore sets custom duplicate checker and receipt saver (useful for testing without live db).
 func (h *ReceiptHandler) WithCustomStore(checkDuplicate func(fileHash, fileUniqueID string) (*models.PaymentReceipt, bool), saveReceipt func(receipt *models.PaymentReceipt) error) *ReceiptHandler {
 	h.checkDuplicateFunc = checkDuplicate
 	h.saveReceiptFunc = saveReceipt
+	return h
+}
+
+// SetAlertFunc sets callback for notifying admin about new receipts.
+func (h *ReceiptHandler) SetAlertFunc(fn func(receipt *models.PaymentReceipt) error) *ReceiptHandler {
+	h.sendReceiptAlertFunc = fn
 	return h
 }
 
@@ -122,6 +133,10 @@ func (h *ReceiptHandler) VerifyOrSubmit(c *gin.Context) {
 			return
 		}
 
+		if h.sendReceiptAlertFunc != nil {
+			_ = h.sendReceiptAlertFunc(&receipt)
+		}
+
 		c.JSON(http.StatusCreated, gin.H{
 			"duplicate":  false,
 			"status":     "recorded",
@@ -150,6 +165,9 @@ func (h *ReceiptHandler) VerifyOrSubmit(c *gin.Context) {
 		if err := h.saveReceiptFunc(&receipt); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения чека"})
 			return
+		}
+		if h.sendReceiptAlertFunc != nil {
+			_ = h.sendReceiptAlertFunc(&receipt)
 		}
 		c.JSON(http.StatusCreated, gin.H{
 			"duplicate":  false,

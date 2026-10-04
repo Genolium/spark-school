@@ -128,12 +128,41 @@ services:
     networks:
       - spark_network
 
+  postgres_backup:
+    image: postgres:16-alpine
+    container_name: spark_postgres_backup
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-spark_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-StrongPassword2026}
+      POSTGRES_DB: ${POSTGRES_DB:-spark_db}
+      BACKUP_TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      BACKUP_TELEGRAM_CHAT_ID: ${ADMIN_TELEGRAM_ID:-}
+    volumes:
+      - ./scripts/backup.sh:/backup.sh:ro
+      - pgbackups:/backups
+    entrypoint: |
+      sh -c "
+        echo '0 3 * * * /backup.sh' > /etc/crontabs/root
+        echo 'Running initial backup at startup...'
+        /backup.sh || true
+        echo 'Starting crond daemon for daily 03:00 UTC backups...'
+        crond -f -l 2
+      "
+    networks:
+      - spark_network
+
 networks:
   spark_network:
     driver: bridge
 
 volumes:
   pgdata:
+  pgbackups:
   caddy_data:
   caddy_config:
   n8n_data:

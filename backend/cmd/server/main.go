@@ -16,6 +16,8 @@ import (
 	"github.com/spark-school/backend/internal/config"
 	"github.com/spark-school/backend/internal/database"
 	"github.com/spark-school/backend/internal/handlers"
+	"github.com/spark-school/backend/internal/models"
+	"github.com/spark-school/backend/internal/outbox"
 	"github.com/spark-school/backend/internal/security"
 	"github.com/spark-school/backend/internal/services"
 )
@@ -41,6 +43,17 @@ func main() {
 	affiliateService := services.NewAffiliateService(db)
 	botService := bot.NewBotService(cfg, db)
 
+	// Outbox Dispatcher for guaranteed async event delivery (Telegram notifications, admin review cards)
+	outboxDispatcher := outbox.NewDispatcher(db, botService.SendNotification, func(adminID int64, payload outbox.AdminAlertPayload) error {
+		var receipt models.PaymentReceipt
+		if err := db.First(&receipt, payload.ReceiptID).Error; err == nil {
+			return botService.SendAdminReceiptCard(adminID, &receipt)
+		}
+		return nil
+	})
+	outboxDispatcher.Start()
+	defer outboxDispatcher.Stop()
+
 	// Note: Standalone Telegram bot worker runs via cmd/bot/main.go.
 	// If RUN_EMBEDDED_BOT=true is set, run it embedded for simple development.
 	if os.Getenv("RUN_EMBEDDED_BOT") == "true" {
@@ -54,7 +67,12 @@ func main() {
 	adminHandler := handlers.NewAdminHandler(db, cfg, affiliateService, botService.SendNotification, botService.CreateOneTimeInviteLink)
 	promoHandler := handlers.NewPromoHandler(db)
 	statsHandler := handlers.NewStatsHandler(db)
-	receiptHandler := handlers.NewReceiptHandler(db)
+	receiptHandler := handlers.NewReceiptHandler(db, func(receipt *models.PaymentReceipt) error {
+		if cfg.AdminTelegramID != 0 {
+			return botService.SendAdminReceiptCard(cfg.AdminTelegramID, receipt)
+		}
+		return nil
+	})
 
 	// Gin Router
 	router := gin.New()

@@ -93,4 +93,18 @@ type PaymentReceipt struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 
+// OutboxEvent provides reliable asynchronous delivery of critical system events (notifications, invite links).
+type OutboxEvent struct {
+	ID          uint       `gorm:"primaryKey" json:"id"`
+	EventType   string     `gorm:"size:64;not null" json:"event_type"` // 'telegram_notification', 'admin_alert'
+	Payload     string     `gorm:"type:jsonb;not null" json:"payload"`
+	Status      string     `gorm:"size:20;default:'pending';index" json:"status"` // 'pending', 'processing', 'completed', 'failed'
+	RetryCount  int        `gorm:"default:0" json:"retry_count"`
+	MaxRetries  int        `gorm:"default:5" json:"max_retries"`
+	LastError   string     `gorm:"type:text" json:"last_error,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	ProcessedAt *time.Time `json:"processed_at,omitempty"`
+}
+
+
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -387,7 +388,20 @@ func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 			}
 			generatedInviteLink = inviteLink
 			msg := "🎉 Поздравляем! Ваш доступ к закрытому Telegram-каналу и комьюнити проекта «так называемый SPARK» успешно активирован.\n\nСсылка-приглашение в канал: " + inviteLink
-			_ = h.notifyFunc(user.TelegramID, msg)
+			errSend := h.notifyFunc(user.TelegramID, msg)
+			if errSend != nil {
+				// Resilient fallback: enqueue to Outbox table for background retries
+				if h.db != nil {
+					_ = h.db.Create(&models.OutboxEvent{
+						EventType:  "telegram_notification",
+						Payload:    fmt.Sprintf(`{"telegram_id":%d,"message":%q}`, user.TelegramID, msg),
+						Status:     "pending",
+						CreatedAt:  time.Now(),
+						MaxRetries: 5,
+						LastError:  errSend.Error(),
+					})
+				}
+			}
 		}
 	}
 

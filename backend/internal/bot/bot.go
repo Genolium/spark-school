@@ -131,7 +131,9 @@ func (s *BotService) Start() {
 	log.Println("Telegram Bot worker started listening for commands...")
 
 	for update := range updates {
-		if update.Message != nil {
+		if update.CallbackQuery != nil {
+			s.HandleCallbackQuery(update.CallbackQuery)
+		} else if update.Message != nil {
 			s.handleMessage(update.Message)
 		}
 	}
@@ -382,6 +384,11 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 			}
 			_ = s.db.Create(&receipt)
 
+			// Notify Admin with actionable review card
+			if s.cfg.AdminTelegramID != 0 {
+				_ = s.SendAdminReceiptCard(s.cfg.AdminTelegramID, &receipt)
+			}
+
 			reply := "🧾 <b>Чек об оплате успешно получен!</b>\n\nТак называемый Иль проверит поступление средств и активирует доступ к закрытому Telegram-каналу проекта «так называемый SPARK» в ближайшее время."
 			m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML)
 			if s.bot != nil {
@@ -615,3 +622,256 @@ func (s *BotService) associateBotReferral(from *telego.User, inputUsername, refC
 		}
 	}
 }
+
+// SendAdminReceiptCard sends an admin card with receipt photo/info and quick Action Inline Buttons.
+func (s *BotService) SendAdminReceiptCard(adminTelegramID int64, receipt *models.PaymentReceipt) error {
+	if s.bot == nil || adminTelegramID == 0 || receipt == nil {
+		return nil
+	}
+
+	caption := fmt.Sprintf(`🧾 <b>Новый чек на проверку (#%d)</b>
+
+👤 Студент: <b>%s</b> (@%s)
+🆔 Telegram ID: <code>%d</code>
+📦 Тариф: <b>%s</b>
+💰 Сумма: <b>%.0f ₽</b>
+⏱ Время: %s
+
+Выберите действие:`,
+		receipt.ID,
+		receipt.Username,
+		receipt.Username,
+		receipt.TelegramID,
+		strings.ToUpper(receipt.Tier),
+		receipt.Amount,
+		receipt.CreatedAt.Format("02.01.2006 15:04"),
+	)
+
+	btnApprove := tu.InlineKeyboardButton("✅ Одобрить и выдать доступ").WithCallbackData(fmt.Sprintf("receipt_approve_%d", receipt.ID))
+	btnReject := tu.InlineKeyboardButton("❌ Отклонить чек").WithCallbackData(fmt.Sprintf("receipt_reject_%d", receipt.ID))
+	btnChat := tu.InlineKeyboardButton("💬 Написать студенту").WithURL(fmt.Sprintf("tg://user?id=%d", receipt.TelegramID))
+
+	keyboard := tu.InlineKeyboard(
+		tu.InlineKeyboardRow(btnApprove),
+		tu.InlineKeyboardRow(btnReject),
+		tu.InlineKeyboardRow(btnChat),
+	)
+
+	chatID := tu.ID(adminTelegramID)
+
+	// If FileID is available (photo/document), send photo or document with caption
+	if receipt.FileID != "" {
+		photoMsg := tu.Photo(chatID, telego.InputFile{FileID: receipt.FileID}).
+			WithCaption(caption).
+			WithParseMode(telego.ModeHTML).
+			WithReplyMarkup(keyboard)
+
+		_, err := s.bot.SendPhoto(photoMsg)
+		if err == nil {
+			return nil
+		}
+	}
+
+	// Fallback to text message
+	msg := tu.Message(chatID, caption).
+		WithParseMode(telego.ModeHTML).
+		WithReplyMarkup(keyboard)
+
+	_, err := s.bot.SendMessage(msg)
+	return err
+}
+
+// HandleCallbackQuery processes inline button clicks ([✅ Одобрить], [❌ Отклонить]).
+func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
+	if query == nil || query.Data == "" {
+		return false
+	}
+
+	data := query.Data
+	adminID := query.From.ID
+
+	// Security: verify clicker is administrator
+	if s.cfg != nil && s.cfg.AdminTelegramID != 0 && adminID != s.cfg.AdminTelegramID {
+		if s.bot != nil {
+			_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+				CallbackQueryID: query.ID,
+				Text:            "⛔️ У вас нет прав администратора для этого действия.",
+				ShowAlert:       true,
+			})
+		}
+		return true
+	}
+
+	if strings.HasPrefix(data, "receipt_approve_") {
+		idStr := strings.TrimPrefix(data, "receipt_approve_")
+		s.processReceiptApproval(query, idStr)
+		return true
+	}
+
+	if strings.HasPrefix(data, "receipt_reject_") {
+		idStr := strings.TrimPrefix(data, "receipt_reject_")
+		s.processReceiptRejection(query, idStr)
+		return true
+	}
+
+	return false
+}
+
+func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr string) {
+	if s.db == nil {
+		return
+	}
+
+	var receipt models.PaymentReceipt
+	if err := s.db.First(&receipt, "id = ?", idStr).Error; err != nil {
+		_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+			CallbackQueryID: query.ID,
+			Text:            "Чек не найден в базе данных.",
+			ShowAlert:       true,
+		})
+		return
+	}
+
+	if receipt.Status == "approved" {
+		_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+			CallbackQueryID: query.ID,
+			Text:            "Этот чек уже был одобрен ранее.",
+			ShowAlert:       true,
+		})
+		return
+	}
+
+	// Generate one-time dynamic invite link if channel is set
+	inviteLink := s.cfg.TelegramInviteLink
+	if s.cfg.TelegramChannelID != 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if link, err := s.CreateOneTimeInviteLink(ctx, s.cfg.TelegramChannelID); err == nil && link != "" {
+			inviteLink = link
+		}
+	}
+
+	// Update status and grant access atomically
+	now := time.Now()
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		receipt.Status = "approved"
+		if err := tx.Save(&receipt).Error; err != nil {
+			return err
+		}
+
+		if receipt.TelegramID != 0 {
+			var user models.User
+			if err := tx.Where("telegram_id = ?", receipt.TelegramID).First(&user).Error; err == nil {
+				user.HasAccess = true
+				if user.AccessGrantedAt == nil {
+					user.AccessGrantedAt = &now
+				}
+				if err := tx.Save(&user).Error; err != nil {
+					return err
+				}
+
+				// Process affiliate commission if applicable
+				if s.affiliateService != nil {
+					amount := receipt.Amount
+					if amount <= 0 {
+						amount = 6900.0
+					}
+					_ = s.affiliateService.ProcessCoursePurchaseTx(tx, user.ID, amount)
+				}
+			}
+		}
+		return nil
+	})
+
+	if err != nil {
+		_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+			CallbackQueryID: query.ID,
+			Text:            "Ошибка при обновлении статуса: " + err.Error(),
+			ShowAlert:       true,
+		})
+		return
+	}
+
+	// Notify student with the invite link
+	if receipt.TelegramID != 0 {
+		studentMsg := fmt.Sprintf(`🎉 <b>Поздравляем! Ваш платёж успешно подтверждён!</b>
+
+Куратор так называемый Иль подтвердил ваш платёж по тарифу <b>%s</b>.
+Ваш доступ к закрытому Telegram-каналу и комьюнити проекта <b>«так называемый SPARK»</b> активирован!
+
+🔗 <b>Персональная ссылка-приглашение:</b>
+%s
+
+<i>(Ссылка одноразовая и действует 24 часа. Сохраните её!)</i>`, strings.ToUpper(receipt.Tier), inviteLink)
+
+		_ = s.SendNotification(receipt.TelegramID, studentMsg)
+	}
+
+	_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+		CallbackQueryID: query.ID,
+		Text:            "✅ Доступ успешно выдан! Студент получил ссылку-приглашение.",
+	})
+
+	// Update admin message text or caption
+	updatedText := fmt.Sprintf("✅ <b>ЧЕК ОДОБРЕН (#%d)</b>\nСтудент: @%s\nТариф: %s (%.0f ₽)\nСсылка выдана: %s",
+		receipt.ID, receipt.Username, strings.ToUpper(receipt.Tier), receipt.Amount, inviteLink)
+
+	if query.Message != nil {
+		m := query.Message
+		chatID := tu.ID(m.GetChat().ID)
+		msgID := m.GetMessageID()
+		_, _ = s.bot.EditMessageCaption(&telego.EditMessageCaptionParams{
+			ChatID:    chatID,
+			MessageID: msgID,
+			Caption:   updatedText,
+			ParseMode: telego.ModeHTML,
+		})
+	}
+}
+
+func (s *BotService) processReceiptRejection(query *telego.CallbackQuery, idStr string) {
+	if s.db == nil {
+		return
+	}
+
+	var receipt models.PaymentReceipt
+	if err := s.db.First(&receipt, "id = ?", idStr).Error; err != nil {
+		_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+			CallbackQueryID: query.ID,
+			Text:            "Чек не найден в базе данных.",
+			ShowAlert:       true,
+		})
+		return
+	}
+
+	receipt.Status = "rejected"
+	_ = s.db.Save(&receipt)
+
+	if receipt.TelegramID != 0 {
+		studentMsg := `⚠️ <b>Чек об оплате отклонён</b>
+
+Куратор не смог подтвердить платёж по предоставленному скриншоту (нечёткое изображение, несоответствие суммы или реквизитов).
+
+Пожалуйста, отправьте корректный чек или напишите куратору так называемому Илю (@ilyan_vas) для уточнения деталей.`
+
+		_ = s.SendNotification(receipt.TelegramID, studentMsg)
+	}
+
+	_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+		CallbackQueryID: query.ID,
+		Text:            "❌ Чек отклонён. Уведомление отправлено студенту.",
+	})
+
+	if query.Message != nil {
+		m := query.Message
+		chatID := tu.ID(m.GetChat().ID)
+		msgID := m.GetMessageID()
+		_, _ = s.bot.EditMessageCaption(&telego.EditMessageCaptionParams{
+			ChatID:    chatID,
+			MessageID: msgID,
+			Caption:   fmt.Sprintf("❌ <b>ЧЕК ОТКЛОНЁН (#%d)</b>\nСтудент: @%s (Telegram ID: %d)", receipt.ID, receipt.Username, receipt.TelegramID),
+			ParseMode: telego.ModeHTML,
+		})
+	}
+}
+

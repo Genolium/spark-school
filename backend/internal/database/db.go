@@ -42,7 +42,12 @@ func Init(cfg *config.Config) *gorm.DB {
 	sqlDB.SetMaxOpenConns(100)
 	sqlDB.SetConnMaxLifetime(time.Hour)
 
-	// Run Auto-Migrations
+	// Run Production Database Migrations via Goose
+	if err := RunMigrations(sqlDB); err != nil {
+		log.Printf("[WARN] Goose migration failed (falling back to GORM AutoMigrate): %v", err)
+	}
+
+	// Run GORM Auto-Migrations fallback to ensure all struct fields match
 	err = db.AutoMigrate(
 		&models.User{},
 		&models.Referral{},
@@ -51,6 +56,7 @@ func Init(cfg *config.Config) *gorm.DB {
 		&models.PayoutRequest{},
 		&models.PromoCode{},
 		&models.PaymentReceipt{},
+		&models.OutboxEvent{},
 	)
 	if err != nil {
 		log.Printf("[WARN] Notice during database auto-migration: %v", err)
