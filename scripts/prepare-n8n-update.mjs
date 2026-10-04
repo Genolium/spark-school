@@ -1,7 +1,7 @@
 import fs from "fs";
 
 // Build operations list for n8n workflow update
-const botToken = "8953236759:AAElSHfGTBqbLxU88kRkopSICeVY0twiTog";
+const botToken = "YOUR_TELEGRAM_BOT_TOKEN";
 const proxyUrl = "https://bold-water-3c34.ugolpatyj.workers.dev/bot" + botToken;
 const adminChatId = 349646233;
 
@@ -22,7 +22,7 @@ const fullName = [message?.from?.first_name, message?.from?.last_name].filter(Bo
 const callbackId = callback?.id || null;
 const messageId = message?.message_id || callback?.message?.message_id;
 
-const botToken = '8953236759:AAElSHfGTBqbLxU88kRkopSICeVY0twiTog';
+const botToken = 'YOUR_TELEGRAM_BOT_TOKEN';
 const proxyUrl = 'https://bold-water-3c34.ugolpatyj.workers.dev/bot' + botToken;
 const adminChatId = 349646233;
 
