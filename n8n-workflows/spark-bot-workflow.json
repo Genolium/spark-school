@@ -982,10 +982,10 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $json.proxyUrl }}/sendMessage",
+        "url": "={{ $('Парсинг сообщений').item.json.proxyUrl }}/sendMessage",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"chat_id\": 349646233,\n  \"text\": \"🔔 <b>Новый чек на оплату проекта «так называемый SPARK»!</b>\\n\\nСтудент: <b>{{ $json.fullName }}</b>\\nUsername: @{{ $json.username }}\\nChat ID: <code>{{ $json.chatId }}</code>\\n\\nПодтвердите поступление средств и выдачу доступа:\",\n  \"parse_mode\": \"HTML\",\n  \"reply_markup\": {\n    \"inline_keyboard\": [\n      [\n        {\n          \"text\": \"✅ Одобрить и выдать доступ\",\n          \"callback_data\": \"=approve_{{ $json.chatId }}\"\n        },\n        {\n          \"text\": \"❌ Отклонить\",\n          \"callback_data\": \"=reject_{{ $json.chatId }}\"\n        }\n      ]\n    ]\n  }\n}",
+        "jsonBody": "={\n  \"chat_id\": 349646233,\n  \"text\": \"🔔 <b>Новый чек на оплату проекта «так называемый SPARK»!</b>\\n\\nСтудент: <b>{{ $('Парсинг сообщений').item.json.fullName }}</b>\\nUsername: @{{ $('Парсинг сообщений').item.json.username }}\\nChat ID: <code>{{ $('Парсинг сообщений').item.json.chatId }}</code>\\n\\nПодтвердите поступление средств и выдачу доступа:\",\n  \"parse_mode\": \"HTML\",\n  \"reply_markup\": {\n    \"inline_keyboard\": [\n      [\n        {\n          \"text\": \"✅ Одобрить и выдать доступ\",\n          \"callback_data\": \"approve_{{ $('Парсинг сообщений').item.json.chatId }}\"\n        },\n        {\n          \"text\": \"❌ Отклонить\",\n          \"callback_data\": \"reject_{{ $('Парсинг сообщений').item.json.chatId }}\"\n        }\n      ]\n    ]\n  }\n}",
         "options": {},
         "parse_mode": "HTML"
       },
@@ -1020,10 +1020,10 @@
     {
       "parameters": {
         "method": "POST",
-        "url": "={{ $json.proxyUrl }}/sendMessage",
+        "url": "={{ $('Парсинг сообщений').item.json.proxyUrl }}/sendMessage",
         "sendBody": true,
         "specifyBody": "json",
-        "jsonBody": "={\n  \"chat_id\": {{ $json.chatId }},\n  \"text\": \"✅ <b>Доступ успешно выдан!</b>\\n\\nСтудент с Chat ID <code>{{ $json.targetChatId }}</code> получил персональную ссылку в закрытый канал.\",\n  \"parse_mode\": \"HTML\"\n}",
+        "jsonBody": "={\n  \"chat_id\": {{ $('Парсинг сообщений').item.json.chatId }},\n  \"text\": \"✅ <b>Доступ успешно выдан!</b>\\n\\nСтудент с Chat ID <code>{{ $('Парсинг сообщений').item.json.targetChatId }}</code> получил персональную ссылку в канал.\",\n  \"parse_mode\": \"HTML\"\n}",
         "options": {}
       },
       "id": "534b10d5-6654-4dfc-8fb1-5a496f8b0820",
