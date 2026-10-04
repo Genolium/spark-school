@@ -397,7 +397,7 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
               <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 dark:bg-white/[0.04] dark:border-white/10 text-left text-xs font-mono space-y-1.5 mb-5 max-w-sm mx-auto text-slate-800 dark:text-slate-200">
                 <div className="text-slate-500 dark:text-slate-400 text-[11px] uppercase font-bold">Реквизиты для перевода (СБП 0%):</div>
                 <div>• Банк: <b className="text-slate-900 dark:text-white">Т-Банк (Тинькофф)</b></div>
-                <div>• Телефон: <code className="bg-emerald-100/70 dark:bg-white/10 px-1 py-0.5 rounded text-emerald-900 dark:text-emerald-300 font-bold">+7 999 000-00-00</code></div>
+                <div>• Телефон: <code className="bg-emerald-100/70 dark:bg-white/10 px-1 py-0.5 rounded text-emerald-900 dark:text-emerald-300 font-bold">+7 981 163-36-91</code></div>
                 <div>• Получатель: <b className="text-slate-900 dark:text-white">Васюнин Илья Олегович</b></div>
                 <div>• Назначение: <code className="bg-emerald-100/70 dark:bg-white/10 px-1 py-0.5 rounded text-emerald-900 dark:text-emerald-300 font-bold">SPARK {tier.toUpperCase()}</code></div>
               </div>
