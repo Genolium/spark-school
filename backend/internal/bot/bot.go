@@ -27,6 +27,7 @@ type BotService struct {
 	cfg              *config.Config
 	affiliateService *services.AffiliateService
 	sessions         *SessionManager
+	mediaCache       *MediaCache
 	notifyQueue      chan queuedNotification
 	quitChan         chan struct{}
 }
@@ -38,6 +39,7 @@ func NewBotService(cfg *config.Config, db *gorm.DB) *BotService {
 		cfg:              cfg,
 		affiliateService: affService,
 		sessions:         NewSessionManager(30 * time.Minute),
+		mediaCache:       NewMediaCache("media"),
 		notifyQueue:      make(chan queuedNotification, 500),
 		quitChan:         make(chan struct{}),
 	}
@@ -239,13 +241,17 @@ func (s *BotService) sendWelcomeMenu(chatID telego.ChatID, from *telego.User) {
 
 👇 <b>Выберите интересующий раздел:</b>`, firstName)
 
-	// Send rich photo card with verified Golden Gate image
-	photoMsg := tu.Photo(chatID, tu.FileFromID(PhotoGoldenGate)).
+	// Send rich photo card using cached or local file
+	photoFile := s.ResolvePhotoFile(MediaMainBanner)
+	photoMsg := tu.Photo(chatID, photoFile).
 		WithCaption(caption).
 		WithParseMode(telego.ModeHTML).
 		WithReplyMarkup(MainMenuKeyboard(s.cfg.FrontendURL))
 
-	if _, err := s.bot.SendPhoto(photoMsg); err != nil {
+	sentMsg, err := s.bot.SendPhoto(photoMsg)
+	if err == nil && sentMsg != nil {
+		s.CacheSentPhoto(MediaMainBanner, sentMsg)
+	} else if err != nil {
 		// Fallback to text message if photo failed
 		textMsg := tu.Message(chatID, caption).
 			WithParseMode(telego.ModeHTML).
@@ -299,8 +305,19 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 		keyboard = PaymentKeyboard()
 	}
 
-	m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(keyboard)
-	_, _ = s.bot.SendMessage(m)
+	photoFile := s.ResolvePhotoFile(MediaBuyCourse)
+	photoMsg := tu.Photo(chatID, photoFile).
+		WithCaption(text).
+		WithParseMode(telego.ModeHTML).
+		WithReplyMarkup(keyboard)
+
+	sentMsg, err := s.bot.SendPhoto(photoMsg)
+	if err == nil && sentMsg != nil {
+		s.CacheSentPhoto(MediaBuyCourse, sentMsg)
+	} else if err != nil {
+		m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(keyboard)
+		_, _ = s.bot.SendMessage(m)
+	}
 }
 
 func (s *BotService) processPromoInput(chatID telego.ChatID, from *telego.User, rawCode string) {
@@ -473,12 +490,16 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 			tu.InlineKeyboardRow(btnMenu),
 		)
 
-		photoMsg := tu.Photo(chatID, tu.FileFromID(PhotoProgramInfo)).
+		photoFile := s.ResolvePhotoFile(MediaBuyCourse)
+		photoMsg := tu.Photo(chatID, photoFile).
 			WithCaption(text).
 			WithParseMode(telego.ModeHTML).
 			WithReplyMarkup(kb)
 
-		if _, err := s.bot.SendPhoto(photoMsg); err != nil {
+		sentMsg, err := s.bot.SendPhoto(photoMsg)
+		if err == nil && sentMsg != nil {
+			s.CacheSentPhoto(MediaBuyCourse, sentMsg)
+		} else if err != nil {
 			m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
 			_, _ = s.bot.SendMessage(m)
 		}

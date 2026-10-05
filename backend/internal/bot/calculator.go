@@ -118,8 +118,19 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) bool 
 
 🔥 <i>Места на поток строго ограничены.</i>`, score, langLabel, scoreZone)
 
-		m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML).WithReplyMarkup(CalcResultKeyboard())
-		_, _ = s.bot.SendMessage(m)
+		photoFile := s.ResolvePhotoFile(MediaGrantChances)
+		photoMsg := tu.Photo(chatID, photoFile).
+			WithCaption(reply).
+			WithParseMode(telego.ModeHTML).
+			WithReplyMarkup(CalcResultKeyboard())
+
+		sentMsg, err := s.bot.SendPhoto(photoMsg)
+		if err == nil && sentMsg != nil {
+			s.CacheSentPhoto(MediaGrantChances, sentMsg)
+		} else if err != nil {
+			m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML).WithReplyMarkup(CalcResultKeyboard())
+			_, _ = s.bot.SendMessage(m)
+		}
 		return true
 	}
 
