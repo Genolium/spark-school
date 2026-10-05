@@ -11,6 +11,7 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/mymmrac/telego"
 	"github.com/spark-school/backend/internal/auth"
 	"github.com/spark-school/backend/internal/bot"
 	"github.com/spark-school/backend/internal/config"
@@ -138,6 +139,17 @@ func main() {
 		// Promo Codes Public API
 		api.POST("/promo/validate", promoHandler.Validate)
 		api.POST("/promo/redeem", promoHandler.Redeem)
+
+		// Telegram Bot Webhook endpoint (direct integration bypassing n8n, 15ms latency)
+		api.POST("/bot/webhook", func(c *gin.Context) {
+			var update telego.Update
+			if err := c.ShouldBindJSON(&update); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
+				return
+			}
+			botService.ProcessUpdate(&update)
+			c.JSON(http.StatusOK, gin.H{"ok": true})
+		})
 
 		// Admin Public Login (Username + Password -> JWT) with strict brute-force rate limiting (5 req/min)
 		adminLoginLimiter := security.RateLimitMiddleware(5, 1*time.Minute, "Слишком много попыток входа (максимум 5 в минуту). Пожалуйста, подождите 60 секунд.")

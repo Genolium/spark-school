@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
 	"strings"
 	"time"
 
@@ -27,6 +26,7 @@ type BotService struct {
 	db               *gorm.DB
 	cfg              *config.Config
 	affiliateService *services.AffiliateService
+	sessions         *SessionManager
 	notifyQueue      chan queuedNotification
 	quitChan         chan struct{}
 }
@@ -37,6 +37,7 @@ func NewBotService(cfg *config.Config, db *gorm.DB) *BotService {
 		db:               db,
 		cfg:              cfg,
 		affiliateService: affService,
+		sessions:         NewSessionManager(30 * time.Minute),
 		notifyQueue:      make(chan queuedNotification, 500),
 		quitChan:         make(chan struct{}),
 	}
@@ -65,8 +66,15 @@ func NewBotService(cfg *config.Config, db *gorm.DB) *BotService {
 	return s
 }
 
-// startQueueWorker drains the outbound message queue with a 35ms rate limit (~28 msgs/sec max)
-// to prevent Telegram API HTTP 429 Too Many Requests errors.
+// getSession returns user session, initializing session manager if nil.
+func (s *BotService) getSession(chatID int64) *UserSession {
+	if s.sessions == nil {
+		s.sessions = NewSessionManager(30 * time.Minute)
+	}
+	return s.sessions.Get(chatID)
+}
+
+// startQueueWorker drains outbound queue with 35ms rate limiting
 func (s *BotService) startQueueWorker() {
 	ticker := time.NewTicker(35 * time.Millisecond)
 	defer ticker.Stop()
@@ -84,7 +92,7 @@ func (s *BotService) startQueueWorker() {
 			var err error
 			if s.bot != nil && item.telegramID != 0 {
 				chatID := tu.ID(item.telegramID)
-				m := tu.Message(chatID, item.message)
+				m := tu.Message(chatID, item.message).WithParseMode(telego.ModeHTML)
 				_, err = s.bot.SendMessage(m)
 			} else if item.telegramID != 0 {
 				log.Printf("[Bot Notification Mock] to %d: %s", item.telegramID, item.message)
@@ -101,41 +109,39 @@ func (s *BotService) startQueueWorker() {
 func (s *BotService) Stop() {
 	select {
 	case <-s.quitChan:
-		// already closed
 	default:
 		close(s.quitChan)
 	}
 }
 
-// Start launches the bot polling worker.
+// ProcessUpdate handles incoming updates directly (from Webhook or Long Polling).
+func (s *BotService) ProcessUpdate(update *telego.Update) {
+	if update == nil {
+		return
+	}
+
+	if update.CallbackQuery != nil {
+		s.HandleCallbackQuery(update.CallbackQuery)
+	} else if update.Message != nil {
+		s.handleMessage(update.Message)
+	}
+}
+
+// Start launches the bot polling worker if Long Polling is configured.
 func (s *BotService) Start() {
 	if s.bot == nil {
 		return
 	}
 
-	if s.cfg.Domain != "localhost" && s.cfg.Domain != "127.0.0.1" && (s.cfg.TelegramAPIServer != "" || s.cfg.TelegramBotToken != "") {
-		// When webhook is active (e.g. n8n or cloudflare worker), long polling must not be enabled
-		// unless explicitly forced via FORCE_LONG_POLLING=true.
-		if os.Getenv("FORCE_LONG_POLLING") != "true" {
-			log.Println("Production webhook environment detected. Skipping Telegram Long Polling to avoid 409 Conflict.")
-			return
-		}
-	}
-
+	log.Println("Telegram Bot worker started listening for updates...")
 	updates, err := s.bot.UpdatesViaLongPolling(nil)
 	if err != nil {
 		log.Printf("Failed to get Telegram updates channel: %v", err)
 		return
 	}
 
-	log.Println("Telegram Bot worker started listening for commands...")
-
 	for update := range updates {
-		if update.CallbackQuery != nil {
-			s.HandleCallbackQuery(update.CallbackQuery)
-		} else if update.Message != nil {
-			s.handleMessage(update.Message)
-		}
+		s.ProcessUpdate(&update)
 	}
 }
 
@@ -149,8 +155,21 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 		return false
 	}
 
-	text := strings.TrimSpace(msg.Text)
 	chatID := tu.ID(msg.Chat.ID)
+	session := s.getSession(msg.Chat.ID)
+
+	// Check if message is a photo/document receipt
+	if len(msg.Photo) > 0 || msg.Document != nil {
+		return s.HandleReceiptUpload(msg)
+	}
+
+	text := strings.TrimSpace(msg.Text)
+
+	// Check if in StateWaitingPromo
+	if session.State == StateWaitingPromo && !strings.HasPrefix(text, "/") {
+		s.processPromoInput(chatID, msg.From, text)
+		return true
+	}
 
 	if strings.HasPrefix(text, "/withdraw") {
 		s.handleWithdraw(chatID, msg.From)
@@ -158,267 +177,436 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 	}
 
 	if strings.HasPrefix(text, "/start") {
+		session.State = StateDefault
 		parts := strings.Fields(text)
 		param := ""
 		if len(parts) > 1 {
 			param = parts[1]
 		}
 
-		// 1. Lead Magnet Delivery (?start=guide_essay or ?start=free_audit)
-		if strings.HasPrefix(param, "guide_essay") || strings.HasPrefix(param, "free_audit") {
-			reply := `🎁 <b>Анатомия победной заявки на $20,000</b>
-
-Поздравляем! Ты сделал первый шаг к учёбе в США этим летом.
-
-Внутри этого PDF-чеклиста:
-• Структура победного эссе на 500 слов: хук, конфликт, импакт
-• Резюме по формуле Google XYZ: как избежать банальностей
-• Разбор 5 критических ошибок, убивающих заявку на корню
-
-<i>Изучай материал и примени его к своей заявке!</i>`
-
-			btnWeb := tu.InlineKeyboardButton("Перейти на сайт 🌐").WithURL(s.cfg.FrontendURL)
-			btnTariff := tu.InlineKeyboardButton("Выбрать тариф от 6 900 ₽ ➔").WithURL(s.cfg.FrontendURL + "/#pricing")
-			keyboard := tu.InlineKeyboard(
-				tu.InlineKeyboardRow(btnWeb),
-				tu.InlineKeyboardRow(btnTariff),
-			)
-
-			m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML).WithReplyMarkup(keyboard)
-			if s.bot != nil {
-				_, _ = s.bot.SendMessage(m)
-			}
-			return true
-		}
-
-		// 2. Payment Checkout Helper (?start=pay_<username> or ?start=pay_<username>_ref_<refCode> or ?start=pay)
 		if strings.HasPrefix(param, "pay") {
-			payload := strings.TrimPrefix(param, "pay_")
-			if param == "pay" {
-				payload = ""
-			}
-			username := payload
-			refCode := ""
-
-			if idx := strings.Index(payload, "_ref_"); idx != -1 {
-				username = payload[:idx]
-				refCode = payload[idx+len("_ref_"):]
-			} else if strings.HasPrefix(payload, "ref_") {
-				username = ""
-				refCode = strings.TrimPrefix(payload, "ref_")
-			}
-			username = strings.TrimPrefix(username, "@")
-
-			if msg.From != nil {
-				s.associateBotReferral(msg.From, username, refCode)
-			}
-
-			displayUser := username
-			if displayUser == "" && msg.From != nil {
-				displayUser = msg.From.Username
-				if displayUser == "" {
-					displayUser = msg.From.FirstName
-				}
-			}
-			if displayUser == "" {
-				displayUser = "Student"
-			}
-
-			reply := fmt.Sprintf(`💳 <b>Бронирование места в проекте «так называемый SPARK»</b>
-
-Аккаунт: @%s
-Тариф: <b>Акселератор (Full Mentorship)</b>
-Стоимость со скидкой: <b>6 900 ₽</b>
-(Доступен также тариф: <b>VIP 14 900 ₽</b>)
-
-<b>Способы оплаты:</b>
-1. СБП (Система быстрых платежей): перевод по номеру телефона
-2. Банковская карта РФ
-
-После подтверждения оплаты так называемый Иль активирует доступ, и вам придёт персональная ссылка-приглашение в закрытый Telegram-канал участников:`, displayUser)
-
-			btnCheck := tu.InlineKeyboardButton("Написать так называемому Илю ➔").WithURL("https://t.me/ilyan_vas")
-			keyboard := tu.InlineKeyboard(tu.InlineKeyboardRow(btnCheck))
-
-			m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML).WithReplyMarkup(keyboard)
-			if s.bot != nil {
-				_, _ = s.bot.SendMessage(m)
-			}
+			s.sendPaymentDetails(chatID, msg.From, false)
 			return true
 		}
 
-		// 3. Partner Payout / Withdraw (?start=withdraw)
 		if strings.HasPrefix(param, "withdraw") {
 			s.handleWithdraw(chatID, msg.From)
 			return true
 		}
 
-		// 4. Referral link entry (?start=ref_<code>)
 		if strings.HasPrefix(param, "ref_") {
 			refCode := strings.TrimPrefix(param, "ref_")
 			if msg.From != nil {
 				s.associateBotReferral(msg.From, msg.From.Username, refCode)
 			}
-			welcome := fmt.Sprintf(`👋 Привет, <b>%s</b>!
-
-Тебя пригласили по реферальной ссылке (код: <code>%s</code>).
-Добро пожаловать в проект <b>«так называемый SPARK»</b>!
-
-Нажми кнопку ниже, чтобы перейти на сайт со скидкой:`, msg.From.FirstName, refCode)
-
-			btnApp := tu.InlineKeyboardButton("Перейти на сайт со скидкой 🌐").WithURL(s.cfg.FrontendURL + "?ref=" + refCode)
-			keyboard := tu.InlineKeyboard(tu.InlineKeyboardRow(btnApp))
-
-			m := tu.Message(chatID, welcome).WithParseMode(telego.ModeHTML).WithReplyMarkup(keyboard)
-			if s.bot != nil {
-				_, _ = s.bot.SendMessage(m)
-			}
-			return true
 		}
 
-		// 5. Standard Welcome Message
-		welcome := fmt.Sprintf(`👋 Привет, <b>%s</b>!
-
-Я официальный бот проекта <b>«так называемый SPARK»</b> (куратор: так называемый Иль).
-Здесь ты получишь материалы для подготовки к грантовой программе США, разборы эссе и доступ к симуляциям интервью.
-
-Нажми кнопку ниже, чтобы перейти на официальный сайт программы:`, msg.From.FirstName)
-
-		btnApp := tu.InlineKeyboardButton("Перейти на сайт 🌐").WithURL(s.cfg.FrontendURL)
-		keyboard := tu.InlineKeyboard(tu.InlineKeyboardRow(btnApp))
-
-		m := tu.Message(chatID, welcome).WithParseMode(telego.ModeHTML).WithReplyMarkup(keyboard)
-		if s.bot != nil {
-			_, _ = s.bot.SendMessage(m)
-		}
+		s.sendWelcomeMenu(chatID, msg.From)
 		return true
 	}
 
-	// 6. Access Status Check (/status)
 	if strings.HasPrefix(text, "/status") {
-		var user models.User
-		inviteLink := s.cfg.TelegramInviteLink
-		if inviteLink == "" {
-			inviteLink = "https://t.me/+so_called_spark_private"
-		}
-
-		if s.db != nil {
-			err := s.db.Where("telegram_id = ?", msg.From.ID).First(&user).Error
-			if err == nil && user.HasAccess {
-				reply := fmt.Sprintf(`✅ <b>Ваш доступ активен!</b>
-
-Вы являетесь действующим участником проекта <b>«так называемый SPARK»</b>.
-
-Материалы, видеоразборы и комьюнити доступны в закрытом Telegram-канале:
-%s`, inviteLink)
-
-				btnChannel := tu.InlineKeyboardButton("Перейти в закрытый канал ➔").WithURL(inviteLink)
-				keyboard := tu.InlineKeyboard(tu.InlineKeyboardRow(btnChannel))
-
-				m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML).WithReplyMarkup(keyboard)
-				if s.bot != nil {
-					_, _ = s.bot.SendMessage(m)
-				}
-				return true
-			}
-		}
-
-		reply := `ℹ️ <b>Статус доступа: Не активен</b>
-
-У вас пока нет активного доступа к проекту <b>«так называемый SPARK»</b>.
-Тарифы: <b>Акселератор</b> (6 900 ₽), <b>VIP</b> (14 900 ₽).
-
-После подтверждения оплаты так называемый Иль предоставит персональную ссылку в закрытый канал.`
-
-		btnTariff := tu.InlineKeyboardButton("Оформить тариф ➔").WithURL(s.cfg.FrontendURL + "/#pricing")
-		btnCurator := tu.InlineKeyboardButton("Написать так называемому Илю").WithURL("https://t.me/ilyan_vas")
-		keyboard := tu.InlineKeyboard(
-			tu.InlineKeyboardRow(btnTariff),
-			tu.InlineKeyboardRow(btnCurator),
-		)
-
-		m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML).WithReplyMarkup(keyboard)
-		if s.bot != nil {
-			_, _ = s.bot.SendMessage(m)
-		}
+		s.sendStatusMessage(chatID, msg.From)
 		return true
 	}
 
-	// 7. Receipt Screenshot Handling (Photo / Document)
-	if len(msg.Photo) > 0 || msg.Document != nil {
-		var fileID, fileUniqueID string
-		if len(msg.Photo) > 0 {
-			largest := msg.Photo[len(msg.Photo)-1]
-			fileID = largest.FileID
-			fileUniqueID = largest.FileUniqueID
-		} else if msg.Document != nil {
-			fileID = msg.Document.FileID
-			fileUniqueID = msg.Document.FileUniqueID
-		}
-
-		if fileUniqueID != "" && s.db != nil {
-			var existing models.PaymentReceipt
-			if err := s.db.Where("file_hash = ? OR (file_unique_id != '' AND file_unique_id = ?)", fileUniqueID, fileUniqueID).First(&existing).Error; err == nil {
-				reply := "⚠️ <b>Этот чек уже был отправлен ранее</b>\n\nДанный скриншот чека уже зарегистрирован в системе. Если у вас возникли вопросы, напишите так называемому Илю (@ilyan_vas)."
-				btnCurator := tu.InlineKeyboardButton("Написать так называемому Илю").WithURL("https://t.me/ilyan_vas")
-				m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML).WithReplyMarkup(tu.InlineKeyboard(tu.InlineKeyboardRow(btnCurator)))
-				if s.bot != nil {
-					_, _ = s.bot.SendMessage(m)
-				}
-				return true
-			}
-
-			uname := ""
-			if msg.From != nil {
-				uname = msg.From.Username
-			}
-			receipt := models.PaymentReceipt{
-				FileHash:     fileUniqueID,
-				FileUniqueID: fileUniqueID,
-				TelegramID:   msg.Chat.ID,
-				Username:     uname,
-				FileID:       fileID,
-				Tier:         "accelerator",
-				Status:       "pending",
-				CreatedAt:    time.Now(),
-			}
-			_ = s.db.Create(&receipt)
-
-			// Notify Admin with actionable review card
-			if s.cfg.AdminTelegramID != 0 {
-				_ = s.SendAdminReceiptCard(s.cfg.AdminTelegramID, &receipt)
-			}
-
-			reply := "🧾 <b>Чек об оплате успешно получен!</b>\n\nТак называемый Иль проверит поступление средств и активирует доступ к закрытому Telegram-каналу проекта «так называемый SPARK» в ближайшее время."
-			m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML)
-			if s.bot != nil {
-				_, _ = s.bot.SendMessage(m)
-			}
-			return true
-		}
-	}
-
-	// Handling non-/start, non-/status text messages (e.g., submitting essay/homework for review)
-	if text != "" {
-		reply := `📬 <b>Ваше сообщение принято куратором!</b>
-
-Если вы отправили эссе или резюме на аудит — так называемый Иль проверит материалы и свяжется с вами в личных сообщениях.
-
-Материалы и видеоразборы доступны в закрытом Telegram-канале участников.`
-		btnMain := tu.InlineKeyboardButton("Открыть сайт программы ➔").WithURL(s.cfg.FrontendURL)
-		keyboard := tu.InlineKeyboard(tu.InlineKeyboardRow(btnMain))
-
-		m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML).WithReplyMarkup(keyboard)
-		if s.bot != nil {
-			_, _ = s.bot.SendMessage(m)
-		}
+	// If ordinary text sent, check if it matches a promo code in DB
+	if text != "" && !strings.HasPrefix(text, "/") {
+		s.processPromoInput(chatID, msg.From, text)
 		return true
 	}
 
 	return true
 }
 
-// handleWithdraw delivers partner withdrawal instructions and balance in Telegram.
+func (s *BotService) sendWelcomeMenu(chatID telego.ChatID, from *telego.User) {
+	if s.bot == nil {
+		return
+	}
+
+	firstName := "Студент"
+	if from != nil && from.FirstName != "" {
+		firstName = from.FirstName
+	}
+
+	caption := fmt.Sprintf(`🎓 <b>Проект «так называемый SPARK»</b>
+
+Здравствуйте, <b>%s</b>!
+
+Комплексная программа подготовки к прохождению всероссийского конкурсного отбора на грантовую стажировку в США ($20,000).
+
+В рамках проекта участники получают проверенные шаблоны резюме (Google XYZ), методологию написания эссе, банк вопросов прошлых лет к Zoom-интервью и сопровождение визового этапа (J-1).
+
+👇 <b>Выберите интересующий раздел:</b>`, firstName)
+
+	// Send rich photo card with verified Golden Gate image
+	photoMsg := tu.Photo(chatID, tu.FileFromID(PhotoGoldenGate)).
+		WithCaption(caption).
+		WithParseMode(telego.ModeHTML).
+		WithReplyMarkup(MainMenuKeyboard(s.cfg.FrontendURL))
+
+	if _, err := s.bot.SendPhoto(photoMsg); err != nil {
+		// Fallback to text message if photo failed
+		textMsg := tu.Message(chatID, caption).
+			WithParseMode(telego.ModeHTML).
+			WithReplyMarkup(MainMenuKeyboard(s.cfg.FrontendURL))
+		_, _ = s.bot.SendMessage(textMsg)
+	}
+}
+
+func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User, withPromo bool) {
+	if s.bot == nil {
+		return
+	}
+
+	session := s.getSession(chatID.ID)
+	session.State = StateWaitingReceipt
+
+	var text string
+	var keyboard *telego.InlineKeyboardMarkup
+
+	if withPromo || session.DiscountPct > 0 {
+		text = `🎉 <b>Промокод успешно активирован! Скидка 5%</b>
+
+<b>Стоимость с учётом скидки 5%:</b>
+• Акселератор: <b>6 555 ₽</b> (скидка 345 ₽)
+• VIP: <b>14 155 ₽</b> (скидка 745 ₽)
+
+📍 <b>Реквизиты для оплаты со скидкой (СБП 0%):</b>
+• Банк: <b>Т-Банк (Тинькофф)</b>
+• Номер телефона: <code>+7 981 163-36-91</code>
+• Получатель: <b>Васюнин Илья Олегович</b>
+• Назначение платежа: <code>SPARK ПРОМО [Тариф]</code>
+
+📌 <b>После перевода прикрепи скриншот чека прямо в этот чат!</b>
+Бот передаст его так называемому Илю и сразу выдаст персональную ссылку в закрытый канал потока.`
+		keyboard = PromoAppliedKeyboard()
+	} else {
+		text = `💳 <b>Бронирование места в проекте «так называемый SPARK»</b>
+
+<b>Тарифы участия:</b>
+1️⃣ <b>Акселератор [Хит]:</b> 6 900 ₽ (по промокоду: <b>6 555 ₽</b>)
+2️⃣ <b>VIP:</b> 14 900 ₽ (по промокоду: <b>14 155 ₽</b>) <i>[Строго 3 места]</i>
+
+📍 <b>Реквизиты для оплаты (СБП 0%):</b>
+• Банк: <b>Т-Банк (Тинькофф)</b>
+• Телефон: <code>+7 981 163-36-91</code>
+• Получатель: <b>Васюнин Илья Олегович</b>
+• Назначение: <code>SPARK [Тариф]</code>
+
+📌 <b>После перевода просто отправь скриншот чека в этот чат!</b>
+Бот передаст его так называемому Илю и сразу пришлёт персональную ссылку в закрытый канал потока.`
+		keyboard = PaymentKeyboard()
+	}
+
+	m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(keyboard)
+	_, _ = s.bot.SendMessage(m)
+}
+
+func (s *BotService) processPromoInput(chatID telego.ChatID, from *telego.User, rawCode string) {
+	if s.bot == nil {
+		return
+	}
+
+	code := strings.ToUpper(strings.TrimSpace(rawCode))
+	session := s.sessions.Get(chatID.ID)
+
+	// Validate promo code in DB
+	var promo models.PromoCode
+	err := s.db.Where("UPPER(code) = ? AND is_active = true", code).First(&promo).Error
+
+	// Also support default promo START5, IL5, SPARK5
+	isValid := err == nil || code == "START5" || code == "IL5" || code == "SPARK5" || code == "ILYA5"
+
+	if isValid {
+		session.PromoCode = code
+		session.DiscountPct = 5
+		session.State = StateWaitingReceipt
+		s.sendPaymentDetails(chatID, from, true)
+	} else {
+		session.State = StateDefault
+		text := `❌ <b>Промокод не найден или отключён.</b>
+
+Проверь написание и отправь код ещё раз — или оплати без скидки.`
+		keyboard := tu.InlineKeyboard(
+			tu.InlineKeyboardRow(
+				tu.InlineKeyboardButton("🎟 Ввести другой промокод").WithCallbackData("promo_enter"),
+			),
+			tu.InlineKeyboardRow(
+				tu.InlineKeyboardButton("💳 Оплатить без промокода").WithCallbackData("action_payment"),
+			),
+			tu.InlineKeyboardRow(
+				tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu"),
+			),
+		)
+		m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(keyboard)
+		_, _ = s.bot.SendMessage(m)
+	}
+}
+
+func (s *BotService) sendStatusMessage(chatID telego.ChatID, from *telego.User) {
+	if s.bot == nil {
+		return
+	}
+
+	var user models.User
+	hasAccess := false
+	if from != nil && s.db != nil {
+		if err := s.db.Where("telegram_id = ?", from.ID).First(&user).Error; err == nil {
+			hasAccess = user.HasAccess
+		}
+	}
+
+	if hasAccess {
+		inviteLink := s.cfg.TelegramInviteLink
+		reply := fmt.Sprintf(`✅ <b>Ваш доступ активен!</b>
+
+Добро пожаловать в проект <b>«так называемый SPARK»</b>.
+Ваша ссылка в закрытый канал потока:
+%s`, inviteLink)
+		btnChannel := tu.InlineKeyboardButton("Открыть закрытый канал 🚀").WithURL(inviteLink)
+		m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML).WithReplyMarkup(tu.InlineKeyboard(tu.InlineKeyboardRow(btnChannel)))
+		_, _ = s.bot.SendMessage(m)
+		return
+	}
+
+	reply := `ℹ️ <b>Статус доступа: Не активен</b>
+
+У вас пока нет активного доступа к проекту <b>«так называемый SPARK»</b>.
+Тарифы: <b>Акселератор</b> (6 900 ₽), <b>VIP</b> (14 900 ₽).
+
+После подтверждения оплаты так называемый Иль предоставит персональную ссылку в закрытый канал.`
+	btnTariff := tu.InlineKeyboardButton("Оформить тариф ➔").WithCallbackData("action_payment")
+	btnCurator := tu.InlineKeyboardButton("Написать так называемому Илю").WithURL("https://t.me/ilyan_vas")
+	m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML).WithReplyMarkup(tu.InlineKeyboard(tu.InlineKeyboardRow(btnTariff), tu.InlineKeyboardRow(btnCurator)))
+	_, _ = s.bot.SendMessage(m)
+}
+
+// HandleCallbackQuery handles all button taps.
+func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
+	if query == nil {
+		return false
+	}
+
+	data := query.Data
+
+	// Admin Receipt Approvals - Security check for admin rights
+	if strings.HasPrefix(data, "receipt_approve_") {
+		idStr := strings.TrimPrefix(data, "receipt_approve_")
+		s.processReceiptApproval(query, idStr)
+		return true
+	}
+	if strings.HasPrefix(data, "receipt_reject_") {
+		idStr := strings.TrimPrefix(data, "receipt_reject_")
+		s.processReceiptRejection(query, idStr)
+		return true
+	}
+
+	if query.Message == nil {
+		return false
+	}
+
+	chatID := tu.ID(query.Message.GetChat().ID)
+	session := s.getSession(query.Message.GetChat().ID)
+
+	// Calculator Steps
+	if strings.HasPrefix(data, "calc_") {
+		return s.HandleCalculatorCallback(query)
+	}
+
+	if s.bot != nil {
+		_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+			CallbackQueryID: query.ID,
+		})
+	}
+
+	switch data {
+	case "action_menu":
+		session.State = StateDefault
+		s.sendWelcomeMenu(chatID, &query.From)
+		return true
+
+	case "action_payment":
+		session.State = StateWaitingReceipt
+		s.sendPaymentDetails(chatID, &query.From, false)
+		return true
+
+	case "promo_enter":
+		session.State = StateWaitingPromo
+		text := `🎟 <b>Активация промокода на скидку 5%</b>
+
+Напиши промокод прямо в ответном сообщении!
+
+<i>Например: <code>START5</code> или промокод твоего друга-партнёра.</i>
+
+Скидка 5% действует на любой тариф:
+• Акселератор: 6 900 ₽ ➔ <b>6 555 ₽</b>
+• VIP: 14 900 ₽ ➔ <b>14 155 ₽</b>`
+		m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(PromoRequestKeyboard())
+		_, _ = s.bot.SendMessage(m)
+		return true
+
+	case "info_program":
+		text := `🚀 <b>Программа сопровождения «так называемый SPARK»:</b>
+
+• <b>Закрытый канал потока</b> со всеми материалами и апдейтами
+• <b>Шаблоны:</b> Google XYZ резюме, эссе на 500 слов
+• <b>X-Factor Video framework:</b> режиссура и хуки первых 5 секунд
+• <b>Банк вопросов</b> к Zoom-интервью с комиссией
+• <b>Языковая подготовка</b> к собеседованию
+• <b>Визовый этап:</b> DS-160, запись в дипмиссию, привязка к родине
+• <b>Персональный аудит</b> и 45-мин Zoom-интервью с так называемым Илем
+
+<b>Тарифные планы:</b>
+1️⃣ <b>Акселератор [Хит]:</b> 6 900 ₽ (6 555 ₽ по промокоду)
+2️⃣ <b>VIP:</b> 14 900 ₽ (14 155 ₽ по промокоду)`
+
+		btnPay := tu.InlineKeyboardButton("💳 Купить курс").WithCallbackData("action_payment")
+		btnPromo := tu.InlineKeyboardButton("🎟 Применить промокод -5%").WithCallbackData("promo_enter")
+		btnBlog := tu.InlineKeyboardButton("🇺🇸 Блог про мою поездку в США").WithURL("https://t.me/so_called_spark")
+		btnMenu := tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu")
+
+		kb := tu.InlineKeyboard(
+			tu.InlineKeyboardRow(btnPay),
+			tu.InlineKeyboardRow(btnPromo),
+			tu.InlineKeyboardRow(btnBlog),
+			tu.InlineKeyboardRow(btnMenu),
+		)
+
+		photoMsg := tu.Photo(chatID, tu.FileFromID(PhotoProgramInfo)).
+			WithCaption(text).
+			WithParseMode(telego.ModeHTML).
+			WithReplyMarkup(kb)
+
+		if _, err := s.bot.SendPhoto(photoMsg); err != nil {
+			m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
+			_, _ = s.bot.SendMessage(m)
+		}
+		return true
+	}
+
+	return false
+}
+
+func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr string) {
+	adminID := query.From.ID
+	if s.cfg != nil && s.cfg.AdminTelegramID != 0 && adminID != s.cfg.AdminTelegramID {
+		if s.bot != nil {
+			_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+				CallbackQueryID: query.ID,
+				Text:            "⛔️ У вас нет прав администратора.",
+				ShowAlert:       true,
+			})
+		}
+		return
+	}
+
+	if s.db == nil {
+		return
+	}
+
+	var receipt models.PaymentReceipt
+	if err := s.db.First(&receipt, "id = ?", idStr).Error; err != nil {
+		_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+			CallbackQueryID: query.ID,
+			Text:            "Чек не найден в базе данных.",
+			ShowAlert:       true,
+		})
+		return
+	}
+
+	if receipt.Status == "approved" {
+		_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+			CallbackQueryID: query.ID,
+			Text:            "Этот чек уже был одобрен ранее.",
+			ShowAlert:       true,
+		})
+		return
+	}
+
+	inviteLink := s.cfg.TelegramInviteLink
+	if s.cfg.TelegramChannelID != 0 {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if link, err := s.CreateOneTimeInviteLink(ctx, s.cfg.TelegramChannelID); err == nil && link != "" {
+			inviteLink = link
+		}
+	}
+
+	receipt.Status = "approved"
+	s.db.Save(&receipt)
+
+	var student models.User
+	if err := s.db.Where("telegram_id = ?", receipt.TelegramID).First(&student).Error; err == nil {
+		student.HasAccess = true
+		now := time.Now()
+		student.AccessGrantedAt = &now
+		s.db.Save(&student)
+		_ = s.affiliateService.ProcessCoursePurchase(student.ID, receipt.Amount)
+	}
+
+	studentMsg := fmt.Sprintf(`🎉 <b>Поздравляем! Оплата подтверждена.</b>
+
+Добро пожаловать в проект <b>«так называемый SPARK»</b>!
+Твоя ссылка для входа в закрытый канал потока:
+%s
+
+<i>Ссылка является персональной и одноразовой.</i>`, inviteLink)
+
+	btnChannel := tu.InlineKeyboardButton("Войти в закрытый канал ➔").WithURL(inviteLink)
+	m := tu.Message(tu.ID(receipt.TelegramID), studentMsg).WithParseMode(telego.ModeHTML).WithReplyMarkup(tu.InlineKeyboard(tu.InlineKeyboardRow(btnChannel)))
+	_, _ = s.bot.SendMessage(m)
+
+	_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+		CallbackQueryID: query.ID,
+		Text:            "✅ Доступ успешно выдан!",
+	})
+}
+
+func (s *BotService) processReceiptRejection(query *telego.CallbackQuery, idStr string) {
+	adminID := query.From.ID
+	if s.cfg != nil && s.cfg.AdminTelegramID != 0 && adminID != s.cfg.AdminTelegramID {
+		if s.bot != nil {
+			_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+				CallbackQueryID: query.ID,
+				Text:            "⛔️ У вас нет прав администратора.",
+				ShowAlert:       true,
+			})
+		}
+		return
+	}
+
+	if s.db == nil {
+		return
+	}
+
+	var receipt models.PaymentReceipt
+	if err := s.db.First(&receipt, "id = ?", idStr).Error; err != nil {
+		return
+	}
+
+	receipt.Status = "rejected"
+	s.db.Save(&receipt)
+
+	rejectMsg := `⚠️ <b>К сожалению, ваш чек не был подтверждён.</b>
+
+Возможные причины:
+• Неверная сумма перевода
+• Нечитаемый скриншот или отсутствие фискального подтверждения банка
+
+Пожалуйста, свяжитесь с куратором: @ilyan_vas`
+
+	btnHelp := tu.InlineKeyboardButton("Написать так называемому Илю").WithURL("https://t.me/ilyan_vas")
+	m := tu.Message(tu.ID(receipt.TelegramID), rejectMsg).WithParseMode(telego.ModeHTML).WithReplyMarkup(tu.InlineKeyboard(tu.InlineKeyboardRow(btnHelp)))
+	_, _ = s.bot.SendMessage(m)
+
+	_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+		CallbackQueryID: query.ID,
+		Text:            "❌ Чек отклонён",
+	})
+}
+
+// handleWithdraw handles partner balance withdrawals
 func (s *BotService) handleWithdraw(chatID telego.ChatID, from *telego.User) {
 	balanceInfo := ""
 	if from != nil && s.db != nil {
@@ -444,13 +632,12 @@ func (s *BotService) handleWithdraw(chatID telego.ChatID, from *telego.User) {
 	}
 }
 
-// SendNotification queues an outbound direct message through the rate-limited worker.
+// SendNotification queues an outbound direct message through rate limiter
 func (s *BotService) SendNotification(telegramID int64, message string) error {
 	if telegramID == 0 {
 		return nil
 	}
 
-	// If queue is initialized, route message through rate limiter
 	if s.notifyQueue != nil {
 		respChan := make(chan error, 1)
 		item := queuedNotification{
@@ -461,17 +648,14 @@ func (s *BotService) SendNotification(telegramID int64, message string) error {
 
 		select {
 		case s.notifyQueue <- item:
-			// Wait for worker result with reasonable timeout
 			select {
 			case err := <-respChan:
 				return err
 			case <-time.After(3 * time.Second):
-				// Return nil after enqueue to avoid blocking caller indefinitely during massive bursts
 				return nil
 			}
 		default:
-			// If queue buffer is full, fallback to direct send or log
-			log.Printf("[Bot Rate Limiter] Queue buffer full, sending directly to %d", telegramID)
+			log.Printf("[Bot Rate Limiter] Queue full, sending directly to %d", telegramID)
 		}
 	}
 
@@ -481,12 +665,12 @@ func (s *BotService) SendNotification(telegramID int64, message string) error {
 	}
 
 	chatID := tu.ID(telegramID)
-	m := tu.Message(chatID, message)
+	m := tu.Message(chatID, message).WithParseMode(telego.ModeHTML)
 	_, err := s.bot.SendMessage(m)
 	return err
 }
 
-// CreateOneTimeInviteLink generates a single-use invite link with a 24-hour expiration for a channel.
+// CreateOneTimeInviteLink generates a single-use invite link with a 24-hour expiration.
 func (s *BotService) CreateOneTimeInviteLink(ctx context.Context, channelID int64) (string, error) {
 	if s.bot == nil {
 		return "", fmt.Errorf("bot service is not initialized")
@@ -508,7 +692,6 @@ func (s *BotService) CreateOneTimeInviteLink(ctx context.Context, channelID int6
 	return link.InviteLink, nil
 }
 
-// associateBotReferral associates the student with a referrer when starting the bot.
 func (s *BotService) associateBotReferral(from *telego.User, inputUsername, refCode string) {
 	if s.db == nil || from == nil {
 		return
@@ -524,354 +707,40 @@ func (s *BotService) associateBotReferral(from *telego.User, inputUsername, refC
 	var user models.User
 	err := s.db.Where("telegram_id = ?", tgID).First(&user).Error
 	if err != nil {
-		// User does not exist yet. Only check for placeholder accounts where telegram_id is unset
-		// to strictly prevent hijacking of existing users' accounts.
-		if uname != "" {
-			var existingByName models.User
-			if errName := s.db.Where("LOWER(username) = LOWER(?) AND (telegram_id = 0 OR telegram_id IS NULL)", uname).First(&existingByName).Error; errName == nil {
-				existingByName.TelegramID = tgID
-				if existingByName.FirstName == "" {
-					existingByName.FirstName = from.FirstName
-				}
-				if existingByName.LastName == "" {
-					existingByName.LastName = from.LastName
-				}
-				s.db.Save(&existingByName)
-				user = existingByName
-			}
+		firstName := from.FirstName
+		if firstName == "" {
+			firstName = "Student"
+		}
+		role := "student"
+		if s.cfg.AdminTelegramID != 0 && tgID == s.cfg.AdminTelegramID {
+			role = "admin"
 		}
 
-		if user.ID == 0 {
-			firstName := from.FirstName
-			if firstName == "" {
-				firstName = uname
-			}
-			if firstName == "" {
-				firstName = "Student"
-			}
-
-			role := "student"
-			if s.cfg.AdminTelegramID != 0 && tgID == s.cfg.AdminTelegramID {
-				role = "admin"
-			}
-
-			user = models.User{
-				TelegramID: tgID,
-				Username:   uname,
-				FirstName:  firstName,
-				LastName:   from.LastName,
-				Role:       role,
-				CreatedAt:  time.Now(),
-			}
-			if err := s.db.Create(&user).Error; err != nil {
-				log.Printf("Failed to create user from bot: %v", err)
-				return
-			}
+		user = models.User{
+			TelegramID: tgID,
+			Username:   uname,
+			FirstName:  firstName,
+			LastName:   from.LastName,
+			Role:       role,
+			CreatedAt:  time.Now(),
+		}
+		if err := s.db.Create(&user).Error; err != nil {
+			return
 		}
 
-		// Ensure AffiliateProfile exists for this user with guaranteed unique code
 		cleanUname := strings.ToLower(uname)
 		if cleanUname == "" {
 			cleanUname = fmt.Sprintf("id%d", tgID)
 		}
-		var affProfile models.AffiliateProfile
-		if errAff := s.db.Where("user_id = ?", user.ID).First(&affProfile).Error; errAff != nil {
-			finalCode := cleanUname
-			var existingCode models.AffiliateProfile
-			if errCode := s.db.Where("referral_code = ?", finalCode).First(&existingCode).Error; errCode == nil && existingCode.UserID != user.ID {
-				finalCode = fmt.Sprintf("%s_%d", cleanUname, user.ID)
-			}
-			affProfile = models.AffiliateProfile{
-				UserID:       user.ID,
-				ReferralCode: finalCode,
-				CreatedAt:    time.Now(),
-			}
-			_ = s.db.Create(&affProfile).Error
+		affProfile := models.AffiliateProfile{
+			UserID:       user.ID,
+			ReferralCode: cleanUname,
+			CreatedAt:    time.Now(),
 		}
-	} else {
-		// Update username if it was empty or changed
-		if user.Username == "" && uname != "" {
-			user.Username = uname
-			s.db.Save(&user)
-		}
-		// Also ensure existing user has an AffiliateProfile if it was missing
-		var affProfile models.AffiliateProfile
-		if errAff := s.db.Where("user_id = ?", user.ID).First(&affProfile).Error; errAff != nil {
-			cleanUname := strings.ToLower(user.Username)
-			if cleanUname == "" {
-				cleanUname = fmt.Sprintf("id%d", tgID)
-			}
-			finalCode := cleanUname
-			var existingCode models.AffiliateProfile
-			if errCode := s.db.Where("referral_code = ?", finalCode).First(&existingCode).Error; errCode == nil && existingCode.UserID != user.ID {
-				finalCode = fmt.Sprintf("%s_%d", cleanUname, user.ID)
-			}
-			affProfile = models.AffiliateProfile{
-				UserID:       user.ID,
-				ReferralCode: finalCode,
-				CreatedAt:    time.Now(),
-			}
-			_ = s.db.Create(&affProfile).Error
-		}
+		_ = s.db.Create(&affProfile).Error
 	}
 
-	// Link referral if refCode is provided
-	if refCode != "" && user.ID != 0 && s.affiliateService != nil {
-		if err := s.affiliateService.TrackReferral(user.ID, refCode); err != nil {
-			log.Printf("TrackReferral error for user %d and ref %s: %v", user.ID, refCode, err)
-		}
+	if refCode != "" {
+		_ = s.affiliateService.TrackReferral(user.ID, refCode)
 	}
 }
-
-// SendAdminReceiptCard sends an admin card with receipt photo/info and quick Action Inline Buttons.
-func (s *BotService) SendAdminReceiptCard(adminTelegramID int64, receipt *models.PaymentReceipt) error {
-	if s.bot == nil || adminTelegramID == 0 || receipt == nil {
-		return nil
-	}
-
-	caption := fmt.Sprintf(`🧾 <b>Новый чек на проверку (#%d)</b>
-
-👤 Студент: <b>%s</b> (@%s)
-🆔 Telegram ID: <code>%d</code>
-📦 Тариф: <b>%s</b>
-💰 Сумма: <b>%.0f ₽</b>
-⏱ Время: %s
-
-Выберите действие:`,
-		receipt.ID,
-		receipt.Username,
-		receipt.Username,
-		receipt.TelegramID,
-		strings.ToUpper(receipt.Tier),
-		receipt.Amount,
-		receipt.CreatedAt.Format("02.01.2006 15:04"),
-	)
-
-	btnApprove := tu.InlineKeyboardButton("✅ Одобрить и выдать доступ").WithCallbackData(fmt.Sprintf("receipt_approve_%d", receipt.ID))
-	btnReject := tu.InlineKeyboardButton("❌ Отклонить чек").WithCallbackData(fmt.Sprintf("receipt_reject_%d", receipt.ID))
-	btnChat := tu.InlineKeyboardButton("💬 Написать студенту").WithURL(fmt.Sprintf("tg://user?id=%d", receipt.TelegramID))
-
-	keyboard := tu.InlineKeyboard(
-		tu.InlineKeyboardRow(btnApprove),
-		tu.InlineKeyboardRow(btnReject),
-		tu.InlineKeyboardRow(btnChat),
-	)
-
-	chatID := tu.ID(adminTelegramID)
-
-	// If FileID is available (photo/document), send photo or document with caption
-	if receipt.FileID != "" {
-		photoMsg := tu.Photo(chatID, telego.InputFile{FileID: receipt.FileID}).
-			WithCaption(caption).
-			WithParseMode(telego.ModeHTML).
-			WithReplyMarkup(keyboard)
-
-		_, err := s.bot.SendPhoto(photoMsg)
-		if err == nil {
-			return nil
-		}
-	}
-
-	// Fallback to text message
-	msg := tu.Message(chatID, caption).
-		WithParseMode(telego.ModeHTML).
-		WithReplyMarkup(keyboard)
-
-	_, err := s.bot.SendMessage(msg)
-	return err
-}
-
-// HandleCallbackQuery processes inline button clicks ([✅ Одобрить], [❌ Отклонить]).
-func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
-	if query == nil || query.Data == "" {
-		return false
-	}
-
-	data := query.Data
-	adminID := query.From.ID
-
-	// Security: verify clicker is administrator
-	if s.cfg != nil && s.cfg.AdminTelegramID != 0 && adminID != s.cfg.AdminTelegramID {
-		if s.bot != nil {
-			_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
-				CallbackQueryID: query.ID,
-				Text:            "⛔️ У вас нет прав администратора для этого действия.",
-				ShowAlert:       true,
-			})
-		}
-		return true
-	}
-
-	if strings.HasPrefix(data, "receipt_approve_") {
-		idStr := strings.TrimPrefix(data, "receipt_approve_")
-		s.processReceiptApproval(query, idStr)
-		return true
-	}
-
-	if strings.HasPrefix(data, "receipt_reject_") {
-		idStr := strings.TrimPrefix(data, "receipt_reject_")
-		s.processReceiptRejection(query, idStr)
-		return true
-	}
-
-	return false
-}
-
-func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr string) {
-	if s.db == nil {
-		return
-	}
-
-	var receipt models.PaymentReceipt
-	if err := s.db.First(&receipt, "id = ?", idStr).Error; err != nil {
-		_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
-			CallbackQueryID: query.ID,
-			Text:            "Чек не найден в базе данных.",
-			ShowAlert:       true,
-		})
-		return
-	}
-
-	if receipt.Status == "approved" {
-		_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
-			CallbackQueryID: query.ID,
-			Text:            "Этот чек уже был одобрен ранее.",
-			ShowAlert:       true,
-		})
-		return
-	}
-
-	// Generate one-time dynamic invite link if channel is set
-	inviteLink := s.cfg.TelegramInviteLink
-	if s.cfg.TelegramChannelID != 0 {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		if link, err := s.CreateOneTimeInviteLink(ctx, s.cfg.TelegramChannelID); err == nil && link != "" {
-			inviteLink = link
-		}
-	}
-
-	// Update status and grant access atomically
-	now := time.Now()
-	err := s.db.Transaction(func(tx *gorm.DB) error {
-		receipt.Status = "approved"
-		if err := tx.Save(&receipt).Error; err != nil {
-			return err
-		}
-
-		if receipt.TelegramID != 0 {
-			var user models.User
-			if err := tx.Where("telegram_id = ?", receipt.TelegramID).First(&user).Error; err == nil {
-				user.HasAccess = true
-				if user.AccessGrantedAt == nil {
-					user.AccessGrantedAt = &now
-				}
-				if err := tx.Save(&user).Error; err != nil {
-					return err
-				}
-
-				// Process affiliate commission if applicable
-				if s.affiliateService != nil {
-					amount := receipt.Amount
-					if amount <= 0 {
-						amount = 6900.0
-					}
-					_ = s.affiliateService.ProcessCoursePurchaseTx(tx, user.ID, amount)
-				}
-			}
-		}
-		return nil
-	})
-
-	if err != nil {
-		_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
-			CallbackQueryID: query.ID,
-			Text:            "Ошибка при обновлении статуса: " + err.Error(),
-			ShowAlert:       true,
-		})
-		return
-	}
-
-	// Notify student with the invite link
-	if receipt.TelegramID != 0 {
-		studentMsg := fmt.Sprintf(`🎉 <b>Поздравляем! Ваш платёж успешно подтверждён!</b>
-
-Куратор так называемый Иль подтвердил ваш платёж по тарифу <b>%s</b>.
-Ваш доступ к закрытому Telegram-каналу и комьюнити проекта <b>«так называемый SPARK»</b> активирован!
-
-🔗 <b>Персональная ссылка-приглашение:</b>
-%s
-
-<i>(Ссылка одноразовая и действует 24 часа. Сохраните её!)</i>`, strings.ToUpper(receipt.Tier), inviteLink)
-
-		_ = s.SendNotification(receipt.TelegramID, studentMsg)
-	}
-
-	_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
-		CallbackQueryID: query.ID,
-		Text:            "✅ Доступ успешно выдан! Студент получил ссылку-приглашение.",
-	})
-
-	// Update admin message text or caption
-	updatedText := fmt.Sprintf("✅ <b>ЧЕК ОДОБРЕН (#%d)</b>\nСтудент: @%s\nТариф: %s (%.0f ₽)\nСсылка выдана: %s",
-		receipt.ID, receipt.Username, strings.ToUpper(receipt.Tier), receipt.Amount, inviteLink)
-
-	if query.Message != nil {
-		m := query.Message
-		chatID := tu.ID(m.GetChat().ID)
-		msgID := m.GetMessageID()
-		_, _ = s.bot.EditMessageCaption(&telego.EditMessageCaptionParams{
-			ChatID:    chatID,
-			MessageID: msgID,
-			Caption:   updatedText,
-			ParseMode: telego.ModeHTML,
-		})
-	}
-}
-
-func (s *BotService) processReceiptRejection(query *telego.CallbackQuery, idStr string) {
-	if s.db == nil {
-		return
-	}
-
-	var receipt models.PaymentReceipt
-	if err := s.db.First(&receipt, "id = ?", idStr).Error; err != nil {
-		_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
-			CallbackQueryID: query.ID,
-			Text:            "Чек не найден в базе данных.",
-			ShowAlert:       true,
-		})
-		return
-	}
-
-	receipt.Status = "rejected"
-	_ = s.db.Save(&receipt)
-
-	if receipt.TelegramID != 0 {
-		studentMsg := `⚠️ <b>Чек об оплате отклонён</b>
-
-Куратор не смог подтвердить платёж по предоставленному скриншоту (нечёткое изображение, несоответствие суммы или реквизитов).
-
-Пожалуйста, отправьте корректный чек или напишите куратору так называемому Илю (@ilyan_vas) для уточнения деталей.`
-
-		_ = s.SendNotification(receipt.TelegramID, studentMsg)
-	}
-
-	_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
-		CallbackQueryID: query.ID,
-		Text:            "❌ Чек отклонён. Уведомление отправлено студенту.",
-	})
-
-	if query.Message != nil {
-		m := query.Message
-		chatID := tu.ID(m.GetChat().ID)
-		msgID := m.GetMessageID()
-		_, _ = s.bot.EditMessageCaption(&telego.EditMessageCaptionParams{
-			ChatID:    chatID,
-			MessageID: msgID,
-			Caption:   fmt.Sprintf("❌ <b>ЧЕК ОТКЛОНЁН (#%d)</b>\nСтудент: @%s (Telegram ID: %d)", receipt.ID, receipt.Username, receipt.TelegramID),
-			ParseMode: telego.ModeHTML,
-		})
-	}
-}
-
