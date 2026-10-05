@@ -236,6 +236,35 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 		return true
 	}
 
+	// Diagnostic tool for Telegram Premium Custom Emojis
+	if strings.HasPrefix(text, "/emoji") {
+		var detectedIDs []string
+		for _, entity := range msg.Entities {
+			if entity.Type == telego.EntityTypeCustomEmoji && entity.CustomEmojiID != "" {
+				detectedIDs = append(detectedIDs, entity.CustomEmojiID)
+			}
+		}
+		if len(detectedIDs) > 0 {
+			reply := "🎉 <b>Обнаружены Custom Emoji ID:</b>\n\n"
+			for i, id := range detectedIDs {
+				reply += fmt.Sprintf("%d. <code>%s</code>\n", i+1, id)
+			}
+			reply += "\n<i>Скопируйте их сюда в чат, и мы внедрим их в оформление бота!</i>"
+			m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML)
+			_, _ = s.bot.SendMessage(m)
+		} else {
+			reply := `ℹ️ <b>Как узнать Custom Emoji ID:</b>
+
+Отправьте команду <code>/emoji</code> вместе с эмодзи из вашего пака прямо в одном сообщении, например:
+<code>/emoji </code> [вставьте эмодзи из пака @emojiabc]
+
+Бот моментально считает их Telegram ID и пришлёт вам!`
+			m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML)
+			_, _ = s.bot.SendMessage(m)
+		}
+		return true
+	}
+
 	if strings.HasPrefix(text, "/status") {
 		s.sendStatusMessage(chatID, msg.From)
 		return true
