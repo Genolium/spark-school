@@ -361,17 +361,25 @@ func (s *BotService) sendWelcomeMenu(chatID telego.ChatID, from *telego.User) {
 	if err == nil && sentMsg != nil {
 		s.CacheSentPhoto(MediaMainBanner, sentMsg)
 	} else if err != nil {
-		log.Printf("[Bot Error] SendPhoto failed: %v. Stripping custom emojis and sending fallback...", err)
-		// Clean <tg-emoji> tags to avoid ENTITY_TEXT_INVALID
-		cleanCaption := StripTgEmoji(caption)
-		textMsg := tu.Message(chatID, cleanCaption).
+		log.Printf("[Bot Error] SendPhoto with local media failed: %v. Retrying with verified photo file ID...", err)
+		// Fallback 1: Try sending with verified Telegram photo ID and KEEP custom emojis!
+		fallbackPhoto := tu.Photo(chatID, tu.FileFromID(PhotoGoldenGate)).
+			WithCaption(caption).
 			WithParseMode(telego.ModeHTML).
 			WithReplyMarkup(MainMenuKeyboard(s.cfg.FrontendURL))
-		if _, textErr := s.bot.SendMessage(textMsg); textErr != nil {
-			log.Printf("[Bot Error] Fallback SendMessage failed: %v. Retrying with plain text...", textErr)
-			plainMsg := tu.Message(chatID, cleanCaption).
+		if _, fbErr := s.bot.SendPhoto(fallbackPhoto); fbErr != nil {
+			log.Printf("[Bot Error] Fallback SendPhoto also failed: %v. Sending message...", fbErr)
+			textMsg := tu.Message(chatID, caption).
+				WithParseMode(telego.ModeHTML).
 				WithReplyMarkup(MainMenuKeyboard(s.cfg.FrontendURL))
-			_, _ = s.bot.SendMessage(plainMsg)
+			if _, textErr := s.bot.SendMessage(textMsg); textErr != nil {
+				log.Printf("[Bot Error] SendMessage with custom emoji failed: %v. Cleaning tags...", textErr)
+				cleanCaption := StripTgEmoji(caption)
+				cleanMsg := tu.Message(chatID, cleanCaption).
+					WithParseMode(telego.ModeHTML).
+					WithReplyMarkup(MainMenuKeyboard(s.cfg.FrontendURL))
+				_, _ = s.bot.SendMessage(cleanMsg)
+			}
 		}
 	}
 }

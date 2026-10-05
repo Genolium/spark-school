@@ -104,9 +104,9 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) bool 
 
 		session.CalcEnglishLevel = data
 
-		star := TgEmoji(EmojiSparkle1, "✦")
+		star := TgEmoji(EmojiSparkle1, "✨")
 		check := TgEmoji(EmojiCheck, "✅")
-		spark := TgEmoji(EmojiSparkle2, "✧")
+		spark := TgEmoji(EmojiSparkle2, "⭐")
 
 		reply := fmt.Sprintf(`%s <b>Твой расчет шансов на грант $20,000:</b>
 
