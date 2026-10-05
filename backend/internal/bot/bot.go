@@ -152,8 +152,11 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 		return false
 	}
 
+	log.Printf("[Bot Inbound] chat_id=%d, type=%s, from=%s, text=%q", msg.Chat.ID, msg.Chat.Type, msg.From.FirstName, msg.Text)
+
 	// Private Chat Filter (R5): strictly ignore group, supergroup, channel messages
 	if msg.Chat.Type != "private" || msg.Chat.ID <= 0 {
+		log.Printf("[Bot Inbound Ignored] chat_type=%s, chat_id=%d", msg.Chat.Type, msg.Chat.ID)
 		return false
 	}
 
@@ -238,27 +241,46 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 
 	// Diagnostic tool for Telegram Premium Custom Emojis
 	if strings.HasPrefix(text, "/emoji") {
-		var detectedIDs []string
+		type detectedEmoji struct {
+			fallback string
+			id       string
+		}
+		var detected []detectedEmoji
+
+		runes := []rune(msg.Text)
 		for _, entity := range msg.Entities {
 			if entity.Type == telego.EntityTypeCustomEmoji && entity.CustomEmojiID != "" {
-				detectedIDs = append(detectedIDs, entity.CustomEmojiID)
+				char := ""
+				if entity.Offset >= 0 && entity.Offset+entity.Length <= len(runes) {
+					char = string(runes[entity.Offset : entity.Offset+entity.Length])
+				}
+				if char == "" {
+					char = "•"
+				}
+				detected = append(detected, detectedEmoji{
+					fallback: char,
+					id:       entity.CustomEmojiID,
+				})
 			}
 		}
-		if len(detectedIDs) > 0 {
-			reply := "🎉 <b>Обнаружены Custom Emoji ID:</b>\n\n"
-			for i, id := range detectedIDs {
-				reply += fmt.Sprintf("%d. <code>%s</code>\n", i+1, id)
+
+		if len(detected) > 0 {
+			reply := "🎉 <b>Обнаружены Custom Emoji ID:</b>\n"
+			for i, e := range detected {
+				// Exact requested format: 1. fallback <tg-emoji emoji-id="...">fallback</tg-emoji> ID
+				reply += fmt.Sprintf("%d.  %s  <tg-emoji emoji-id=\"%s\">%s</tg-emoji>  <code>%s</code>\n",
+					i+1, e.fallback, e.id, e.fallback, e.id)
 			}
-			reply += "\n<i>Скопируйте их сюда в чат, и мы внедрим их в оформление бота!</i>"
+			reply += "\n<i>Скопируйте нужные строчки сюда, и мы внедрим их в бота!</i>"
 			m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML)
 			_, _ = s.bot.SendMessage(m)
 		} else {
 			reply := `ℹ️ <b>Как узнать Custom Emoji ID:</b>
 
 Отправьте команду <code>/emoji</code> вместе с эмодзи из вашего пака прямо в одном сообщении, например:
-<code>/emoji </code> [вставьте эмодзи из пака @emojiabc]
+<code>/emoji </code> [вставьте эмодзи из пака]
 
-Бот моментально считает их Telegram ID и пришлёт вам!`
+Бот моментально покажет символ, сам эмодзи и его ID!`
 			m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML)
 			_, _ = s.bot.SendMessage(m)
 		}
@@ -314,11 +336,14 @@ func (s *BotService) sendWelcomeMenu(chatID telego.ChatID, from *telego.User) {
 	if err == nil && sentMsg != nil {
 		s.CacheSentPhoto(MediaMainBanner, sentMsg)
 	} else if err != nil {
+		log.Printf("[Bot Error] SendPhoto failed: %v. Falling back to SendMessage...", err)
 		// Fallback to text message if photo failed
 		textMsg := tu.Message(chatID, caption).
 			WithParseMode(telego.ModeHTML).
 			WithReplyMarkup(MainMenuKeyboard(s.cfg.FrontendURL))
-		_, _ = s.bot.SendMessage(textMsg)
+		if _, textErr := s.bot.SendMessage(textMsg); textErr != nil {
+			log.Printf("[Bot Error] Fallback SendMessage also failed: %v", textErr)
+		}
 	}
 }
 

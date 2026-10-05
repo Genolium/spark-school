@@ -144,11 +144,13 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-spark_db}
       BACKUP_TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       BACKUP_TELEGRAM_CHAT_ID: ${ADMIN_TELEGRAM_ID:-}
+      TELEGRAM_API_SERVER: ${TELEGRAM_API_SERVER:-}
     volumes:
       - ./scripts/backup.sh:/backup.sh:ro
       - pgbackups:/backups
     entrypoint: |
       sh -c "
+        apk add --no-cache curl > /dev/null 2>&1 || true
         echo '0 3 * * * /backup.sh' > /etc/crontabs/root
         echo 'Running initial backup at startup...'
         /backup.sh || true
