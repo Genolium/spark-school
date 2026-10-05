@@ -104,9 +104,11 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) bool 
 
 		session.CalcEnglishLevel = data
 
-		star := TgEmoji(EmojiSparkle1, "✨")
+		star := TgEmoji(EmojiSparkleGreen, "✨")
 		check := TgEmoji(EmojiCheck, "✅")
-		spark := TgEmoji(EmojiSparkle2, "⭐")
+		spark := TgEmoji(EmojiStarGreen, "⭐")
+		idea := TgEmoji(EmojiIdea, "💡")
+		fire := TgEmoji(EmojiFire, "🔥")
 
 		reply := fmt.Sprintf(`%s <b>Твой расчет шансов на грант $20,000:</b>
 
@@ -116,12 +118,12 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) bool 
 
 %s <b>Ты полностью проходишь базовые фильтры проекта «так называемый SPARK»!</b>
 
-💡 <b>В чём главный нюанс?</b>
+%s <b>В чём главный нюанс?</b>
 Формальные критерии — это лишь 10%% отбора. Главная битва начинается в <b>Google XYZ резюме</b>, <b>эссе на 500 слов</b> и <b>20-минутном Zoom-интервью</b> с американской комиссией.
 
 В проекте «так называемый SPARK» мы упакуем твою заявку до идеала под ключ от 6 900 ₽ (от 6 555 ₽ по промокоду).
 
-🔥 <i>Места на поток строго ограничены.</i>`, star, score, spark, langLabel, scoreZone, check)
+%s <i>Места на поток строго ограничены.</i>`, star, score, spark, langLabel, scoreZone, check, idea, fire)
 
 		photoFile := s.ResolvePhotoFile(MediaCalcResult)
 		photoMsg := tu.Photo(chatID, photoFile).

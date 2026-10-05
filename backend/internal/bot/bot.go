@@ -336,9 +336,10 @@ func (s *BotService) sendWelcomeMenu(chatID telego.ChatID, from *telego.User) {
 		firstName = from.FirstName
 	}
 
-	star := TgEmoji(EmojiSparkle1, "✨")
-	spark := TgEmoji(EmojiSparkle2, "⭐")
+	star := TgEmoji(EmojiSparkleGreen, "✨")
+	spark := TgEmoji(EmojiStarGreen, "⭐")
 	books := TgEmoji(EmojiBooks, "📚")
+	pointDown := TgEmoji(EmojiPointDown, "👇")
 
 	caption := fmt.Sprintf(`%s <b>Проект «так называемый SPARK»</b> %s
 
@@ -348,7 +349,7 @@ func (s *BotService) sendWelcomeMenu(chatID telego.ChatID, from *telego.User) {
 
 %s В рамках проекта участники получают проверенные шаблоны резюме (Google XYZ), методологию написания эссе, банк вопросов прошлых лет к Zoom-интервью и сопровождение визового этапа (J-1).
 
-👇 <b>Выберите интересующий раздел:</b>`, star, spark, firstName, books)
+%s <b>Выберите интересующий раздел:</b>`, star, spark, firstName, books, pointDown)
 
 	// Send rich photo card using cached or local file
 	photoFile := s.ResolvePhotoFile(MediaMainBanner)
@@ -395,37 +396,44 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 	var text string
 	var keyboard *telego.InlineKeyboardMarkup
 
-	if withPromo || session.DiscountPct > 0 {
-		text = `🎉 <b>Промокод успешно активирован! Скидка 5%</b>
+	ticket := TgEmoji(EmojiTicket, "🎟")
+	card := TgEmoji(EmojiCard, "💳")
+	num1 := TgEmoji(EmojiNum1, "1️⃣")
+	num2 := TgEmoji(EmojiNum2, "2️⃣")
+	pin := TgEmoji(EmojiPinRed, "📍")
+	pushpin := TgEmoji(EmojiPinPush, "📌")
 
-<b>Стоимость с учётом скидки 5%:</b>
+	if withPromo || session.DiscountPct > 0 {
+		text = fmt.Sprintf(`%s <b>Промокод успешно активирован! Скидка 5%%</b>
+
+<b>Стоимость с учётом скидки 5%%:</b>
 • Акселератор: <b>6 555 ₽</b> (скидка 345 ₽)
 • VIP: <b>14 155 ₽</b> (скидка 745 ₽)
 
-📍 <b>Реквизиты для оплаты со скидкой (СБП 0%):</b>
+%s <b>Реквизиты для оплаты со скидкой (СБП 0%%):</b>
 • Банк: <b>Т-Банк (Тинькофф)</b>
 • Номер телефона: <code>+7 981 163-36-91</code>
 • Получатель: <b>Васюнин Илья Олегович</b>
 • Назначение платежа: <code>SPARK ПРОМО [Тариф]</code>
 
-📌 <b>После перевода прикрепи скриншот чека прямо в этот чат!</b>
-Бот передаст его так называемому Илю и сразу выдаст персональную ссылку в закрытый канал потока.`
+%s <b>После перевода прикрепи скриншот чека прямо в этот чат!</b>
+Бот передаст его так называемому Илю и сразу выдаст персональную ссылку в закрытый канал потока.`, ticket, pin, pushpin)
 		keyboard = PromoAppliedKeyboard()
 	} else {
-		text = `💳 <b>Бронирование места в проекте «так называемый SPARK»</b>
+		text = fmt.Sprintf(`%s <b>Бронирование места в проекте «так называемый SPARK»</b>
 
 <b>Тарифы участия:</b>
-1️⃣ <b>Акселератор [Хит]:</b> 6 900 ₽ (по промокоду: <b>6 555 ₽</b>)
-2️⃣ <b>VIP:</b> 14 900 ₽ (по промокоду: <b>14 155 ₽</b>) <i>[Строго 3 места]</i>
+%s <b>Акселератор [Хит]:</b> 6 900 ₽ (по промокоду: <b>6 555 ₽</b>)
+%s <b>VIP:</b> 14 900 ₽ (по промокоду: <b>14 155 ₽</b>) <i>[Строго 3 места]</i>
 
-📍 <b>Реквизиты для оплаты (СБП 0%):</b>
+%s <b>Реквизиты для оплаты (СБП 0%%):</b>
 • Банк: <b>Т-Банк (Тинькофф)</b>
 • Телефон: <code>+7 981 163-36-91</code>
 • Получатель: <b>Васюнин Илья Олегович</b>
 • Назначение: <code>SPARK [Тариф]</code>
 
-📌 <b>После перевода просто отправь скриншот чека в этот чат!</b>
-Бот передаст его так называемому Илю и сразу пришлёт персональную ссылку в закрытый канал потока.`
+%s <b>После перевода просто отправь скриншот чека в этот чат!</b>
+Бот передаст его так называемому Илю и сразу пришлёт персональную ссылку в закрытый канал потока.`, card, num1, num2, pin, pushpin)
 		keyboard = PaymentKeyboard()
 	}
 
@@ -510,11 +518,13 @@ func (s *BotService) sendStatusMessage(chatID telego.ChatID, from *telego.User) 
 
 	if hasAccess {
 		inviteLink := s.cfg.TelegramInviteLink
-		reply := fmt.Sprintf(`✅ <b>Ваш доступ активен!</b>
+		star := TgEmoji(EmojiSparkleGreen, "✨")
+		spark := TgEmoji(EmojiStarGreen, "⭐")
+		reply := fmt.Sprintf(`%s <b>Ваш доступ активен!</b> %s
 
 Добро пожаловать в проект <b>«так называемый SPARK»</b>.
 Ваша ссылка в закрытый канал потока:
-%s`, inviteLink)
+%s`, star, spark, inviteLink)
 		btnChannel := tu.InlineKeyboardButton("Открыть закрытый канал 🚀").WithURL(inviteLink)
 		kb := tu.InlineKeyboard(tu.InlineKeyboardRow(btnChannel))
 
@@ -597,21 +607,28 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 
 	case "promo_enter":
 		session.State = StateWaitingPromo
-		text := `🎟 <b>Активация промокода на скидку 5%</b>
+		ticket := TgEmoji(EmojiTicket, "🎟")
+		star := TgEmoji(EmojiSparkleGreen, "✨")
+		text := fmt.Sprintf(`%s <b>Активация промокода на скидку 5%%</b> %s
 
 Напиши промокод прямо в ответном сообщении!
 
 <i>Например: <code>START5</code> или промокод твоего друга-партнёра.</i>
 
-Скидка 5% действует на любой тариф:
+Скидка 5%% действует на любой тариф:
 • Акселератор: 6 900 ₽ ➔ <b>6 555 ₽</b>
-• VIP: 14 900 ₽ ➔ <b>14 155 ₽</b>`
+• VIP: 14 900 ₽ ➔ <b>14 155 ₽</b>`, ticket, star)
 		m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(PromoRequestKeyboard())
 		_, _ = s.bot.SendMessage(m)
 		return true
 
 	case "info_program":
-		text := `🚀 <b>Программа сопровождения «так называемый SPARK»:</b>
+		star := TgEmoji(EmojiSparkleGreen, "✨")
+		spark := TgEmoji(EmojiStarGreen, "⭐")
+		num1 := TgEmoji(EmojiNum1, "1️⃣")
+		num2 := TgEmoji(EmojiNum2, "2️⃣")
+
+		text := fmt.Sprintf(`%s <b>Программа сопровождения «так называемый SPARK»</b> %s
 
 • <b>Закрытый канал потока</b> со всеми материалами и апдейтами
 • <b>Шаблоны:</b> Google XYZ резюме, эссе на 500 слов
@@ -622,11 +639,11 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 • <b>Персональный аудит</b> и 45-мин Zoom-интервью с так называемым Илем
 
 <b>Тарифные планы:</b>
-1️⃣ <b>Акселератор [Хит]:</b> 6 900 ₽ (6 555 ₽ по промокоду)
-2️⃣ <b>VIP:</b> 14 900 ₽ (14 155 ₽ по промокоду)`
+%s <b>Акселератор [Хит]:</b> 6 900 ₽ (6 555 ₽ по промокоду)
+%s <b>VIP:</b> 14 900 ₽ (14 155 ₽ по промокоду)`, star, spark, num1, num2)
 
-		btnPay := tu.InlineKeyboardButton("💳 Купить курс").WithCallbackData("action_payment")
-		btnPromo := tu.InlineKeyboardButton("🎟 Применить промокод -5%").WithCallbackData("promo_enter")
+		btnPay := tu.InlineKeyboardButton(fmt.Sprintf("%s Купить курс", "💳")).WithCallbackData("action_payment")
+		btnPromo := tu.InlineKeyboardButton(fmt.Sprintf("%s Применить промокод -5%%", "🎟")).WithCallbackData("promo_enter")
 		btnBlog := tu.InlineKeyboardButton("🇺🇸 Блог про мою поездку в США").WithURL("https://t.me/so_called_spark")
 		btnMenu := tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu")
 
