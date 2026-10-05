@@ -6,6 +6,7 @@ import (
 	"log"
 	"strings"
 	"time"
+	"unicode/utf16"
 
 	"github.com/mymmrac/telego"
 	tu "github.com/mymmrac/telego/telegoutil"
@@ -247,15 +248,18 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 		}
 		var detected []detectedEmoji
 
-		runes := []rune(msg.Text)
+		// Telegram entity offsets are in UTF-16 code units
+		utf16Text := utf16.Encode([]rune(msg.Text))
 		for _, entity := range msg.Entities {
 			if entity.Type == telego.EntityTypeCustomEmoji && entity.CustomEmojiID != "" {
 				char := ""
-				if entity.Offset >= 0 && entity.Offset+entity.Length <= len(runes) {
-					char = string(runes[entity.Offset : entity.Offset+entity.Length])
+				if entity.Offset >= 0 && entity.Offset+entity.Length <= len(utf16Text) {
+					sub := utf16.Decode(utf16Text[entity.Offset : entity.Offset+entity.Length])
+					char = string(sub)
 				}
-				if char == "" {
-					char = "•"
+				// Default to sparkle if extracted char is empty or whitespace
+				if strings.TrimSpace(char) == "" {
+					char = "✨"
 				}
 				detected = append(detected, detectedEmoji{
 					fallback: char,
@@ -268,7 +272,6 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 			reply := "🎉 <b>Обнаружены Custom Emoji ID:</b>\n"
 			plainReply := "🎉 Обнаружены Custom Emoji ID:\n"
 			for i, e := range detected {
-				// Exact requested format: 1. fallback <tg-emoji emoji-id="...">fallback</tg-emoji> ID
 				reply += fmt.Sprintf("%d.  %s  <tg-emoji emoji-id=\"%s\">%s</tg-emoji>  <code>%s</code>\n",
 					i+1, e.fallback, e.id, e.fallback, e.id)
 				plainReply += fmt.Sprintf("%d.  %s  ID: %s\n", i+1, e.fallback, e.id)
@@ -305,9 +308,18 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 		return true
 	}
 
-	// If ordinary text sent, check if it matches a promo code in DB
-	if text != "" && !strings.HasPrefix(text, "/") {
+	// State-dependent handling:
+	// Only parse promo code if user actually requested to enter a promo code
+	if session.State == StateWaitingPromo && text != "" && !strings.HasPrefix(text, "/") {
 		s.processPromoInput(chatID, msg.From, text)
+		return true
+	}
+
+	// Default fallback for any unexpected text: guide user back to main menu
+	if text != "" && !strings.HasPrefix(text, "/") {
+		helpMsg := tu.Message(chatID, `👋 Я вас понял! Чтобы выбрать действие, воспользуйтесь кнопками меню ниже или отправьте команду /start:`)
+		helpMsg.WithReplyMarkup(MainMenuKeyboard(s.cfg.FrontendURL))
+		_, _ = s.bot.SendMessage(helpMsg)
 		return true
 	}
 
