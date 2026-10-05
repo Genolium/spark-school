@@ -266,15 +266,26 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 
 		if len(detected) > 0 {
 			reply := "🎉 <b>Обнаружены Custom Emoji ID:</b>\n"
+			plainReply := "🎉 Обнаружены Custom Emoji ID:\n"
 			for i, e := range detected {
 				// Exact requested format: 1. fallback <tg-emoji emoji-id="...">fallback</tg-emoji> ID
 				reply += fmt.Sprintf("%d.  %s  <tg-emoji emoji-id=\"%s\">%s</tg-emoji>  <code>%s</code>\n",
 					i+1, e.fallback, e.id, e.fallback, e.id)
+				plainReply += fmt.Sprintf("%d.  %s  ID: %s\n", i+1, e.fallback, e.id)
 			}
 			reply += "\n<i>Скопируйте нужные строчки сюда, и мы внедрим их в бота!</i>"
+			plainReply += "\nСкопируйте нужные строчки сюда, и мы внедрим их в бота!"
+
 			m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML)
-			_, _ = s.bot.SendMessage(m)
+			if _, err := s.bot.SendMessage(m); err != nil {
+				log.Printf("[Bot Error] /emoji SendMessage with <tg-emoji> failed: %v. Sending plain fallback...", err)
+				plainMsg := tu.Message(chatID, plainReply)
+				if _, plainErr := s.bot.SendMessage(plainMsg); plainErr != nil {
+					log.Printf("[Bot Error] /emoji fallback SendMessage also failed: %v", plainErr)
+				}
+			}
 		} else {
+			log.Printf("[Bot /emoji] No custom emoji entities found in msg. Text=%q, EntitiesCount=%d", msg.Text, len(msg.Entities))
 			reply := `ℹ️ <b>Как узнать Custom Emoji ID:</b>
 
 Отправьте команду <code>/emoji</code> вместе с эмодзи из вашего пака прямо в одном сообщении, например:
@@ -282,7 +293,9 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 
 Бот моментально покажет символ, сам эмодзи и его ID!`
 			m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML)
-			_, _ = s.bot.SendMessage(m)
+			if _, err := s.bot.SendMessage(m); err != nil {
+				log.Printf("[Bot Error] /emoji info SendMessage failed: %v", err)
+			}
 		}
 		return true
 	}
@@ -311,8 +324,8 @@ func (s *BotService) sendWelcomeMenu(chatID telego.ChatID, from *telego.User) {
 		firstName = from.FirstName
 	}
 
-	star := TgEmoji(EmojiSparkle1, "✦")
-	spark := TgEmoji(EmojiSparkle2, "✧")
+	star := TgEmoji(EmojiSparkle1, "✨")
+	spark := TgEmoji(EmojiSparkle2, "⭐")
 	books := TgEmoji(EmojiBooks, "📚")
 
 	caption := fmt.Sprintf(`%s <b>Проект «так называемый SPARK»</b> %s
@@ -336,13 +349,17 @@ func (s *BotService) sendWelcomeMenu(chatID telego.ChatID, from *telego.User) {
 	if err == nil && sentMsg != nil {
 		s.CacheSentPhoto(MediaMainBanner, sentMsg)
 	} else if err != nil {
-		log.Printf("[Bot Error] SendPhoto failed: %v. Falling back to SendMessage...", err)
-		// Fallback to text message if photo failed
-		textMsg := tu.Message(chatID, caption).
+		log.Printf("[Bot Error] SendPhoto failed: %v. Stripping custom emojis and sending fallback...", err)
+		// Clean <tg-emoji> tags to avoid ENTITY_TEXT_INVALID
+		cleanCaption := StripTgEmoji(caption)
+		textMsg := tu.Message(chatID, cleanCaption).
 			WithParseMode(telego.ModeHTML).
 			WithReplyMarkup(MainMenuKeyboard(s.cfg.FrontendURL))
 		if _, textErr := s.bot.SendMessage(textMsg); textErr != nil {
-			log.Printf("[Bot Error] Fallback SendMessage also failed: %v", textErr)
+			log.Printf("[Bot Error] Fallback SendMessage failed: %v. Retrying with plain text...", textErr)
+			plainMsg := tu.Message(chatID, cleanCaption).
+				WithReplyMarkup(MainMenuKeyboard(s.cfg.FrontendURL))
+			_, _ = s.bot.SendMessage(plainMsg)
 		}
 	}
 }
