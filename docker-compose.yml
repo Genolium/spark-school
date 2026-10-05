@@ -39,6 +39,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    volumes:
+      - ./backend/media:/app/media:ro
     networks:
       - spark_network
 

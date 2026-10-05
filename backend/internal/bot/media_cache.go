@@ -90,6 +90,7 @@ func (s *BotService) CacheSentPhoto(key string, msg *telego.Message) {
 
 func (s *BotService) findLocalMedia(fileName string) string {
 	candidates := []string{
+		filepath.Join("/app", "media", fileName),
 		filepath.Join("media", fileName),
 		filepath.Join("backend", "media", fileName),
 		filepath.Join("..", "backend", "media", fileName),
@@ -99,8 +100,10 @@ func (s *BotService) findLocalMedia(fileName string) string {
 
 	for _, p := range candidates {
 		if info, err := os.Stat(p); err == nil && !info.IsDir() {
+			log.Printf("[Bot Media] Found local media file: %s (%d bytes)", p, info.Size())
 			return p
 		}
 	}
+	log.Printf("[Bot Media] Local media file not found for: %s. Using permanent fallback file_id.", fileName)
 	return ""
 }

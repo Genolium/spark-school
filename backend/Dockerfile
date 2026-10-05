@@ -22,6 +22,7 @@ RUN apk --no-cache add ca-certificates tzdata
 
 COPY --from=builder /app/spark-server /app/spark-server
 COPY --from=builder /app/spark-bot /app/spark-bot
+COPY media /app/media
 
 EXPOSE 8080
 

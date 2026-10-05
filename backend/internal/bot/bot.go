@@ -289,15 +289,19 @@ func (s *BotService) sendWelcomeMenu(chatID telego.ChatID, from *telego.User) {
 		firstName = from.FirstName
 	}
 
-	caption := fmt.Sprintf(`🎓 <b>Проект «так называемый SPARK»</b>
+	star := TgEmoji(EmojiSparkle1, "✦")
+	spark := TgEmoji(EmojiSparkle2, "✧")
+	books := TgEmoji(EmojiBooks, "📚")
+
+	caption := fmt.Sprintf(`%s <b>Проект «так называемый SPARK»</b> %s
 
 Здравствуйте, <b>%s</b>!
 
 Комплексная программа подготовки к прохождению всероссийского конкурсного отбора на грантовую стажировку в США ($20,000).
 
-В рамках проекта участники получают проверенные шаблоны резюме (Google XYZ), методологию написания эссе, банк вопросов прошлых лет к Zoom-интервью и сопровождение визового этапа (J-1).
+%s В рамках проекта участники получают проверенные шаблоны резюме (Google XYZ), методологию написания эссе, банк вопросов прошлых лет к Zoom-интервью и сопровождение визового этапа (J-1).
 
-👇 <b>Выберите интересующий раздел:</b>`, firstName)
+👇 <b>Выберите интересующий раздел:</b>`, star, spark, firstName, books)
 
 	// Send rich photo card using cached or local file
 	photoFile := s.ResolvePhotoFile(MediaMainBanner)
