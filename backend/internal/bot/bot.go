@@ -398,7 +398,11 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 	var text string
 	var keyboard *telego.InlineKeyboardMarkup
 
-	promoSparkle := TgEmoji(EmojiPromoSparkle, "✨")
+	sparkle := TgEmoji(EmojiStarGreen, "✨")
+	checkV := TgEmoji(EmojiCheckVGreen, "✔️")
+	clipGreen := TgEmoji(EmojiPaperclipGreen, "📎")
+	bullet := TgEmoji(EmojiStarBigGreen, "•")
+
 	lightning := TgEmoji(EmojiLightning, "⚡️")
 	num1 := TgEmoji(EmojiNum1, "1️⃣")
 	num2 := TgEmoji(EmojiNum2, "2️⃣")
@@ -409,8 +413,8 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 		text = fmt.Sprintf(`%s <b>Промокод успешно активирован! Скидка 5%%</b>
 
 <b>Стоимость с учётом скидки 5%%:</b>
-• Акселератор: <b>6 555 ₽</b> (скидка 345 ₽)
-• VIP: <b>14 155 ₽</b> (скидка 745 ₽)
+%s Акселератор: <b>6 555 ₽</b> (скидка 345 ₽)
+%s VIP: <b>14 155 ₽</b> (скидка 745 ₽)
 
 %s <b>Реквизиты для оплаты со скидкой (СБП 0%%):</b>
 • Банк: <b>Т-Банк (Тинькофф)</b>
@@ -419,7 +423,7 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 • Назначение платежа: <code>SPARK ПРОМО [Тариф]</code>
 
 %s <b>После перевода прикрепи скриншот чека прямо в этот чат!</b>
-Бот передаст его так называемому Илю и сразу выдаст персональную ссылку в закрытый канал потока.`, promoSparkle, calendar, paperclip)
+Бот передаст его так называемому Илю и сразу выдаст персональную ссылку в закрытый канал потока.`, sparkle, bullet, bullet, checkV, clipGreen)
 		keyboard = PromoAppliedKeyboard()
 	} else {
 		text = fmt.Sprintf(`%s <b>Бронирование места в проекте «так называемый SPARK»</b>
@@ -520,13 +524,13 @@ func (s *BotService) sendStatusMessage(chatID telego.ChatID, from *telego.User) 
 
 	if hasAccess {
 		inviteLink := s.cfg.TelegramInviteLink
-		star := TgEmoji(EmojiSparkleGreen, "✨")
-		spark := TgEmoji(EmojiStarGreen, "⭐")
-		reply := fmt.Sprintf(`%s <b>Ваш доступ активен!</b> %s
+		heart := TgEmoji(EmojiHeartSolidGreen, "💚")
+		sun := TgEmoji(EmojiSunGreen, "☀️")
+		reply := fmt.Sprintf(`%s <b>Ваш доступ активен!</b>
 
-Добро пожаловать в проект <b>«так называемый SPARK»</b>.
+%s Добро пожаловать в проект <b>«так называемый SPARK»</b>.
 Ваша ссылка в закрытый канал потока:
-%s`, star, spark, inviteLink)
+%s`, heart, sun, inviteLink)
 		btnChannel := tu.InlineKeyboardButton("Открыть закрытый канал 🚀").WithURL(inviteLink)
 		kb := tu.InlineKeyboard(tu.InlineKeyboardRow(btnChannel))
 
@@ -609,8 +613,10 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 
 	case "promo_enter":
 		session.State = StateWaitingPromo
-		ticket := TgEmoji(EmojiTicket, "🎟")
-		star := TgEmoji(EmojiSparkleGreen, "✨")
+		checkCircle := TgEmoji(EmojiCheckCircleGreen, "✅")
+		sparkle := TgEmoji(EmojiSparkleGreen, "✨")
+		bullet := TgEmoji(EmojiStarBigGreen, "•")
+
 		text := fmt.Sprintf(`%s <b>Активация промокода на скидку 5%%</b> %s
 
 Напиши промокод прямо в ответном сообщении!
@@ -618,8 +624,8 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 <i>Например: <code>START5</code> или промокод твоего друга-партнёра.</i>
 
 Скидка 5%% действует на любой тариф:
-• Акселератор: 6 900 ₽ ➔ <b>6 555 ₽</b>
-• VIP: 14 900 ₽ ➔ <b>14 155 ₽</b>`, ticket, star)
+%s Акселератор: 6 900 ₽ ➔ <b>6 555 ₽</b>
+%s VIP: 14 900 ₽ ➔ <b>14 155 ₽</b>`, checkCircle, sparkle, bullet, bullet)
 		m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(PromoRequestKeyboard())
 		_, _ = s.bot.SendMessage(m)
 		return true
@@ -779,13 +785,17 @@ func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr s
 		_ = s.affiliateService.ProcessCoursePurchase(student.ID, receipt.Amount)
 	}
 
-	studentMsg := fmt.Sprintf(`🎉 <b>Поздравляем! Оплата подтверждена.</b>
+	heart := TgEmoji(EmojiHeartSolidGreen, "💚")
+	sun := TgEmoji(EmojiSunGreen, "☀️")
+	arrow := TgEmoji(EmojiArrowRightGreen, "➔")
 
-Добро пожаловать в проект <b>«так называемый SPARK»</b>!
+	studentMsg := fmt.Sprintf(`%s <b>Поздравляем! Оплата подтверждена.</b>
+
+%s Добро пожаловать в проект <b>«так называемый SPARK»</b>!
 Твоя ссылка для входа в закрытый канал потока:
 %s
 
-<i>Ссылка является персональной и одноразовой.</i>`, inviteLink)
+%s <i>Ссылка является персональной и одноразовой.</i>`, heart, sun, inviteLink, arrow)
 
 	btnChannel := tu.InlineKeyboardButton("Войти в закрытый канал ➔").WithURL(inviteLink)
 	kb := tu.InlineKeyboard(tu.InlineKeyboardRow(btnChannel))

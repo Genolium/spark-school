@@ -39,6 +39,13 @@ const (
 	EmojiPaperclip    = "5348212037119924779" // 📎 Paperclip
 	EmojiCalendarTag  = "5348508089215639697" // 🗓 Calendar / Tag
 
+	// New detected emojis from user screenshots:
+	EmojiCheckCircleGreen = "5884152869656994006" // ✅ Green check circle
+	EmojiCheckVGreen      = "5884052947242852173" // ✔️ Green checkmark V
+	EmojiPaperclipGreen   = "5884282156762537884" // 📎 Green paperclip/spiral
+	EmojiHeartSolidGreen  = "5884421867753709341" // 💚 Solid green heart
+	EmojiArrowRightGreen  = "5884424573583106260" // ➔ Green arrow right
+
 	// Aliases for backward compatibility
 	EmojiSparkle1 = EmojiSparkleGreen
 	EmojiSparkle2 = EmojiStarGreen
