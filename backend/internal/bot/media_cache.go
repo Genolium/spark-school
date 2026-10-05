@@ -15,6 +15,9 @@ const (
 	MediaMainBanner    = "bot-main.png"
 	MediaGrantChances  = "bot-grant-chances.png"
 	MediaBuyCourse     = "bot-buy-course.png"
+	MediaCalcResult    = "bot-calc-result.png"
+	MediaPromoApplied  = "bot-promo-applied.png"
+	MediaStatusGranted = "bot-status-granted.png"
 )
 
 // MediaCache holds resolved Telegram file IDs in memory and disk/db.

@@ -409,7 +409,12 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 		keyboard = PaymentKeyboard()
 	}
 
-	photoFile := s.ResolvePhotoFile(MediaBuyCourse)
+	targetMedia := MediaBuyCourse
+	if withPromo || session.DiscountPct > 0 {
+		targetMedia = MediaPromoApplied
+	}
+
+	photoFile := s.ResolvePhotoFile(targetMedia)
 	photoMsg := tu.Photo(chatID, photoFile).
 		WithCaption(text).
 		WithParseMode(telego.ModeHTML).
@@ -417,10 +422,15 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 
 	sentMsg, err := s.bot.SendPhoto(photoMsg)
 	if err == nil && sentMsg != nil {
-		s.CacheSentPhoto(MediaBuyCourse, sentMsg)
+		s.CacheSentPhoto(targetMedia, sentMsg)
 	} else if err != nil {
-		m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(keyboard)
-		_, _ = s.bot.SendMessage(m)
+		log.Printf("[Bot Error] sendPaymentDetails SendPhoto failed: %v. Sending fallback...", err)
+		cleanText := StripTgEmoji(text)
+		m := tu.Message(chatID, cleanText).WithParseMode(telego.ModeHTML).WithReplyMarkup(keyboard)
+		if _, textErr := s.bot.SendMessage(m); textErr != nil {
+			plainMsg := tu.Message(chatID, cleanText).WithReplyMarkup(keyboard)
+			_, _ = s.bot.SendMessage(plainMsg)
+		}
 	}
 }
 
@@ -486,8 +496,21 @@ func (s *BotService) sendStatusMessage(chatID telego.ChatID, from *telego.User) 
 Ваша ссылка в закрытый канал потока:
 %s`, inviteLink)
 		btnChannel := tu.InlineKeyboardButton("Открыть закрытый канал 🚀").WithURL(inviteLink)
-		m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML).WithReplyMarkup(tu.InlineKeyboard(tu.InlineKeyboardRow(btnChannel)))
-		_, _ = s.bot.SendMessage(m)
+		kb := tu.InlineKeyboard(tu.InlineKeyboardRow(btnChannel))
+
+		photoFile := s.ResolvePhotoFile(MediaStatusGranted)
+		photoMsg := tu.Photo(chatID, photoFile).
+			WithCaption(reply).
+			WithParseMode(telego.ModeHTML).
+			WithReplyMarkup(kb)
+
+		sentMsg, err := s.bot.SendPhoto(photoMsg)
+		if err == nil && sentMsg != nil {
+			s.CacheSentPhoto(MediaStatusGranted, sentMsg)
+		} else {
+			m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
+			_, _ = s.bot.SendMessage(m)
+		}
 		return
 	}
 
@@ -726,8 +749,22 @@ func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr s
 <i>Ссылка является персональной и одноразовой.</i>`, inviteLink)
 
 	btnChannel := tu.InlineKeyboardButton("Войти в закрытый канал ➔").WithURL(inviteLink)
-	m := tu.Message(tu.ID(receipt.TelegramID), studentMsg).WithParseMode(telego.ModeHTML).WithReplyMarkup(tu.InlineKeyboard(tu.InlineKeyboardRow(btnChannel)))
-	_, _ = s.bot.SendMessage(m)
+	kb := tu.InlineKeyboard(tu.InlineKeyboardRow(btnChannel))
+
+	studentChatID := tu.ID(receipt.TelegramID)
+	photoFile := s.ResolvePhotoFile(MediaStatusGranted)
+	photoMsg := tu.Photo(studentChatID, photoFile).
+		WithCaption(studentMsg).
+		WithParseMode(telego.ModeHTML).
+		WithReplyMarkup(kb)
+
+	sentMsg, err := s.bot.SendPhoto(photoMsg)
+	if err == nil && sentMsg != nil {
+		s.CacheSentPhoto(MediaStatusGranted, sentMsg)
+	} else {
+		m := tu.Message(studentChatID, studentMsg).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
+		_, _ = s.bot.SendMessage(m)
+	}
 
 	_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
 		CallbackQueryID: query.ID,

@@ -2,6 +2,7 @@ package bot
 
 import (
 	"fmt"
+	"log"
 
 	"github.com/mymmrac/telego"
 	tu "github.com/mymmrac/telego/telegoutil"
@@ -122,7 +123,7 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) bool 
 
 🔥 <i>Места на поток строго ограничены.</i>`, star, score, spark, langLabel, scoreZone, check)
 
-		photoFile := s.ResolvePhotoFile(MediaGrantChances)
+		photoFile := s.ResolvePhotoFile(MediaCalcResult)
 		photoMsg := tu.Photo(chatID, photoFile).
 			WithCaption(reply).
 			WithParseMode(telego.ModeHTML).
@@ -130,10 +131,15 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) bool 
 
 		sentMsg, err := s.bot.SendPhoto(photoMsg)
 		if err == nil && sentMsg != nil {
-			s.CacheSentPhoto(MediaGrantChances, sentMsg)
+			s.CacheSentPhoto(MediaCalcResult, sentMsg)
 		} else if err != nil {
-			m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML).WithReplyMarkup(CalcResultKeyboard())
-			_, _ = s.bot.SendMessage(m)
+			log.Printf("[Bot Error] CalcResult SendPhoto failed: %v. Sending fallback...", err)
+			cleanReply := StripTgEmoji(reply)
+			m := tu.Message(chatID, cleanReply).WithParseMode(telego.ModeHTML).WithReplyMarkup(CalcResultKeyboard())
+			if _, textErr := s.bot.SendMessage(m); textErr != nil {
+				plainMsg := tu.Message(chatID, cleanReply).WithReplyMarkup(CalcResultKeyboard())
+				_, _ = s.bot.SendMessage(plainMsg)
+			}
 		}
 		return true
 	}
