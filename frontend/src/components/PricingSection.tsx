@@ -49,12 +49,13 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
         </div>
       </div>
 
-      {/* 3-Tier Pricing Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 items-stretch max-w-7xl mx-auto">
+      {/* 2-Tier Pricing Grid (Базовый тариф временно скрыт) */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 items-stretch max-w-5xl mx-auto">
         
         {/* ========================================================================= */}
-        {/* TIER 1: БАЗОВЫЙ (Self-Paced)                                              */}
+        {/* TIER 1: БАЗОВЫЙ (Self-Paced) - ВРЕМЕННО СКРЫТ                            */}
         {/* ========================================================================= */}
+        {false && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -123,6 +124,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
             <ArrowUpRight className="w-4 h-4" />
           </button>
         </motion.div>
+        )}
 
         {/* ========================================================================= */}
         {/* TIER 2: АКСЕЛЕРАТОР (Full Mentorship) - ХИТ ПРОДАЖ                         */}

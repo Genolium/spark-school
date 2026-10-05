@@ -49,8 +49,10 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
   const [places, setPlaces] = useState<PlacesStats>({ total_capacity: 25, active_students: 16, spots_left: 9 });
 
   useEffect(() => {
-    if (initialTier) {
+    if (initialTier && initialTier !== "basic") {
       setTier(initialTier);
+    } else {
+      setTier("accelerator");
     }
   }, [initialTier]);
 
@@ -179,8 +181,8 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                 <label className="block text-xs font-mono text-slate-700 dark:text-slate-300 mb-1.5 font-semibold">
                   Выбери тариф:
                 </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(["basic", "accelerator", "vip"] as PricingTier[]).map((t) => {
+                <div className="grid grid-cols-2 gap-2">
+                  {(["accelerator", "vip"] as PricingTier[]).map((t) => {
                     const cfg = TIERS[t];
                     const isSelected = tier === t;
                     return (

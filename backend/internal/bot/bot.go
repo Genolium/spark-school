@@ -178,7 +178,7 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 <i>Изучай материал и примени его к своей заявке!</i>`
 
 			btnWeb := tu.InlineKeyboardButton("Перейти на сайт 🌐").WithURL(s.cfg.FrontendURL)
-			btnTariff := tu.InlineKeyboardButton("Выбрать тариф от 2 900 ₽ ➔").WithURL(s.cfg.FrontendURL + "/#pricing")
+			btnTariff := tu.InlineKeyboardButton("Выбрать тариф от 6 900 ₽ ➔").WithURL(s.cfg.FrontendURL + "/#pricing")
 			keyboard := tu.InlineKeyboard(
 				tu.InlineKeyboardRow(btnWeb),
 				tu.InlineKeyboardRow(btnTariff),
@@ -229,7 +229,7 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 Аккаунт: @%s
 Тариф: <b>Акселератор (Full Mentorship)</b>
 Стоимость со скидкой: <b>6 900 ₽</b>
-(Доступны также тарифы: <b>Базовый 2 900 ₽</b> и <b>VIP 14 900 ₽</b>)
+(Доступен также тариф: <b>VIP 14 900 ₽</b>)
 
 <b>Способы оплаты:</b>
 1. СБП (Система быстрых платежей): перевод по номеру телефона
@@ -326,7 +326,7 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 		reply := `ℹ️ <b>Статус доступа: Не активен</b>
 
 У вас пока нет активного доступа к проекту <b>«так называемый SPARK»</b>.
-Тарифы: <b>Базовый</b> (2 900 ₽), <b>Акселератор</b> (6 900 ₽), <b>VIP</b> (14 900 ₽).
+Тарифы: <b>Акселератор</b> (6 900 ₽), <b>VIP</b> (14 900 ₽).
 
 После подтверждения оплаты так называемый Иль предоставит персональную ссылку в закрытый канал.`
 

@@ -169,15 +169,6 @@ const jsonLd = {
       "offers": [
         {
           "@type": "Offer",
-          "name": "Базовый",
-          "price": "2900",
-          "priceCurrency": "RUB",
-          "availability": "https://schema.org/InStock",
-          "url": "https://so-called-spark.ru/#pricing",
-          "validFrom": "2026-09-01"
-        },
-        {
-          "@type": "Offer",
           "name": "Акселератор",
           "price": "6900",
           "priceCurrency": "RUB",
