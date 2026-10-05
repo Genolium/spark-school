@@ -27,7 +27,7 @@ func MainMenuKeyboard(frontendURL string) *telego.InlineKeyboardMarkup {
 			tu.InlineKeyboardButton("🇺🇸 Блог про мою поездку в США").WithURL("https://t.me/so_called_spark"),
 		),
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("🌐 Регламент и структура проекта").WithURL(frontendURL),
+			tu.InlineKeyboardButton("🌐 О проекте").WithURL(frontendURL),
 		),
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton("💬 Консультация с так называемым Илем").WithURL("https://t.me/ilyan_vas"),

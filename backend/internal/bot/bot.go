@@ -615,7 +615,6 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 		session.State = StateWaitingPromo
 		checkCircle := TgEmoji(EmojiCheckCircleGreen, "✅")
 		sparkle := TgEmoji(EmojiSparkleGreen, "✨")
-		bullet := TgEmoji(EmojiStarBigGreen, "•")
 
 		text := fmt.Sprintf(`%s <b>Активация промокода на скидку 5%%</b> %s
 
@@ -624,10 +623,15 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 <i>Например: <code>START5</code> или промокод твоего друга-партнёра.</i>
 
 Скидка 5%% действует на любой тариф:
-%s Акселератор: 6 900 ₽ ➔ <b>6 555 ₽</b>
-%s VIP: 14 900 ₽ ➔ <b>14 155 ₽</b>`, checkCircle, sparkle, bullet, bullet)
+• Акселератор: 6 900 ₽ ➔ <b>6 555 ₽</b>
+• VIP: 14 900 ₽ ➔ <b>14 155 ₽</b>`, checkCircle, sparkle)
 		m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(PromoRequestKeyboard())
-		_, _ = s.bot.SendMessage(m)
+		if _, err := s.bot.SendMessage(m); err != nil {
+			log.Printf("[Bot Error] promo_enter SendMessage failed: %v. Retrying stripped...", err)
+			cleanText := StripTgEmoji(text)
+			cleanMsg := tu.Message(chatID, cleanText).WithParseMode(telego.ModeHTML).WithReplyMarkup(PromoRequestKeyboard())
+			_, _ = s.bot.SendMessage(cleanMsg)
+		}
 		return true
 
 	case "info_program":

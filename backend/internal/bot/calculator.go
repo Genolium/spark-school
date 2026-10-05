@@ -26,17 +26,16 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) bool 
 	case "calc_start":
 		session.State = StateCalcQ1
 		pin := TgEmoji(EmojiPinRed, "📍")
-		bullet := TgEmoji(EmojiStarBigGreen, "•")
 
 		text := fmt.Sprintf(`%s <b>Расчёт шансов на грант $20,000 (SPARK 2027)</b>
 
 <b>Шаг 1 из 3: Возраст и гражданство</b>
 
 Для участия в программе действуют базовые критерии:
-%s Возраст: 18–21 год на момент подачи
-%s Гражданство: РФ с постоянным проживанием в России
+• Возраст: 18–21 год на момент подачи
+• Гражданство: РФ с постоянным проживанием в России
 
-Подходишь под эти критерии?`, pin, bullet, bullet)
+Подходишь под эти критерии?`, pin)
 
 		photoFile := s.ResolvePhotoFile(MediaGrantChances)
 		photoMsg := tu.Photo(chatID, photoFile).
@@ -48,8 +47,14 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) bool 
 		if err == nil && sentMsg != nil {
 			s.CacheSentPhoto(MediaGrantChances, sentMsg)
 		} else {
+			log.Printf("[Bot Error] calc_start SendPhoto failed: %v. Retrying text message...", err)
 			m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(CalcQ1Keyboard())
-			_, _ = s.bot.SendMessage(m)
+			if _, msgErr := s.bot.SendMessage(m); msgErr != nil {
+				log.Printf("[Bot Error] calc_start SendMessage failed: %v. Retrying stripped...", msgErr)
+				cleanText := StripTgEmoji(text)
+				cleanMsg := tu.Message(chatID, cleanText).WithParseMode(telego.ModeHTML).WithReplyMarkup(CalcQ1Keyboard())
+				_, _ = s.bot.SendMessage(cleanMsg)
+			}
 		}
 		return true
 
