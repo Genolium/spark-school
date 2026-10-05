@@ -25,10 +25,24 @@ const (
 	EmojiIdea        = "5386435274664326894" // 💡 Lightbulb
 	EmojiFire        = "5420315771991497307" // 🔥 Fire / Urgency
 
+	// Additional Verified Custom Emojis from latest pack:
+	EmojiStarBigGreen = "5886278646540280100" // 🤩 Green big sparkle
+	EmojiSpeechGreen  = "5884113368842772574" // 🗣 Speech / Talk
+	EmojiWarning      = "5409346180704388243" // ⚠️ Warning / Alert
+	EmojiPromoSparkle = "5386789158494680328" // ✨ Magic sparkle for promo
+	EmojiHeartGreen   = "5884256009001639539" // 💚 Green heart
+	EmojiSpiralGreen  = "5884282156762537884" // 🌀 Green spiral
+	EmojiSunGreen     = "5883980366590517942" // ☀️ Green sun/flower
+	EmojiArrowDown    = "5884233340164251596" // ⬇️ Green arrow down
+	EmojiChatBubbles  = "5884512740671757591" // 💬 Green chat bubbles
+	EmojiLightning    = "5348243699618829694" // ⚡️ Lightning bolt
+	EmojiPaperclip    = "5348212037119924779" // 📎 Paperclip
+	EmojiCalendarTag  = "5348508089215639697" // 🗓 Calendar / Tag
+
 	// Aliases for backward compatibility
 	EmojiSparkle1 = EmojiSparkleGreen
 	EmojiSparkle2 = EmojiStarGreen
-	EmojiCheck    = EmojiSparkleGreen
+	EmojiCheck    = EmojiSunGreen
 )
 
 var tgEmojiRegex = regexp.MustCompile(`<tg-emoji[^>]*>(.*?)</tg-emoji>`)

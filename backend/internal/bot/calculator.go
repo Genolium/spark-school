@@ -25,38 +25,55 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) bool 
 	switch data {
 	case "calc_start":
 		session.State = StateCalcQ1
-		text := `🎯 <b>Расчёт шансов на грант $20,000 (SPARK 2027)</b>
+		pin := TgEmoji(EmojiPinRed, "📍")
+		bullet := TgEmoji(EmojiStarBigGreen, "•")
+
+		text := fmt.Sprintf(`%s <b>Расчёт шансов на грант $20,000 (SPARK 2027)</b>
 
 <b>Шаг 1 из 3: Возраст и гражданство</b>
 
 Для участия в программе действуют базовые критерии:
-• Возраст: 18–21 год на момент подачи
-• Гражданство: РФ с постоянным проживанием в России
+%s Возраст: 18–21 год на момент подачи
+%s Гражданство: РФ с постоянным проживанием в России
 
-Подходишь под эти критерии?`
-		m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(CalcQ1Keyboard())
-		_, _ = s.bot.SendMessage(m)
+Подходишь под эти критерии?`, pin, bullet, bullet)
+
+		photoFile := s.ResolvePhotoFile(MediaGrantChances)
+		photoMsg := tu.Photo(chatID, photoFile).
+			WithCaption(text).
+			WithParseMode(telego.ModeHTML).
+			WithReplyMarkup(CalcQ1Keyboard())
+
+		sentMsg, err := s.bot.SendPhoto(photoMsg)
+		if err == nil && sentMsg != nil {
+			s.CacheSentPhoto(MediaGrantChances, sentMsg)
+		} else {
+			m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(CalcQ1Keyboard())
+			_, _ = s.bot.SendMessage(m)
+		}
 		return true
 
 	case "calc_q1_yes":
 		session.CalcAgeCitizenship = true
 		session.State = StateCalcQ2
-		text := `📚 <b>Шаг 2 из 3: Курс обучения в университете</b>
+		books := TgEmoji(EmojiBooks, "📚")
+		text := fmt.Sprintf(`%s <b>Шаг 2 из 3: Курс обучения в университете</b>
 
 По правилам визы J-1 после стажировки участник обязан вернуться минимум на 1 академический год в свой вуз в РФ.
 
-На каком курсе ты сейчас учишься?`
+На каком курсе ты сейчас учишься?`, books)
 		m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(CalcQ2Keyboard())
 		_, _ = s.bot.SendMessage(m)
 		return true
 
 	case "calc_q1_no":
 		session.State = StateDefault
-		text := `⚠️ <b>Возрастное или территориальное ограничение</b>
+		warning := TgEmoji(EmojiWarning, "⚠️")
+		text := fmt.Sprintf(`%s <b>Возрастное или территориальное ограничение</b>
 
 Программа финансируется Госдепартаментом США со строгими критериями: возраст 18–21 год на момент отбора и гражданство РФ.
 
-Если тебе скоро исполнится 18 или есть особые обстоятельства — напиши так называемому Илю (@ilyan_vas) для личного разбора.`
+Если тебе скоро исполнится 18 или есть особые обстоятельства — напиши так называемому Илю (@ilyan_vas) для личного разбора.`, warning)
 		btnChat := tu.InlineKeyboardButton("💬 Написать так называемому Илю").WithURL("https://t.me/ilyan_vas")
 		btnMenu := tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu")
 		m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(tu.InlineKeyboard(tu.InlineKeyboardRow(btnChat), tu.InlineKeyboardRow(btnMenu)))
@@ -66,10 +83,11 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) bool 
 	case "calc_q2_12", "calc_q2_3":
 		session.CalcStudyYear = "undergraduate"
 		session.State = StateCalcQ3
-		text := `🗣 <b>Шаг 3 из 3: Уровень английского языка</b>
+		speech := TgEmoji(EmojiSpeechGreen, "🗣")
+		text := fmt.Sprintf(`%s <b>Шаг 3 из 3: Уровень английского языка</b>
 
 Оцени свой текущий разговорный и письменный английский:
-(Международные сертификаты IELTS/TOEFL не требуются — отбор оценивает реальную речь)`
+(Международные сертификаты IELTS/TOEFL не требуются — отбор оценивает реальную речь)`, speech)
 		m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(CalcQ3Keyboard())
 		_, _ = s.bot.SendMessage(m)
 		return true
@@ -77,11 +95,13 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) bool 
 	case "calc_q2_senior":
 		session.CalcStudyYear = "senior"
 		session.State = StateCalcQ3
-		text := `⚠️ <b>Нюанс для выпускного курса</b>
+		warning := TgEmoji(EmojiWarning, "⚠️")
+		speech := TgEmoji(EmojiSpeechGreen, "🗣")
+		text := fmt.Sprintf(`%s <b>Нюанс для выпускного курса</b>
 
 Студенты выпускного курса могут участвовать в гранте, если планируют поступление в магистратуру в РФ (это подтверждает обязательство возвращения по J-1).
 
-<b>Оцени свой текущий уровень английского языка:</b>`
+%s <b>Оцени свой текущий уровень английского языка:</b>`, warning, speech)
 		m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(CalcQ3Keyboard())
 		_, _ = s.bot.SendMessage(m)
 		return true
@@ -105,9 +125,9 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) bool 
 		session.CalcEnglishLevel = data
 
 		star := TgEmoji(EmojiSparkleGreen, "✨")
-		check := TgEmoji(EmojiCheck, "✅")
+		sun := TgEmoji(EmojiSunGreen, "☀️")
 		spark := TgEmoji(EmojiStarGreen, "⭐")
-		idea := TgEmoji(EmojiIdea, "💡")
+		chatBubbles := TgEmoji(EmojiChatBubbles, "💬")
 		fire := TgEmoji(EmojiFire, "🔥")
 
 		reply := fmt.Sprintf(`%s <b>Твой расчет шансов на грант $20,000:</b>
@@ -123,7 +143,7 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) bool 
 
 В проекте «так называемый SPARK» мы упакуем твою заявку до идеала под ключ от 6 900 ₽ (от 6 555 ₽ по промокоду).
 
-%s <i>Места на поток строго ограничены.</i>`, star, score, spark, langLabel, scoreZone, check, idea, fire)
+%s <i>Места на поток строго ограничены.</i>`, star, score, spark, langLabel, scoreZone, sun, chatBubbles, fire)
 
 		photoFile := s.ResolvePhotoFile(MediaCalcResult)
 		photoMsg := tu.Photo(chatID, photoFile).

@@ -338,18 +338,20 @@ func (s *BotService) sendWelcomeMenu(chatID telego.ChatID, from *telego.User) {
 
 	star := TgEmoji(EmojiSparkleGreen, "✨")
 	spark := TgEmoji(EmojiStarGreen, "⭐")
-	books := TgEmoji(EmojiBooks, "📚")
-	pointDown := TgEmoji(EmojiPointDown, "👇")
+	spiral := TgEmoji(EmojiSpiralGreen, "🌀")
+	heart := TgEmoji(EmojiHeartGreen, "💚")
+	sun := TgEmoji(EmojiSunGreen, "☀️")
+	arrowDown := TgEmoji(EmojiArrowDown, "⬇️")
 
 	caption := fmt.Sprintf(`%s <b>Проект «так называемый SPARK»</b> %s
 
-Здравствуйте, <b>%s</b>!
+%s Здравствуйте, <b>%s</b>!
 
-Комплексная программа подготовки к прохождению всероссийского конкурсного отбора на грантовую стажировку в США ($20,000).
+%s Наше обучение - комплексная программа подготовки к прохождению всероссийского конкурсного отбора на грантовую стажировку в США ($20,000).
 
-%s В рамках проекта участники получают проверенные шаблоны резюме (Google XYZ), методологию написания эссе, банк вопросов прошлых лет к Zoom-интервью и сопровождение визового этапа (J-1).
+%s В рамках проекта участники получают проверенные шаблоны резюме, методологию написания эссе, банк вопросов прошлых лет к Zoom-интервью и сопровождение визового этапа (J-1).
 
-%s <b>Выберите интересующий раздел:</b>`, star, spark, firstName, books, pointDown)
+%s <b>Выберите интересующий раздел:</b>`, star, spark, spiral, firstName, heart, sun, arrowDown)
 
 	// Send rich photo card using cached or local file
 	photoFile := s.ResolvePhotoFile(MediaMainBanner)
@@ -396,12 +398,12 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 	var text string
 	var keyboard *telego.InlineKeyboardMarkup
 
-	ticket := TgEmoji(EmojiTicket, "🎟")
-	card := TgEmoji(EmojiCard, "💳")
+	promoSparkle := TgEmoji(EmojiPromoSparkle, "✨")
+	lightning := TgEmoji(EmojiLightning, "⚡️")
 	num1 := TgEmoji(EmojiNum1, "1️⃣")
 	num2 := TgEmoji(EmojiNum2, "2️⃣")
-	pin := TgEmoji(EmojiPinRed, "📍")
-	pushpin := TgEmoji(EmojiPinPush, "📌")
+	calendar := TgEmoji(EmojiCalendarTag, "🗓")
+	paperclip := TgEmoji(EmojiPaperclip, "📎")
 
 	if withPromo || session.DiscountPct > 0 {
 		text = fmt.Sprintf(`%s <b>Промокод успешно активирован! Скидка 5%%</b>
@@ -417,7 +419,7 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 • Назначение платежа: <code>SPARK ПРОМО [Тариф]</code>
 
 %s <b>После перевода прикрепи скриншот чека прямо в этот чат!</b>
-Бот передаст его так называемому Илю и сразу выдаст персональную ссылку в закрытый канал потока.`, ticket, pin, pushpin)
+Бот передаст его так называемому Илю и сразу выдаст персональную ссылку в закрытый канал потока.`, promoSparkle, calendar, paperclip)
 		keyboard = PromoAppliedKeyboard()
 	} else {
 		text = fmt.Sprintf(`%s <b>Бронирование места в проекте «так называемый SPARK»</b>
@@ -433,7 +435,7 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 • Назначение: <code>SPARK [Тариф]</code>
 
 %s <b>После перевода просто отправь скриншот чека в этот чат!</b>
-Бот передаст его так называемому Илю и сразу пришлёт персональную ссылку в закрытый канал потока.`, card, num1, num2, pin, pushpin)
+Бот передаст его так называемому Илю и сразу пришлёт персональную ссылку в закрытый канал потока.`, lightning, num1, num2, calendar, paperclip)
 		keyboard = PaymentKeyboard()
 	}
 
