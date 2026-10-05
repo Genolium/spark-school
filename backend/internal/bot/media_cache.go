@@ -49,6 +49,15 @@ func (mc *MediaCache) Set(key, fileID string) {
 	mc.fileIDs[key] = fileID
 }
 
+type namedFileReader struct {
+	*os.File
+	customName string
+}
+
+func (n namedFileReader) Name() string {
+	return n.customName
+}
+
 // ResolvePhotoFile returns telego.InputFile using cached file ID or local disk file.
 func (s *BotService) ResolvePhotoFile(key string) telego.InputFile {
 	if s.mediaCache != nil {
@@ -61,7 +70,10 @@ func (s *BotService) ResolvePhotoFile(key string) telego.InputFile {
 	localPath := s.findLocalMedia(key)
 	if localPath != "" {
 		if file, err := os.Open(localPath); err == nil {
-			return tu.File(file)
+			return tu.File(namedFileReader{
+				File:       file,
+				customName: key, // e.g. "bot-main.png"
+			})
 		}
 	}
 
