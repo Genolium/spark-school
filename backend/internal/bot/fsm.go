@@ -13,8 +13,9 @@ const (
 	StateCalcQ1         BotState = "calc_q1"         // Age & Russian citizenship
 	StateCalcQ2         BotState = "calc_q2"         // University study year
 	StateCalcQ3         BotState = "calc_q3"         // English proficiency level
-	StateWaitingPromo   BotState = "waiting_promo"   // User clicked "Enter promo code"
-	StateWaitingReceipt BotState = "waiting_receipt" // User clicked "Pay" and is expected to send screenshot
+	StateWaitingPromo     BotState = "waiting_promo"     // User clicked "Enter promo code"
+	StateWaitingReceipt   BotState = "waiting_receipt"   // User clicked "Pay" and is expected to send screenshot
+	StateAdminBroadcast   BotState = "admin_broadcast"   // Curator typed broadcast command and is entering message text
 )
 
 // UserSession holds state machine and temporary calculator or payment data.

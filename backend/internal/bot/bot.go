@@ -207,6 +207,35 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 		return true
 	}
 
+	// Curator Broadcast input state
+	if session.State == StateAdminBroadcast && !strings.HasPrefix(text, "/") {
+		session.State = StateDefault
+		s.ExecuteBroadcast(chatID, text)
+		return true
+	}
+
+	// Curator In-line Command: /admin
+	if strings.HasPrefix(text, "/admin") {
+		if msg.From != nil && s.IsAdmin(msg.From.ID) {
+			s.SendAdminDashboard(chatID)
+		} else {
+			m := tu.Message(chatID, "⛔️ Доступ ограничен. Команда доступна только куратору проекта.")
+			_, _ = s.bot.SendMessage(m)
+		}
+		return true
+	}
+
+	// Curator In-line Command: /promo create [CODE] [DISCOUNT%]
+	if strings.HasPrefix(text, "/promo") {
+		if msg.From != nil && s.IsAdmin(msg.From.ID) {
+			s.HandleAdminPromoCommand(chatID, msg.From, text)
+		} else {
+			m := tu.Message(chatID, "⛔️ Доступ ограничен. Команда доступна только куратору проекта.")
+			_, _ = s.bot.SendMessage(m)
+		}
+		return true
+	}
+
 	if strings.HasPrefix(text, "/status") {
 		s.sendStatusMessage(chatID, msg.From)
 		return true
@@ -504,6 +533,53 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 			_, _ = s.bot.SendMessage(m)
 		}
 		return true
+
+	case "admin_menu":
+		if s.IsAdmin(query.From.ID) {
+			s.SendAdminDashboard(chatID)
+			return true
+		}
+
+	case "admin_stats":
+		if s.IsAdmin(query.From.ID) {
+			s.SendAdminLiveStats(chatID)
+			return true
+		}
+
+	case "admin_promos":
+		if s.IsAdmin(query.From.ID) && s.db != nil {
+			var promos []models.PromoCode
+			s.db.Order("id desc").Limit(10).Find(&promos)
+			sb := strings.Builder{}
+			sb.WriteString("🎟 <b>Список активных промокодов:</b>\n\n")
+			for _, p := range promos {
+				statusIcon := "🟢"
+				if !p.IsActive {
+					statusIcon = "🔴"
+				}
+				sb.WriteString(fmt.Sprintf("%s <code>%s</code> — <b>%d%%</b> (исп: %d)\n", statusIcon, p.Code, p.DiscountPercent, p.UsesCount))
+			}
+			sb.WriteString("\nСоздать новый: <code>/promo create КОД 10%</code>")
+			btnBack := tu.InlineKeyboardButton("⬅️ В админку").WithCallbackData("admin_menu")
+			m := tu.Message(chatID, sb.String()).WithParseMode(telego.ModeHTML).WithReplyMarkup(tu.InlineKeyboard(tu.InlineKeyboardRow(btnBack)))
+			_, _ = s.bot.SendMessage(m)
+			return true
+		}
+
+	case "admin_broadcast_prompt":
+		if s.IsAdmin(query.From.ID) {
+			session.State = StateAdminBroadcast
+			text := `📢 <b>Режим рассылки сообщений</b>
+
+Отправь следующее сообщение с текстом анонса, и бот доставит его <b>каждому пользователю</b> из базы данных!
+
+<i>Поддерживается HTML-разметка: &lt;b&gt;жирный&lt;/b&gt;, &lt;i&gt;курсив&lt;/i&gt;, ссылки.</i>
+
+Для отмены просто напиши /admin.`
+			m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML)
+			_, _ = s.bot.SendMessage(m)
+			return true
+		}
 	}
 
 	return false

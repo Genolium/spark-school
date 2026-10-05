@@ -65,3 +65,53 @@ func TestBot_HandleCallbackQuery_SecurityCheck(t *testing.T) {
 		t.Errorf("expected nil query to return false")
 	}
 }
+
+func TestBot_AdminPanelSecurity(t *testing.T) {
+	service := &BotService{
+		cfg: &config.Config{
+			AdminTelegramID: 123456789,
+		},
+	}
+
+	// 1. IsAdmin checks
+	if !service.IsAdmin(123456789) {
+		t.Errorf("expected 123456789 to be admin")
+	}
+	if service.IsAdmin(999999999) {
+		t.Errorf("expected 999999999 to NOT be admin")
+	}
+
+	// 2. Non-admin accessing admin_stats callback should be ignored
+	nonAdminQuery := &telego.CallbackQuery{
+		ID:   "cb_admin",
+		Data: "admin_stats",
+		From: telego.User{
+			ID: 999999999,
+		},
+		Message: &telego.Message{
+			Chat: telego.Chat{ID: 999999999, Type: "private"},
+		},
+	}
+
+	handled := service.HandleCallbackQuery(nonAdminQuery)
+	if handled {
+		t.Errorf("non-admin should not be permitted to execute admin_stats callback")
+	}
+
+	// 3. Admin accessing admin_stats callback handled safely
+	adminQuery := &telego.CallbackQuery{
+		ID:   "cb_admin_ok",
+		Data: "admin_stats",
+		From: telego.User{
+			ID: 123456789,
+		},
+		Message: &telego.Message{
+			Chat: telego.Chat{ID: 123456789, Type: "private"},
+		},
+	}
+	handledAdmin := service.HandleCallbackQuery(adminQuery)
+	if !handledAdmin {
+		t.Errorf("admin should be permitted to execute admin_stats callback")
+	}
+}
+

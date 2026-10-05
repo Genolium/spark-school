@@ -142,3 +142,23 @@ func CalcResultKeyboard() *telego.InlineKeyboardMarkup {
 		),
 	)
 }
+
+// AdminPanelKeyboard returns control buttons for curator in-line panel.
+func AdminPanelKeyboard() *telego.InlineKeyboardMarkup {
+	return tu.InlineKeyboard(
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("📊 Статистика онлайн").WithCallbackData("admin_stats"),
+		),
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("🧾 Чеки на модерации").WithCallbackData("admin_receipts"),
+			tu.InlineKeyboardButton("🎟 Список промокодов").WithCallbackData("admin_promos"),
+		),
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("📢 Рассылка по базе").WithCallbackData("admin_broadcast_prompt"),
+		),
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("⬅️ Закрыть панель").WithCallbackData("action_menu"),
+		),
+	)
+}
+
