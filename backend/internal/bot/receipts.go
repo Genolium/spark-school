@@ -52,15 +52,24 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) bool {
 		return true
 	}
 
-	chosenTier := session.SelectedTier
+	chosenTier := strings.ToLower(strings.TrimSpace(session.SelectedTier))
 	if chosenTier == "" {
 		chosenTier = "accelerator"
 	}
 
 	amount := 6900.0
-	if chosenTier == "vip" {
+	switch chosenTier {
+	case "basic", "base", "базовый":
+		amount = 2900.0
+		chosenTier = "basic"
+	case "vip":
 		amount = 14900.0
+		chosenTier = "vip"
+	default:
+		amount = 6900.0
+		chosenTier = "accelerator"
 	}
+
 	if session.DiscountPct > 0 {
 		amount = amount * (1.0 - float64(session.DiscountPct)/100.0)
 	}

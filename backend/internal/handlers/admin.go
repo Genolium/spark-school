@@ -115,7 +115,11 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 	var pendingPayoutsSum float64
 	h.db.Model(&models.PayoutRequest{}).Where("status = 'pending'").Select("COALESCE(SUM(amount), 0)").Scan(&pendingPayoutsSum)
 
-	grossVolume := float64(activeStudents) * 6900.0
+	var grossVolume float64
+	h.db.Model(&models.PaymentReceipt{}).Where("status = 'approved'").Select("COALESCE(SUM(amount), 0)").Scan(&grossVolume)
+	if grossVolume == 0 && activeStudents > 0 {
+		grossVolume = float64(activeStudents) * 6900.0
+	}
 
 	conversionRate := 0.0
 	if totalUsers > 0 {
@@ -352,7 +356,12 @@ func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 
 			// 2. Affiliate Commission Settlement (inside same transaction)
 			if h.affiliateService != nil {
-				if err := h.affiliateService.ProcessCoursePurchaseTx(tx, user.ID, 6900.0); err != nil {
+				purchasePrice := 6900.0
+				var userReceipt models.PaymentReceipt
+				if err := tx.Where("telegram_id = ?", user.TelegramID).Order("id DESC").First(&userReceipt).Error; err == nil && userReceipt.Amount > 0 {
+					purchasePrice = userReceipt.Amount
+				}
+				if err := h.affiliateService.ProcessCoursePurchaseTx(tx, user.ID, purchasePrice); err != nil {
 					return err
 				}
 			}
