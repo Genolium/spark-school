@@ -383,8 +383,11 @@ func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 					inviteLink = dynamicLink
 				}
 			}
+			if inviteLink == "" && h.cfg != nil {
+				inviteLink = h.cfg.TelegramInviteLink
+			}
 			if inviteLink == "" {
-				inviteLink = ""
+				inviteLink = "https://t.me/+so_called_spark_private"
 			}
 			generatedInviteLink = inviteLink
 			msg := "🎉 Поздравляем! Ваш доступ к закрытому Telegram-каналу и комьюнити проекта «так называемый SPARK» успешно активирован.\n\nСсылка-приглашение в канал: " + inviteLink

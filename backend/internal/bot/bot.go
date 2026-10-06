@@ -401,7 +401,7 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 	sparkle := TgEmoji(EmojiStarGreen, "✨")
 	checkV := TgEmoji(EmojiCheckVGreen, "✔️")
 	clipGreen := TgEmoji(EmojiPaperclipGreen, "📎")
-	bullet := TgEmoji(EmojiStarBigGreen, "•")
+	bullet := TgEmoji(EmojiStarBigGreen, "⭐")
 
 	lightning := TgEmoji(EmojiLightning, "⚡️")
 	num1 := TgEmoji(EmojiNum1, "1️⃣")
@@ -480,12 +480,13 @@ func (s *BotService) processPromoInput(chatID telego.ChatID, from *telego.User, 
 	var promo models.PromoCode
 	err := s.db.Where("UPPER(code) = ? AND is_active = true", code).First(&promo).Error
 
-	// Also support default promo START5, IL5, SPARK5
-	isValid := err == nil || code == "START5" || code == "IL5" || code == "SPARK5" || code == "ILYA5"
-
-	if isValid {
-		session.PromoCode = code
-		session.DiscountPct = 5
+	if err == nil && promo.ID != 0 {
+		session.PromoCode = promo.Code
+		discount := promo.DiscountPercent
+		if discount <= 0 {
+			discount = 5
+		}
+		session.DiscountPct = discount
 		session.State = StateWaitingReceipt
 		s.sendPaymentDetails(chatID, from, true)
 	} else {
@@ -732,6 +733,108 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 	return false
 }
 
+// sendAccessNotificationToStudent reliably delivers channel invite link to student using 6-stage fallback logic
+func (s *BotService) sendAccessNotificationToStudent(studentTelegramID int64, studentMsg string, inviteLink string) error {
+	if studentTelegramID == 0 {
+		return fmt.Errorf("student Telegram ID is 0")
+	}
+	if s.bot == nil {
+		log.Printf("[Bot Approval Mock] sendAccessNotificationToStudent to %d: %s", studentTelegramID, studentMsg)
+		return nil
+	}
+
+	studentChatID := tu.ID(studentTelegramID)
+	cleanMsg := StripTgEmoji(studentMsg)
+
+	var kb *telego.InlineKeyboardMarkup
+	if strings.HasPrefix(inviteLink, "http://") || strings.HasPrefix(inviteLink, "https://") || strings.HasPrefix(inviteLink, "tg://") {
+		kb = tu.InlineKeyboard(tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("Войти в закрытый канал ➔").WithURL(inviteLink),
+		))
+	} else {
+		kb = tu.InlineKeyboard(tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("💬 Написать так называемому Илю").WithURL("https://t.me/ilyan_vas"),
+		))
+	}
+
+	photoFile := s.ResolvePhotoFile(MediaStatusGranted)
+
+	// Step 1: Rich HTML Photo with custom emojis + keyboard
+	photoMsg := tu.Photo(studentChatID, photoFile).
+		WithCaption(studentMsg).
+		WithParseMode(telego.ModeHTML).
+		WithReplyMarkup(kb)
+
+	sentMsg, err := s.bot.SendPhoto(photoMsg)
+	if err == nil && sentMsg != nil {
+		s.CacheSentPhoto(MediaStatusGranted, sentMsg)
+		log.Printf("[Bot Approval] Step 1 SendPhoto (rich) succeeded for student %d", studentTelegramID)
+		return nil
+	}
+	log.Printf("[Bot Approval] Step 1 SendPhoto failed for student %d: %v. Retrying with stripped emojis...", studentTelegramID, err)
+
+	// Step 2: Clean Photo with StripTgEmoji + keyboard
+	photoMsgClean := tu.Photo(studentChatID, photoFile).
+		WithCaption(cleanMsg).
+		WithParseMode(telego.ModeHTML).
+		WithReplyMarkup(kb)
+
+	sentMsg2, err2 := s.bot.SendPhoto(photoMsgClean)
+	if err2 == nil && sentMsg2 != nil {
+		s.CacheSentPhoto(MediaStatusGranted, sentMsg2)
+		log.Printf("[Bot Approval] Step 2 SendPhoto (clean) succeeded for student %d", studentTelegramID)
+		return nil
+	}
+	log.Printf("[Bot Approval] Step 2 SendPhoto failed for student %d: %v. Retrying SendMessage...", studentTelegramID, err2)
+
+	// Step 3: Text SendMessage with rich HTML + custom emojis + keyboard
+	textMsg := tu.Message(studentChatID, studentMsg).
+		WithParseMode(telego.ModeHTML).
+		WithReplyMarkup(kb)
+
+	if _, err3 := s.bot.SendMessage(textMsg); err3 == nil {
+		log.Printf("[Bot Approval] Step 3 SendMessage (rich) succeeded for student %d", studentTelegramID)
+		return nil
+	} else {
+		log.Printf("[Bot Approval] Step 3 SendMessage failed for student %d: %v. Retrying clean text...", studentTelegramID, err3)
+	}
+
+	// Step 4: Text SendMessage with cleanMsg + keyboard
+	cleanTextMsg := tu.Message(studentChatID, cleanMsg).
+		WithParseMode(telego.ModeHTML).
+		WithReplyMarkup(kb)
+
+	if _, err4 := s.bot.SendMessage(cleanTextMsg); err4 == nil {
+		log.Printf("[Bot Approval] Step 4 SendMessage (clean) succeeded for student %d", studentTelegramID)
+		return nil
+	} else {
+		log.Printf("[Bot Approval] Step 4 SendMessage failed for student %d: %v. Retrying without keyboard...", studentTelegramID, err4)
+	}
+
+	// Step 5: Text SendMessage cleanMsg WITHOUT keyboard (in case keyboard URL caused rejection)
+	noMarkupMsg := tu.Message(studentChatID, cleanMsg).
+		WithParseMode(telego.ModeHTML)
+
+	if _, err5 := s.bot.SendMessage(noMarkupMsg); err5 == nil {
+		log.Printf("[Bot Approval] Step 5 SendMessage (no markup) succeeded for student %d", studentTelegramID)
+		return nil
+	} else {
+		log.Printf("[Bot Approval] Step 5 SendMessage failed for student %d: %v. Retrying plain text...", studentTelegramID, err5)
+	}
+
+	// Step 6: Pure plain unformatted text
+	plainText := fmt.Sprintf("Поздравляем! Оплата подтверждена.\n\nДобро пожаловать в проект «так называемый SPARK»!\nТвоя ссылка для входа в закрытый канал потока:\n%s\n\nСсылка является персональной и одноразовой.", inviteLink)
+	plainMsg := tu.Message(studentChatID, plainText)
+
+	if _, err6 := s.bot.SendMessage(plainMsg); err6 == nil {
+		log.Printf("[Bot Approval] Step 6 plain SendMessage succeeded for student %d", studentTelegramID)
+		return nil
+	} else {
+		log.Printf("[Bot Approval] FATAL: All 6 send attempts failed for student %d: %v", studentTelegramID, err6)
+		return err6
+	}
+}
+
 func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr string) {
 	adminID := query.From.ID
 	if s.cfg != nil && s.cfg.AdminTelegramID != 0 && adminID != s.cfg.AdminTelegramID {
@@ -759,22 +862,50 @@ func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr s
 		return
 	}
 
-	if receipt.Status == "approved" {
-		_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
-			CallbackQueryID: query.ID,
-			Text:            "Этот чек уже был одобрен ранее.",
-			ShowAlert:       true,
-		})
-		return
-	}
-
-	inviteLink := s.cfg.TelegramInviteLink
+	inviteLink := strings.TrimSpace(s.cfg.TelegramInviteLink)
 	if s.cfg.TelegramChannelID != 0 {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		if link, err := s.CreateOneTimeInviteLink(ctx, s.cfg.TelegramChannelID); err == nil && link != "" {
 			inviteLink = link
+		} else if err != nil {
+			log.Printf("[Bot Approval] Failed to create one-time invite link for channel %d: %v", s.cfg.TelegramChannelID, err)
 		}
+	}
+	if inviteLink == "" {
+		inviteLink = "https://t.me/+so_called_spark_private"
+	}
+
+	heart := TgEmoji(EmojiHeartSolidGreen, "💚")
+	sun := TgEmoji(EmojiSunGreen, "☀️")
+	arrow := TgEmoji(EmojiArrowRightGreen, "➡️")
+
+	studentMsg := fmt.Sprintf(`%s <b>Поздравляем! Оплата подтверждена.</b>
+
+%s Добро пожаловать в проект <b>«так называемый SPARK»</b>!
+Твоя ссылка для входа в закрытый канал потока:
+%s
+
+%s <i>Ссылка является персональной и одноразовой.</i>`, heart, sun, inviteLink, arrow)
+
+	// If receipt was ALREADY approved, re-send invite link to student without duplicating DB actions
+	if receipt.Status == "approved" {
+		log.Printf("[Bot Approval] Receipt #%d was already approved. Re-sending invite link to student %d...", receipt.ID, receipt.TelegramID)
+		sendErr := s.sendAccessNotificationToStudent(receipt.TelegramID, studentMsg, inviteLink)
+		if sendErr != nil {
+			_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+				CallbackQueryID: query.ID,
+				Text:            fmt.Sprintf("❌ Ошибка отправки ссылки: %v", sendErr),
+				ShowAlert:       true,
+			})
+		} else {
+			_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+				CallbackQueryID: query.ID,
+				Text:            "✅ Ссылка успешно отправлена студенту повторно!",
+				ShowAlert:       true,
+			})
+		}
+		return
 	}
 
 	receipt.Status = "approved"
@@ -789,40 +920,42 @@ func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr s
 		_ = s.affiliateService.ProcessCoursePurchase(student.ID, receipt.Amount)
 	}
 
-	heart := TgEmoji(EmojiHeartSolidGreen, "💚")
-	sun := TgEmoji(EmojiSunGreen, "☀️")
-	arrow := TgEmoji(EmojiArrowRightGreen, "➔")
-
-	studentMsg := fmt.Sprintf(`%s <b>Поздравляем! Оплата подтверждена.</b>
-
-%s Добро пожаловать в проект <b>«так называемый SPARK»</b>!
-Твоя ссылка для входа в закрытый канал потока:
-%s
-
-%s <i>Ссылка является персональной и одноразовой.</i>`, heart, sun, inviteLink, arrow)
-
-	btnChannel := tu.InlineKeyboardButton("Войти в закрытый канал ➔").WithURL(inviteLink)
-	kb := tu.InlineKeyboard(tu.InlineKeyboardRow(btnChannel))
-
-	studentChatID := tu.ID(receipt.TelegramID)
-	photoFile := s.ResolvePhotoFile(MediaStatusGranted)
-	photoMsg := tu.Photo(studentChatID, photoFile).
-		WithCaption(studentMsg).
-		WithParseMode(telego.ModeHTML).
-		WithReplyMarkup(kb)
-
-	sentMsg, err := s.bot.SendPhoto(photoMsg)
-	if err == nil && sentMsg != nil {
-		s.CacheSentPhoto(MediaStatusGranted, sentMsg)
+	sendErr := s.sendAccessNotificationToStudent(receipt.TelegramID, studentMsg, inviteLink)
+	if sendErr != nil {
+		log.Printf("[Bot Approval] Failed delivering invite link to student %d: %v", receipt.TelegramID, sendErr)
+		_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+			CallbackQueryID: query.ID,
+			Text:            fmt.Sprintf("⚠️ Чек одобрен, но ошибка отправки сообщения: %v", sendErr),
+			ShowAlert:       true,
+		})
 	} else {
-		m := tu.Message(studentChatID, studentMsg).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
-		_, _ = s.bot.SendMessage(m)
+		_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+			CallbackQueryID: query.ID,
+			Text:            "✅ Доступ успешно выдан, ссылка отправлена студенту!",
+		})
 	}
 
-	_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
-		CallbackQueryID: query.ID,
-		Text:            "✅ Доступ успешно выдан!",
-	})
+	// Update Curator's Inline Buttons
+	if query.Message != nil {
+		curatorChatID := tu.ID(query.Message.GetChat().ID)
+		msgID := query.Message.GetMessageID()
+		approvedKb := tu.InlineKeyboard(
+			tu.InlineKeyboardRow(
+				tu.InlineKeyboardButton("🔄 Отправить ссылку повторно").WithCallbackData(fmt.Sprintf("receipt_approve_%d", receipt.ID)),
+			),
+		)
+		if receipt.Username != "" {
+			approvedKb.InlineKeyboard = append(approvedKb.InlineKeyboard, tu.InlineKeyboardRow(
+				tu.InlineKeyboardButton(fmt.Sprintf("💬 Написать @%s", receipt.Username)).WithURL(fmt.Sprintf("https://t.me/%s", receipt.Username)),
+			))
+		}
+		editMarkup := &telego.EditMessageReplyMarkupParams{
+			ChatID:      curatorChatID,
+			MessageID:   msgID,
+			ReplyMarkup: approvedKb,
+		}
+		_, _ = s.bot.EditMessageReplyMarkup(editMarkup)
+	}
 }
 
 func (s *BotService) processReceiptRejection(query *telego.CallbackQuery, idStr string) {
@@ -856,16 +989,41 @@ func (s *BotService) processReceiptRejection(query *telego.CallbackQuery, idStr 
 • Неверная сумма перевода
 • Нечитаемый скриншот или отсутствие фискального подтверждения банка
 
-Пожалуйста, свяжитесь с куратором: @ilyan_vas`
+Пожалуйста, свяжитесь с так называемым Илем: @ilyan_vas`
 
 	btnHelp := tu.InlineKeyboardButton("Написать так называемому Илю").WithURL("https://t.me/ilyan_vas")
 	m := tu.Message(tu.ID(receipt.TelegramID), rejectMsg).WithParseMode(telego.ModeHTML).WithReplyMarkup(tu.InlineKeyboard(tu.InlineKeyboardRow(btnHelp)))
-	_, _ = s.bot.SendMessage(m)
+	if _, err := s.bot.SendMessage(m); err != nil {
+		log.Printf("[Bot Rejection] SendMessage failed for student %d: %v. Retrying clean...", receipt.TelegramID, err)
+		cleanReject := StripTgEmoji(rejectMsg)
+		cleanM := tu.Message(tu.ID(receipt.TelegramID), cleanReject).WithParseMode(telego.ModeHTML).WithReplyMarkup(tu.InlineKeyboard(tu.InlineKeyboardRow(btnHelp)))
+		if _, cleanErr := s.bot.SendMessage(cleanM); cleanErr != nil {
+			plainM := tu.Message(tu.ID(receipt.TelegramID), cleanReject)
+			_, _ = s.bot.SendMessage(plainM)
+		}
+	}
 
 	_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
 		CallbackQueryID: query.ID,
 		Text:            "❌ Чек отклонён",
 	})
+
+	if query.Message != nil {
+		curatorChatID := tu.ID(query.Message.GetChat().ID)
+		msgID := query.Message.GetMessageID()
+		rejectedKb := tu.InlineKeyboard()
+		if receipt.Username != "" {
+			rejectedKb = tu.InlineKeyboard(tu.InlineKeyboardRow(
+				tu.InlineKeyboardButton(fmt.Sprintf("💬 Написать @%s", receipt.Username)).WithURL(fmt.Sprintf("https://t.me/%s", receipt.Username)),
+			))
+		}
+		editMarkup := &telego.EditMessageReplyMarkupParams{
+			ChatID:      curatorChatID,
+			MessageID:   msgID,
+			ReplyMarkup: rejectedKb,
+		}
+		_, _ = s.bot.EditMessageReplyMarkup(editMarkup)
+	}
 }
 
 // handleWithdraw handles partner balance withdrawals
@@ -929,7 +1087,17 @@ func (s *BotService) SendNotification(telegramID int64, message string) error {
 	chatID := tu.ID(telegramID)
 	m := tu.Message(chatID, message).WithParseMode(telego.ModeHTML)
 	_, err := s.bot.SendMessage(m)
-	return err
+	if err != nil {
+		cleanMsg := StripTgEmoji(message)
+		cleanM := tu.Message(chatID, cleanMsg).WithParseMode(telego.ModeHTML)
+		if _, cleanErr := s.bot.SendMessage(cleanM); cleanErr == nil {
+			return nil
+		}
+		rawM := tu.Message(chatID, cleanMsg)
+		_, rawErr := s.bot.SendMessage(rawM)
+		return rawErr
+	}
+	return nil
 }
 
 // CreateOneTimeInviteLink generates a single-use invite link with a 24-hour expiration.

@@ -115,3 +115,28 @@ func TestBot_AdminPanelSecurity(t *testing.T) {
 	}
 }
 
+func TestBot_SendAccessNotificationToStudent_GracefulFallback(t *testing.T) {
+	service := NewBotService(&config.Config{}, nil)
+	defer service.Stop()
+
+	// 1. Zero Telegram ID returns error
+	errZero := service.sendAccessNotificationToStudent(0, "Test", "https://t.me/+link")
+	if errZero == nil {
+		t.Fatal("expected error for zero student ID")
+	}
+
+	// 2. Mock bot handles notification gracefully
+	errMock := service.sendAccessNotificationToStudent(12345678, "<b>Welcome!</b>", "https://t.me/+link")
+	if errMock != nil {
+		t.Fatalf("expected nil error for mock send, got %v", errMock)
+	}
+
+	// 3. StripTgEmoji verification
+	rawText := `Hello <tg-emoji emoji-id="12345">💚</tg-emoji> welcome <tg-emoji emoji-id="67890">☀️</tg-emoji>!`
+	clean := StripTgEmoji(rawText)
+	expected := `Hello 💚 welcome ☀️!`
+	if clean != expected {
+		t.Fatalf("StripTgEmoji: got %q, want %q", clean, expected)
+	}
+}
+
