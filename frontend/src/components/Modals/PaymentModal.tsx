@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, ShieldCheck, ArrowUpRight, QrCode, CreditCard, Send, Check, Tag, Sparkles } from "lucide-react";
 import { api, PromoValidationResult, PlacesStats } from "@/lib/api";
 
-export type PricingTier = "basic" | "accelerator" | "vip";
+export type PricingTier = "accelerator" | "vip";
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -14,13 +14,6 @@ interface PaymentModalProps {
 }
 
 const TIERS: Record<PricingTier, { name: string; price: number; discountPrice: number; discountAmount: number; tag: string }> = {
-  basic: {
-    name: "Базовый",
-    price: 2900,
-    discountPrice: 2755,
-    discountAmount: 145,
-    tag: "Self-Paced",
-  },
   accelerator: {
     name: "Акселератор",
     price: 6900,
@@ -49,7 +42,7 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
   const [places, setPlaces] = useState<PlacesStats>({ total_capacity: 25, active_students: 16, spots_left: 9 });
 
   useEffect(() => {
-    if (initialTier && initialTier !== "basic") {
+    if (initialTier) {
       setTier(initialTier);
     } else {
       setTier("accelerator");

@@ -459,7 +459,6 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 	lightning := TgEmoji(EmojiLightning, "⚡️")
 	num1 := TgEmoji(EmojiNum1, "1️⃣")
 	num2 := TgEmoji(EmojiNum2, "2️⃣")
-	num3 := TgEmoji(EmojiStarBigGreen, "⭐")
 	calendar := TgEmoji(EmojiCalendarTag, "🗓")
 	paperclip := TgEmoji(EmojiPaperclip, "📎")
 
@@ -467,7 +466,6 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 		text = fmt.Sprintf(`%s <b>Промокод успешно активирован! Скидка 5%%</b>
 
 <b>Стоимость с учётом скидки 5%%:</b>
-%s Базовый: <b>2 755 ₽</b> (скидка 145 ₽)
 %s Акселератор: <b>6 555 ₽</b> (скидка 345 ₽)
 %s VIP: <b>14 155 ₽</b> (скидка 745 ₽)
 
@@ -478,13 +476,12 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 • Назначение платежа: <code>SPARK ПРОМО [Тариф]</code>
 
 %s <b>После перевода прикрепи скриншот чека прямо в этот чат!</b>
-Бот передаст его так называемому Илю и сразу выдаст персональную ссылку в закрытый канал потока.`, sparkle, bullet, bullet, bullet, checkV, clipGreen)
+Бот передаст его так называемому Илю и сразу выдаст персональную ссылку в закрытый канал потока.`, sparkle, bullet, bullet, checkV, clipGreen)
 		keyboard = PromoAppliedKeyboard()
 	} else {
 		text = fmt.Sprintf(`%s <b>Бронирование места в проекте «так называемый SPARK»</b>
 
 <b>Тарифы участия:</b>
-%s <b>Базовый:</b> 2 900 ₽ (по промокоду: <b>2 755 ₽</b>)
 %s <b>Акселератор [Хит]:</b> 6 900 ₽ (по промокоду: <b>6 555 ₽</b>)
 %s <b>VIP:</b> 14 900 ₽ (по промокоду: <b>14 155 ₽</b>) <i>[Строго 3 места]</i>
 
@@ -495,7 +492,7 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 • Назначение: <code>SPARK [Тариф]</code>
 
 %s <b>После перевода просто отправь скриншот чека в этот чат!</b>
-Бот передаст его так называемому Илю и сразу пришлёт персональную ссылку в закрытый канал потока.`, lightning, num1, num2, num3, calendar, paperclip)
+Бот передаст его так называемому Илю и сразу пришлёт персональную ссылку в закрытый канал потока.`, lightning, num1, num2, calendar, paperclip)
 		keyboard = PaymentKeyboard()
 	}
 
@@ -680,7 +677,6 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 <i>Укажи промокод твоего друга-партнёра или из официального блога.</i>
 
 Скидка 5%% действует на любой тариф:
-• Базовый: 2 900 ₽ ➔ <b>2 755 ₽</b>
 • Акселератор: 6 900 ₽ ➔ <b>6 555 ₽</b>
 • VIP: 14 900 ₽ ➔ <b>14 155 ₽</b>`, checkCircle, sparkle)
 		m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(PromoRequestKeyboard())

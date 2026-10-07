@@ -5,6 +5,7 @@ import { BlurImage } from "./BlurImage";
 import { motion } from "framer-motion";
 import { ArrowUpRight, CheckCircle2, Video, FileText } from "lucide-react";
 import { api, PlacesStats } from "@/lib/api";
+import { DeadlineCountdown } from "./DeadlineCountdown";
 
 interface HeroProps {
   onOpenPayment?: () => void;
@@ -69,27 +70,20 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroPro
         {/* ========================================================================= */}
         {/* TOP STATUS BAR: Micro-Tag Pills with Muted Accent Tints                   */}
         {/* ========================================================================= */}
-        <div className="relative z-20 hidden sm:flex flex-wrap items-center justify-between gap-4">
+        <div className="relative z-20 flex flex-wrap items-center justify-between gap-4">
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
             className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-black/50 hover:bg-black/60 backdrop-blur-xl border border-white/25 text-xs font-mono text-white shadow-lg transition-all"
           >
             <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-semibold text-white">Набор на обучение открыт</span>
+            <span className="font-semibold text-white">Набор открыт</span>
             <span className="text-white/40">•</span>
-            <span className="text-slate-200">Старт заявочной кампании: Октябрь 2026</span>
+            <span className="text-slate-200">Поток SPARK 2027</span>
           </motion.div>
 
-          {/* Micro Tags */}
-          <div className="flex items-center gap-2.5">
-            <span className="px-3.5 py-1.5 rounded-full text-xs font-mono font-medium bg-black/50 hover:bg-black/60 backdrop-blur-xl border border-white/25 text-white shadow-sm transition-all">
-              #так_называемый_SPARK
-            </span>
-            <span className="px-3.5 py-1.5 rounded-full text-xs font-mono font-medium bg-black/50 hover:bg-black/60 backdrop-blur-xl border border-white/25 text-white shadow-sm transition-all">
-              #Full_Grant_$20k
-            </span>
-          </div>
+          {/* Countdown in Top Bar */}
+          <DeadlineCountdown variant="hero" />
         </div>
 
         {/* ========================================================================= */}

@@ -140,7 +140,7 @@ func main() {
 		api.POST("/promo/validate", promoHandler.Validate)
 		api.POST("/promo/redeem", promoHandler.Redeem)
 
-		// Telegram Bot Webhook endpoint (direct integration bypassing n8n, 15ms latency)
+		// Telegram Bot Webhook endpoint (direct native Go integration, 15ms latency)
 		api.POST("/bot/webhook", func(c *gin.Context) {
 			var update telego.Update
 			if err := c.ShouldBindJSON(&update); err != nil {

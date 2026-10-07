@@ -410,7 +410,7 @@ export function ChancesCalculator() {
                   className="btn-primary-mono w-full sm:w-auto px-6 py-3.5 text-xs sm:text-sm font-bold flex items-center justify-center gap-2 group shadow-xl"
                 >
                   <Send className="w-4 h-4" />
-                  <span>Разобрать заявку ➔</span>
+                  <span>Разобрать заявку с так называемым Илем в Telegram ➔</span>
                 </a>
 
                 <button

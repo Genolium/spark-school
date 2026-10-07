@@ -59,9 +59,6 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) bool {
 
 	amount := 6900.0
 	switch chosenTier {
-	case "basic", "base", "базовый":
-		amount = 2900.0
-		chosenTier = "basic"
 	case "vip":
 		amount = 14900.0
 		chosenTier = "vip"

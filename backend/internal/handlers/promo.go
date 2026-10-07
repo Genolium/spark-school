@@ -51,15 +51,9 @@ func GetTierPrice(tier string, fallbackPrice float64) float64 {
 		return fallbackPrice
 	}
 	switch strings.ToLower(strings.TrimSpace(tier)) {
-	case "basic":
-		return 2900.00
-	case "accelerator":
-		return 6900.00
 	case "vip":
 		return 14900.00
-	case "self-paced", "базовый":
-		return 2900.00
-	case "акселератор":
+	case "accelerator", "акселератор":
 		return 6900.00
 	default:
 		return BaseCoursePrice

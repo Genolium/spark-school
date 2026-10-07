@@ -90,12 +90,6 @@ rootFiles.forEach(f => copyFileSafe(f));
 
 // (Do not copy .env to deploy folder - server keeps its own .env or uses .env.example)
 
-// Copy n8n-workflows if exists
-if (fs.existsSync(path.join(ROOT_DIR, 'n8n-workflows'))) {
-  console.log('🤖 Copying n8n workflows templates...');
-  copyDir(path.join(ROOT_DIR, 'n8n-workflows'), path.join(OUT_DIR, 'n8n-workflows'));
-}
-
 // 3. Copy Backend
 console.log('⚙️ Copying Go backend files (excluding tests & local binaries)...');
 copyDir(path.join(ROOT_DIR, 'backend'), path.join(OUT_DIR, 'backend'), (fullPath, relPath, entry) => {
@@ -192,7 +186,7 @@ fi
 
 echo "📦 Building and launching containers..."
 $DOCKER_COMPOSE down --remove-orphans 2>/dev/null || true
-docker rm -f spark_caddy spark_backend spark_frontend spark_postgres spark_n8n spark_bot 2>/dev/null || true
+docker rm -f spark_caddy spark_backend spark_frontend spark_postgres spark_bot 2>/dev/null || true
 $DOCKER_COMPOSE up -d --build
 
 echo "⏳ Checking container health..."
@@ -259,18 +253,8 @@ const deployMdContent = `# 🚀 Инструкция по деплою на се
 ## Что внутри контура:
 * **caddy** (порт 38080/80): Reverse-proxy, маршрутизация \`/api/*\` на Go, фронтенда на Next.js.
 * **frontend** (Next.js 14): Оптимизированный продакшн-бандл.
-* **backend** (Golang 1.22): REST API, JWT-авторизация, админ-панель.
-* **n8n** (порт 38567 или \`https://n8n.so-called-spark.ru\`): Визуальный конструктор воронок и диалогов Telegram-бота. Готовый шаблон для импорта лежит в папке \`n8n-workflows/spark-bot-workflow.json\`.
+* **backend** (Golang 1.22): REST API, JWT-авторизация, админ-панель и встроенный Telegram-бот на чистом Go.
 * **postgres** (PostgreSQL 16 Alpine): База данных с авто-накатом \`seed.sql\`.
-
----
-
-## 🤖 Как настроить Telegram-бота в n8n:
-1. Откройте в браузере \`https://n8n.YOUR_DOMAIN\` (или \`http://YOUR_SERVER_IP:5678\`).
-2. При первом входе создайте аккаунт администратора n8n.
-3. Нажмите **Add Workflow** ➔ в меню справа выберите **Import from File** и укажите \`n8n-workflows/spark-bot-workflow.json\`.
-4. В ноде **Telegram Trigger** добавьте свои учетные данные бота (токен от @BotFather).
-5. Нажмите кнопку **Save** и включите переключатель **Active**. Бот сразу начинает обрабатывать сообщения!
 `;
 fs.writeFileSync(path.join(OUT_DIR, 'DEPLOY.md'), deployMdContent, 'utf8');
 

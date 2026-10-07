@@ -128,7 +128,7 @@ export default function AdminPage() {
                       </span>
                     </div>
                     <p className="text-xs font-mono text-slate-400 mt-0.5">
-                      Управление студентами и промокоды • Куратор: Илья Васюнин
+                      Управление студентами и промокоды • Куратор: так называемый Иль
                     </p>
                   </div>
                 </div>

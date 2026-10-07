@@ -44,34 +44,6 @@ services:
     networks:
       - spark_network
 
-  # n8n — Visual Telegram Bot Builder & Automation Engine
-  n8n:
-    image: docker.n8n.io/n8nio/n8n:latest
-    container_name: spark_n8n
-    restart: unless-stopped
-    ports:
-      - "${PORT_N8N:-38567}:5678"
-    environment:
-      - N8N_HOST=n8n.${DOMAIN:-so-called-spark.ru}
-      - N8N_PORT=5678
-      - N8N_PROTOCOL=${N8N_PROTOCOL:-http}
-      - N8N_WEBHOOK_URL=${WEBHOOK_URL:-https://n8n.${DOMAIN:-so-called-spark.ru}/}
-      - WEBHOOK_URL=${WEBHOOK_URL:-https://n8n.${DOMAIN:-so-called-spark.ru}/}
-      - N8N_TRUST_PROXY=${N8N_TRUST_PROXY:-true}
-      - N8N_PROXY_HOPS=${N8N_PROXY_HOPS:-1}
-      - N8N_SECURE_COOKIE=${N8N_SECURE_COOKIE:-false}
-      - GENERIC_TIMEZONE=${TIMEZONE:-Europe/Moscow}
-      - TZ=${TIMEZONE:-Europe/Moscow}
-      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
-      - N8N_BLOCK_ENV_ACCESS_IN_NODE=false
-    volumes:
-      - n8n_data:/home/node/.n8n
-    dns:
-      - 8.8.8.8
-      - 1.1.1.1
-    networks:
-      - spark_network
-
   # (Optional) Standalone Go Bot worker — activated via --profile go-bot
   bot:
     profiles: ["go-bot"]
@@ -169,4 +141,3 @@ volumes:
   pgbackups:
   caddy_data:
   caddy_config:
-  n8n_data:

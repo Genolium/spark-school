@@ -104,21 +104,22 @@ function getFilesRecursively(dir, filterFn) {
 // ============================================================================
 describe('Tier 1: Feature Coverage', () => {
 
-  it('1.1 Pricing Tiers: Базовый (2900), Акселератор (6900), and VIP (14900) exist with strict VIP naming', () => {
+  it('1.1 Pricing Tiers: Strictly 2 tiers: Акселератор (6900) and VIP (14900) exist, Basic is removed', () => {
     // 1. Verify frontend PricingSection.tsx
     const pricingSectionPath = path.join(ROOT, 'frontend', 'src', 'components', 'PricingSection.tsx');
     assert.ok(fs.existsSync(pricingSectionPath), 'PricingSection.tsx must exist');
     const pricingContent = fs.readFileSync(pricingSectionPath, 'utf8');
 
     // Check tier names in PricingSection
-    assert.match(pricingContent, /Базовый/, 'PricingSection must include Базовый tier');
     assert.match(pricingContent, /Акселератор/, 'PricingSection must include Акселератор tier');
     assert.match(pricingContent, /VIP/, 'PricingSection must include VIP tier');
 
     // Check base prices in PricingSection
-    assert.match(pricingContent, /2\s*900\s*₽/, 'PricingSection must display 2 900 ₽ for Базовый');
     assert.match(pricingContent, /6\s*900\s*₽/, 'PricingSection must display 6 900 ₽ for Акселератор');
     assert.match(pricingContent, /14\s*900\s*₽/, 'PricingSection must display 14 900 ₽ for VIP');
+
+    // Verify Basic tier is completely removed from PricingSection
+    assert.doesNotMatch(pricingContent, /Выбрать Базовый/, 'PricingSection must not have Basic tier button');
 
     // Check strict naming: VIP card header must not include 'Консьерж'
     assert.doesNotMatch(pricingContent, /<h3[^>]*>[\s\S]*?VIP\s*\/\s*Консьерж[\s\S]*?<\/h3>/, 'PricingSection header must NOT contain "VIP / Консьерж"');
@@ -129,28 +130,22 @@ describe('Tier 1: Feature Coverage', () => {
     assert.ok(fs.existsSync(paymentModalPath), 'PaymentModal.tsx must exist');
     const modalContent = fs.readFileSync(paymentModalPath, 'utf8');
 
-    // Check TIERS dictionary in PaymentModal
-    assert.match(modalContent, /basic:\s*\{[\s\S]*?price:\s*2900/, 'PaymentModal must have basic price 2900');
+    // Check TIERS dictionary in PaymentModal has only accelerator and vip
     assert.match(modalContent, /accelerator:\s*\{[\s\S]*?price:\s*6900/, 'PaymentModal must have accelerator price 6900');
     assert.match(modalContent, /vip:\s*\{[\s\S]*?price:\s*14900/, 'PaymentModal must have vip price 14900');
     assert.match(modalContent, /vip:\s*\{[\s\S]*?name:\s*["']VIP["']/, 'PaymentModal VIP tier name must be strictly "VIP"');
-    assert.doesNotMatch(modalContent, /vip:\s*\{[\s\S]*?name:\s*["']VIP\s*\/\s*Консьерж["']/, 'PaymentModal VIP name must NOT be "VIP / Консьерж"');
+    assert.doesNotMatch(modalContent, /basic:\s*\{[\s\S]*?price:\s*2900/, 'PaymentModal must NOT have basic tier');
 
     // 3. Verify backend promo.go tier pricing
     const backendPromoPath = path.join(ROOT, 'backend', 'internal', 'handlers', 'promo.go');
     assert.ok(fs.existsSync(backendPromoPath), 'backend/internal/handlers/promo.go must exist');
     const backendPromoContent = fs.readFileSync(backendPromoPath, 'utf8');
-    assert.match(backendPromoContent, /case\s+"basic":\s*return\s*2900/, 'backend GetTierPrice must return 2900 for basic');
-    assert.match(backendPromoContent, /case\s+"accelerator":\s*return\s*6900/, 'backend GetTierPrice must return 6900 for accelerator');
     assert.match(backendPromoContent, /case\s+"vip":\s*return\s*14900/, 'backend GetTierPrice must return 14900 for vip');
+    assert.match(backendPromoContent, /case\s+"accelerator"/, 'backend GetTierPrice must return 6900 for accelerator');
   });
 
-  it('1.2 Promo Code Engine: 5% discount calculation (2900 -> 2755, 6900 -> 6555, 14900 -> 14155)', () => {
-    // Mathematical specification validation
-    const basicDiscount = calculatePromoDiscount(2900, 5);
-    assert.equal(basicDiscount.discountAmount, 145, '2900 * 5% must equal 145');
-    assert.equal(basicDiscount.finalPrice, 2755, '2900 - 145 must equal 2755');
-
+  it('1.2 Promo Code Engine: 5% discount calculation (6900 -> 6555, 14900 -> 14155 for 2 active tiers)', () => {
+    // Mathematical specification validation for 2 active tiers
     const accDiscount = calculatePromoDiscount(6900, 5);
     assert.equal(accDiscount.discountAmount, 345, '6900 * 5% must equal 345');
     assert.equal(accDiscount.finalPrice, 6555, '6900 - 345 must equal 6555');
@@ -159,18 +154,16 @@ describe('Tier 1: Feature Coverage', () => {
     assert.equal(vipDiscount.discountAmount, 745, '14900 * 5% must equal 745');
     assert.equal(vipDiscount.finalPrice, 14155, '14900 - 745 must equal 14155');
 
-    // Verify presence of promo prices in PricingSection.tsx
+    // Verify presence of promo prices in PricingSection.tsx (strictly 2 tiers: 6 900 and 14 900)
     const pricingSectionPath = path.join(ROOT, 'frontend', 'src', 'components', 'PricingSection.tsx');
     const pricingContent = fs.readFileSync(pricingSectionPath, 'utf8');
-    assert.match(pricingContent, /2\s*755\s*₽/, 'PricingSection must display 2 755 ₽ promo price');
-    assert.match(pricingContent, /6\s*555\s*₽/, 'PricingSection must display 6 555 ₽ promo price');
-    assert.match(pricingContent, /14\s*155\s*₽/, 'PricingSection must display 14 155 ₽ promo price');
+    assert.match(pricingContent, /6\s*900\s*₽/, 'PricingSection must display 6 900 ₽ price');
+    assert.match(pricingContent, /14\s*900\s*₽/, 'PricingSection must display 14 900 ₽ price');
 
     // Verify discount calculation formula in PaymentModal.tsx
     const paymentModalPath = path.join(ROOT, 'frontend', 'src', 'components', 'Modals', 'PaymentModal.tsx');
     const modalContent = fs.readFileSync(paymentModalPath, 'utf8');
     assert.match(modalContent, /0\.95/, 'PaymentModal must calculate 5% discount using 0.95 multiplier');
-    assert.match(modalContent, /discountPrice:\s*2755/, 'PaymentModal must have discountPrice 2755 for basic');
     assert.match(modalContent, /discountPrice:\s*6555/, 'PaymentModal must have discountPrice 6555 for accelerator');
     assert.match(modalContent, /discountPrice:\s*14155/, 'PaymentModal must have discountPrice 14155 for vip');
   });
@@ -263,23 +256,13 @@ describe('Tier 2: Boundary & Corner Cases', () => {
     assert.equal(isPrivateChat({ type: 'private', id: 0 }), false, 'Zero chat ID must be rejected');
     assert.equal(isPrivateChat(null), false, 'Null chat must be rejected');
 
-    // 2. Code check: inspect backend/internal/bot/bot.go and n8n workflows
+    // 2. Code check: inspect backend/internal/bot/bot.go
     const botGoPath = path.join(ROOT, 'backend', 'internal', 'bot', 'bot.go');
     assert.ok(fs.existsSync(botGoPath), 'bot.go must exist');
     const botGoContent = fs.readFileSync(botGoPath, 'utf8');
 
-    // Either bot.go has chat type filter or n8n workflow has it
     const hasGoChatFilter = /msg\.Chat\.Type\s*!=\s*"private"|chat\.type\s*===\s*["']private["']/i.test(botGoContent);
-
-    // Also check n8n workflows
-    const n8nWorkflowPath = path.join(ROOT, 'n8n-workflows', 'spark-bot-workflow.json');
-    let hasN8nChatFilter = false;
-    if (fs.existsSync(n8nWorkflowPath)) {
-      const n8nContent = fs.readFileSync(n8nWorkflowPath, 'utf8');
-      hasN8nChatFilter = /chatType\s*!==\s*['"]private['"]|chat\.type\s*===\s*['"]private['"]/i.test(n8nContent);
-    }
-
-    assert.ok(hasGoChatFilter || hasN8nChatFilter, 'Private chat filter must be enforced in Go bot or n8n workflow');
+    assert.ok(hasGoChatFilter, 'Private chat filter must be enforced in Go bot');
   });
 
   it('2.3 Anti-Fraud Receipt Deduplication: Rejects duplicate file_unique_id and file_hash', () => {
@@ -398,7 +381,6 @@ describe('Tier 4: Repository Hygiene & Acceptance Scan', () => {
     path.join(ROOT, 'frontend', 'src'),
     path.join(ROOT, 'backend', 'cmd'),
     path.join(ROOT, 'backend', 'internal'),
-    path.join(ROOT, 'n8n-workflows'),
   ];
 
   it('4.1 Codebase Scan: 0 occurrences of forbidden residual "SPARK School"', () => {
@@ -517,7 +499,6 @@ describe('Tier 5: Packaging & Deployment Artifact', () => {
       { pattern: /backend\/.*Dockerfile/, name: 'backend/Dockerfile' },
       { pattern: /backend\/cmd\/server\/main\.go/, name: 'backend/cmd/server/main.go' },
       { pattern: /frontend\/.*package\.json/, name: 'frontend/package.json' },
-      { pattern: /n8n-workflows\/.*\.json/, name: 'n8n workflow definition' },
       { pattern: /seed\.sql/, name: 'seed.sql' },
       { pattern: /DEPLOY\.md/, name: 'DEPLOY.md' },
     ];

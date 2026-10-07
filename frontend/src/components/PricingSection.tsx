@@ -4,9 +4,10 @@ import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Check, ArrowUpRight, ShieldCheck, CreditCard, Sparkles, Crown } from "lucide-react";
 import { api, PlacesStats } from "@/lib/api";
+import { DeadlineCountdown } from "./DeadlineCountdown";
 
 interface PricingSectionProps {
-  onOpenPayment?: (tier?: "basic" | "accelerator" | "vip") => void;
+  onOpenPayment?: (tier?: "accelerator" | "vip") => void;
 }
 
 export function PricingSection({ onOpenPayment }: PricingSectionProps) {
@@ -23,7 +24,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
   return (
     <section id="pricing" className="relative w-full max-w-[1520px] mx-auto px-3 sm:px-6 py-16 sm:py-24 scroll-mt-20 sm:scroll-mt-24">
       {/* Section Header */}
-      <div className="text-center max-w-3xl mx-auto mb-12 sm:mb-16">
+      <div className="text-center max-w-3xl mx-auto mb-10 sm:mb-12">
         <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bento-pill text-xs font-mono text-emerald-800 dark:text-emerald-300 mb-4">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
           <span>Тарифная сетка</span>
@@ -33,7 +34,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
           <span className="text-emerald-600 dark:text-emerald-400 font-serif italic">выиграть грант $20,000</span>
         </h2>
         <p className="mt-4 text-base text-slate-600 dark:text-slate-300 leading-relaxed font-normal">
-          Выбери комфортный формат подготовки: самостоятельный по проверенным шаблонам, полное персональное менторство от финалиста SPARK 2026 или VIP-сопровождение под ключ.
+          Выбери комфортный формат подготовки: полное персональное менторство от финалиста SPARK 2026 или VIP-сопровождение под ключ.
         </p>
 
         {/* Live Scarcity Counter Bar */}
@@ -49,85 +50,16 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
         </div>
       </div>
 
-      {/* 2-Tier Pricing Grid (Базовый тариф временно скрыт) */}
+      {/* Deadline Countdown Widget (20 ноября 23:59) */}
+      <div className="max-w-5xl mx-auto mb-10 sm:mb-12">
+        <DeadlineCountdown onOpenPayment={() => onOpenPayment?.("accelerator")} />
+      </div>
+
+      {/* 2-Tier Pricing Grid: Акселератор & VIP */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 items-stretch max-w-5xl mx-auto">
         
         {/* ========================================================================= */}
-        {/* TIER 1: БАЗОВЫЙ (Self-Paced) - ВРЕМЕННО СКРЫТ                            */}
-        {/* ========================================================================= */}
-        {false && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          whileInView={{ opacity: 1, y: 0 }}
-          viewport={{ once: true }}
-          transition={{ duration: 0.5 }}
-          className="bento-card-dark p-6 sm:p-8 rounded-3xl border border-emerald-500/15 dark:border-white/10 flex flex-col justify-between relative overflow-hidden bg-white/70 dark:bg-[#12161f]/70"
-        >
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <span className="tag-neutral px-3 py-1 rounded-full text-xs font-mono font-medium uppercase">
-                Self-Paced
-              </span>
-            </div>
-
-            <h3 className="font-editorial text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-2">
-              Базовый
-            </h3>
-            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-doc mb-6 leading-relaxed">
-              Самостоятельная подготовка по проверенным шаблонам и видеоразборам реальных заявок.
-            </p>
-
-            <div className="mb-6 pb-6 border-b border-emerald-500/15 dark:border-white/10">
-              <div className="text-slate-400 line-through text-sm font-mono">
-                4 900 ₽
-              </div>
-              <div className="text-3xl sm:text-4xl font-black font-mono text-slate-900 dark:text-white tracking-tight">
-                2 900 ₽
-              </div>
-            </div>
-
-            {/* Features */}
-            <div className="space-y-3 font-doc text-xs sm:text-sm text-slate-700 dark:text-slate-200 mb-8">
-              <div className="flex items-start gap-2.5">
-                <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                <span>Доступ в закрытый канал потока со всеми материалами и апдейтами отбора</span>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                <span>Шаблоны Google XYZ резюме и победные структуры эссе на 500 слов</span>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                <span>Видеоразборы удачных и провальных кейсов прошлых лет</span>
-              </div>
-              <div className="flex items-start gap-2.5">
-                <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                <span>Закрытый Telegram-чат участников потока</span>
-              </div>
-              <div className="flex items-start gap-2.5 text-slate-400">
-                <span className="w-4 h-4 text-center shrink-0">—</span>
-                <span className="line-through">Без личного мок-интервью в Zoom</span>
-              </div>
-              <div className="flex items-start gap-2.5 text-slate-400">
-                <span className="w-4 h-4 text-center shrink-0">—</span>
-                <span className="line-through">Без обратной связи по заявке</span>
-              </div>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => onOpenPayment?.("basic")}
-            className="w-full py-3.5 px-4 rounded-2xl bento-pill hover:bg-emerald-500/15 border border-emerald-500/25 text-xs sm:text-sm font-mono font-bold text-slate-900 dark:text-white flex items-center justify-center gap-2 transition-all active:scale-95"
-          >
-            <span>Выбрать Базовый (2 900 ₽)</span>
-            <ArrowUpRight className="w-4 h-4" />
-          </button>
-        </motion.div>
-        )}
-
-        {/* ========================================================================= */}
-        {/* TIER 2: АКСЕЛЕРАТОР (Full Mentorship) - ХИТ ПРОДАЖ                         */}
+        {/* TIER 1: АКСЕЛЕРАТОР (Full Mentorship) - ХИТ ПРОДАЖ                         */}
         {/* ========================================================================= */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -170,7 +102,11 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
             <div className="space-y-3 font-doc text-xs sm:text-sm text-slate-700 dark:text-slate-200 mb-8">
               <div className="flex items-start gap-2.5 font-semibold text-slate-900 dark:text-white">
                 <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                <span>Всё, что входит в тариф Базовый</span>
+                <span>Бессрочный доступ в закрытый канал потока со всеми материалами</span>
+              </div>
+              <div className="flex items-start gap-2.5 font-semibold text-slate-900 dark:text-white">
+                <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                <span>Библиотека шаблонов Google XYZ резюме и эссе на 500 слов</span>
               </div>
               <div className="flex items-start gap-2.5">
                 <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
@@ -186,7 +122,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
               </div>
               <div className="flex items-start gap-2.5">
                 <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                <span>Личные ответы на любые вопросы по ходу подачи заявки</span>
+                <span>Закрытый Telegram-чат участников потока и ответы на вопросы</span>
               </div>
             </div>
           </div>

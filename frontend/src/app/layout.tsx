@@ -96,22 +96,43 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL("https://so-called-spark.ru"),
   title: {
-    default: "так называемый SPARK — Грант $20,000 на учёбу в США",
+    default: "так называемый SPARK — Грант $20,000 на учёбу в США | Подготовка к отбору 2027",
     template: "так называемый SPARK — %s",
   },
   description:
-    "Практический проект от финалиста программы SPARK 2026 так называемого Иля. Разборы победных заявок, резюме по стандартам Гарварда, симуляция 45-минутного интервью в Zoom и закрытые инсайды отбора.",
+    "Практический проект от финалиста программы SPARK 2026 так называемого Иля. Разборы победных заявок, резюме по стандартам Google XYZ, симуляция 45-минутного интервью в Zoom и визовый гайд J-1. Выиграй грант $20,000 на бесплатную учёбу в американском университете.",
   keywords: [
     "так называемый SPARK",
     "SPARK 2027",
-    "гранты США",
-    "обучение в Америке",
+    "грант SPARK",
+    "гранты США для студентов",
+    "обучение в Америке бесплатно",
     "подготовка к SPARK",
-    "академический обмен",
+    "академический обмен США",
     "University of Wyoming",
+    "Google XYZ резюме",
+    "эссе на грант США",
+    "Zoom интервью США",
+    "мок интервью на английском",
+    "виза J-1 подготовка",
+    "форма DS-160",
+    "стипендии на учебу в США",
+    "так называемый Иль",
   ],
-  authors: [{ name: "так называемый Иль" }],
+  authors: [{ name: "так называемый Иль", url: "https://t.me/ilyan_vas" }],
   creator: "так называемый Иль (Финалист SPARK 2026)",
+  publisher: "проект «так называемый SPARK»",
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
   alternates: {
     canonical: "https://so-called-spark.ru",
   },
@@ -160,10 +181,43 @@ const jsonLd = {
   "@context": "https://schema.org",
   "@graph": [
     {
+      "@type": "WebSite",
+      "@id": "https://so-called-spark.ru/#website",
+      "url": "https://so-called-spark.ru",
+      "name": "так называемый SPARK",
+      "description": "Практический проект подготовки к гранту $20,000 на учёбу в США летом 2027 года.",
+      "inLanguage": "ru"
+    },
+    {
+      "@type": "BreadcrumbList",
+      "@id": "https://so-called-spark.ru/#breadcrumbs",
+      "itemListElement": [
+        {
+          "@type": "ListItem",
+          "position": 1,
+          "name": "Главная",
+          "item": "https://so-called-spark.ru"
+        },
+        {
+          "@type": "ListItem",
+          "position": 2,
+          "name": "Тарифы",
+          "item": "https://so-called-spark.ru/#pricing"
+        },
+        {
+          "@type": "ListItem",
+          "position": 3,
+          "name": "Публичная оферта",
+          "item": "https://so-called-spark.ru/offer"
+        }
+      ]
+    },
+    {
       "@type": "Course",
       "@id": "https://so-called-spark.ru/#course",
       "name": "проект «так называемый SPARK» 2027",
       "description": "Практический проект от финалиста программы SPARK 2026 так называемого Иля. Разборы победных заявок, шаблоны документов, симуляция 45-минутного интервью в Zoom.",
+      "courseMode": "online",
       "provider": {
         "@type": "Organization",
         "name": "так называемый SPARK",

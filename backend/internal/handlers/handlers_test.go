@@ -259,15 +259,18 @@ func TestReceiptVerify_Validation(t *testing.T) {
 }
 
 func TestPromoValidate_TierPricing(t *testing.T) {
-	// Test helper GetTierPrice
-	if price := GetTierPrice("basic", 0); price != 2900.00 {
-		t.Errorf("expected basic price 2900, got %f", price)
-	}
+	// Test helper GetTierPrice (only 2 active tiers: accelerator and vip)
 	if price := GetTierPrice("accelerator", 0); price != 6900.00 {
 		t.Errorf("expected accelerator price 6900, got %f", price)
 	}
+	if price := GetTierPrice("акселератор", 0); price != 6900.00 {
+		t.Errorf("expected акселератор price 6900, got %f", price)
+	}
 	if price := GetTierPrice("vip", 0); price != 14900.00 {
 		t.Errorf("expected vip price 14900, got %f", price)
+	}
+	if price := GetTierPrice("unknown", 0); price != 6900.00 {
+		t.Errorf("expected default price 6900, got %f", price)
 	}
 	if price := GetTierPrice("", 5000); price != 5000.00 {
 		t.Errorf("expected custom price 5000, got %f", price)
