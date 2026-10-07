@@ -150,6 +150,9 @@ export const metadata: Metadata = {
     images: ["/og-image.png"],
     creator: "@ilyan_vas",
   },
+  verification: {
+    yandex: "345a2f8dfaaff053",
+  },
   category: "education",
 };
 
@@ -256,6 +259,7 @@ export default function RootLayout({
       className={`scroll-smooth ${golosHeading.variable} ${ptRootUI.variable} ${ptAstraSans.variable} ${ibmPlexMono.variable} ${spectral.variable}`}
     >
       <head>
+        <meta name="yandex-verification" content="345a2f8dfaaff053" />
         <script
           dangerouslySetInnerHTML={{
             __html: `

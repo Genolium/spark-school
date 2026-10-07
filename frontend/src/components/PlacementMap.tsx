@@ -81,14 +81,18 @@ export function PlacementMap() {
     });
   }, [placements, activeRegion, searchQuery]);
 
-  const regionTabs = [
-    { key: "All", label: "Все кампусы (24)" },
-    { key: "Mountain", label: "Mountain (6)" },
-    { key: "West", label: "West Coast (9)" },
-    { key: "Midwest", label: "Midwest (4)" },
-    { key: "South", label: "South (3)" },
-    { key: "East", label: "East Coast (2)" },
-  ];
+  const regionTabs = useMemo(() => {
+    const total = placements.length;
+    const countFor = (region: string) => placements.filter((p) => p.region === region).length;
+    return [
+      { key: "All", label: `Все кампусы (${total})` },
+      { key: "Mountain", label: `Mountain (${countFor("Mountain")})` },
+      { key: "West", label: `West Coast (${countFor("West")})` },
+      { key: "Midwest", label: `Midwest (${countFor("Midwest")})` },
+      { key: "South", label: `South (${countFor("South")})` },
+      { key: "East", label: `East Coast (${countFor("East")})` },
+    ];
+  }, [placements]);
 
   return (
     <section id="map" className="relative w-full max-w-[1520px] mx-auto px-3 sm:px-6 py-16 sm:py-24 scroll-mt-20 sm:scroll-mt-24">
@@ -166,7 +170,7 @@ export function PlacementMap() {
             <div className="flex items-center gap-2.5 text-xs font-mono text-slate-600 dark:text-slate-300">
               <span className="hidden sm:inline-flex items-center gap-2">
                 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 dark:bg-emerald-400" />
-                <span>Отображено на карте: <strong>{filteredPlacements.length}</strong> из 24</span>
+                <span>Отображено на карте: <strong>{filteredPlacements.length}</strong> из {placements.length}</span>
               </span>
               <span className="text-slate-400 dark:text-white/20 hidden sm:inline">•</span>
               {isAutoRotating ? (
