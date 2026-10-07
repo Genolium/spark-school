@@ -106,7 +106,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
               </div>
               <div className="flex items-start gap-2.5 font-semibold text-slate-900 dark:text-white">
                 <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                <span>Библиотека шаблонов Google XYZ резюме и эссе на 500 слов</span>
+                <span>Подробный курс по каждому элементу заявки</span>
               </div>
               <div className="flex items-start gap-2.5">
                 <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />

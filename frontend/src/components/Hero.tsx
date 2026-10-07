@@ -5,7 +5,6 @@ import { BlurImage } from "./BlurImage";
 import { motion } from "framer-motion";
 import { ArrowUpRight, CheckCircle2, Video, FileText } from "lucide-react";
 import { api, PlacesStats } from "@/lib/api";
-import { DeadlineCountdown } from "./DeadlineCountdown";
 
 interface HeroProps {
   onOpenPayment?: () => void;
@@ -79,9 +78,6 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroPro
             <span className="text-white/40">•</span>
             <span className="text-slate-200">Поток SPARK 2027</span>
           </motion.div>
-
-          {/* Countdown in Top Bar */}
-          <DeadlineCountdown variant="hero" />
         </div>
 
         {/* ========================================================================= */}
