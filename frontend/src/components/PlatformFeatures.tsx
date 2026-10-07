@@ -137,9 +137,9 @@ export function PlatformFeatures() {
           </div>
 
           <div>
-            <h4 className="font-editorial text-xl font-bold text-slate-900 dark:text-white mb-2">
+            <h3 className="font-editorial text-xl font-bold text-slate-900 dark:text-white mb-2">
               Разбор реального интервью
-            </h4>
+            </h3>
             <p className="font-doc text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
               Видеозапись собеседования с американскими интервьюерами с покадровым таймлайн-разбором стресс-вопросов и удачных формулировок.
             </p>
@@ -169,9 +169,9 @@ export function PlatformFeatures() {
           </div>
 
           <div>
-            <h4 className="font-editorial text-xl font-bold text-slate-900 dark:text-white mb-2">
+            <h3 className="font-editorial text-xl font-bold text-slate-900 dark:text-white mb-2">
               Гайд по Duolingo на 130+
-            </h4>
+            </h3>
             <p className="font-doc text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
               Алгоритмы сдачи языкового экзамена от профессионального приглашённого преподавателя английского.
             </p>
@@ -201,9 +201,9 @@ export function PlatformFeatures() {
           </div>
 
           <div>
-            <h4 className="font-editorial text-xl font-bold text-slate-900 dark:text-white mb-2">
+            <h3 className="font-editorial text-xl font-bold text-slate-900 dark:text-white mb-2">
               Грантовый трек INSPIRE
-            </h4>
+            </h3>
             <p className="font-doc text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
               Бонусный трек для тех, кто хочет удвоить шансы и податься сразу на две программы академического обмена США (доступен за доп. плату).
             </p>

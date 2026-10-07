@@ -36,12 +36,11 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroPro
           {/* Desktop & Tablet: Campus Architectural Photograph */}
           <div className="hidden sm:block absolute inset-0">
             <BlurImage
-              src="/spatial-campus-hero.jpg"
+              src="/spatial-campus-hero.webp"
               alt="Кампус University of Wyoming и Скалистые горы — место академической стажировки так называемого Иля"
               fill
               priority
-              quality={100}
-              unoptimized
+              quality={85}
               className="object-cover object-center"
               sizes="100vw"
             />
@@ -50,14 +49,13 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroPro
           {/* Mobile: Golden Gate Bridge Vertical Photo */}
           <div className="block sm:hidden absolute inset-0">
             <BlurImage
-              src="/spatial-campus-hero-mobile.jpg"
+              src="/spatial-campus-hero-mobile.webp"
               alt="Golden Gate Bridge, California — академическая стажировка и путешествия в США"
               fill
               priority
-              quality={100}
-              unoptimized
+              quality={85}
               className="object-cover object-center"
-              sizes="100vw"
+              sizes="(max-width: 640px) 100vw, 640px"
             />
           </div>
 

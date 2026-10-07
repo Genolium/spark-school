@@ -22,5 +22,6 @@ const DEFAULT_BLUR =
 export function getBlurDataURL(src: string | undefined): string {
   if (!src) return DEFAULT_BLUR;
   const cleanSrc = src.split('?')[0];
-  return blurDataMap[cleanSrc] || DEFAULT_BLUR;
+  const jpgSrc = cleanSrc.replace(/\.webp$/, '.jpg');
+  return blurDataMap[cleanSrc] || blurDataMap[jpgSrc] || DEFAULT_BLUR;
 }

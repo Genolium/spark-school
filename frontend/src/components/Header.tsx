@@ -58,6 +58,8 @@ export function Header({ onOpenPayment }: HeaderProps) {
             <img
               src="/logos/logo.svg"
               alt="так называемый SPARK"
+              width={32}
+              height={32}
               decoding="async"
               className="h-7 w-7 sm:h-8 sm:w-8 object-contain md:hidden block transition-transform hover:scale-105 active:scale-95"
             />
@@ -65,12 +67,16 @@ export function Header({ onOpenPayment }: HeaderProps) {
             <img
               src="/logos/logo-text-light-row.png"
               alt="так называемый SPARK"
+              width={178}
+              height={28}
               decoding="async"
               className="h-7 w-auto object-contain dark:hidden hidden md:block transition-opacity hover:opacity-90"
             />
             <img
               src="/logos/logo-text-dark-row.png"
               alt="так называемый SPARK"
+              width={178}
+              height={28}
               decoding="async"
               className="h-7 w-auto object-contain hidden dark:md:block transition-opacity hover:opacity-90"
             />

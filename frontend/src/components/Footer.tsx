@@ -31,6 +31,8 @@ export function Footer() {
             <img
               src="/logos/logo-text-light-row.png"
               alt="так называемый SPARK"
+              width={178}
+              height={32}
               loading="lazy"
               decoding="async"
               className="h-7 sm:h-8 w-auto object-contain dark:hidden block transition-opacity hover:opacity-90"
@@ -38,6 +40,8 @@ export function Footer() {
             <img
               src="/logos/logo-text-dark-row.png"
               alt="так называемый SPARK"
+              width={178}
+              height={32}
               loading="lazy"
               decoding="async"
               className="h-7 sm:h-8 w-auto object-contain hidden dark:block transition-opacity hover:opacity-90"

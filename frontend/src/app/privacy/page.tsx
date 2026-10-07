@@ -49,24 +49,24 @@ export default function PrivacyPage() {
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
           <div className="bento-card-dark p-5 rounded-2xl border border-emerald-500/15 dark:border-white/10 font-doc">
             <ShieldCheck className="w-5 h-5 text-emerald-600 dark:text-emerald-400 mb-2" />
-            <h4 className="font-editorial text-sm font-bold text-slate-900 dark:text-white mb-1">Никакого спама</h4>
-            <p className="text-xs text-slate-600 dark:text-slate-400">
+            <p className="font-editorial text-sm font-bold text-slate-900 dark:text-white mb-1">Никакого спама</p>
+            <p className="text-xs text-slate-600 dark:text-slate-300">
               Ваш Telegram и email используются исключительно для предоставления доступа к закрытому Telegram-каналу и фискального чека.
             </p>
           </div>
 
           <div className="bento-card-dark p-5 rounded-2xl border border-emerald-500/15 dark:border-white/10 font-doc">
             <Lock className="w-5 h-5 text-sky-600 dark:text-sky-400 mb-2" />
-            <h4 className="font-editorial text-sm font-bold text-slate-900 dark:text-white mb-1">Конфиденциальность эссе</h4>
-            <p className="text-xs text-slate-600 dark:text-slate-400">
+            <p className="font-editorial text-sm font-bold text-slate-900 dark:text-white mb-1">Конфиденциальность эссе</p>
+            <p className="text-xs text-slate-600 dark:text-slate-300">
               Черновики ваших мотивационных эссе и резюме никогда не публикуются и не передаются третьим лицам.
             </p>
           </div>
 
           <div className="bento-card-dark p-5 rounded-2xl border border-emerald-500/15 dark:border-white/10 font-doc">
             <Server className="w-5 h-5 text-amber-600 dark:text-amber-400 mb-2" />
-            <h4 className="font-editorial text-sm font-bold text-slate-900 dark:text-white mb-1">256-bit SSL</h4>
-            <p className="text-xs text-slate-600 dark:text-slate-400">
+            <p className="font-editorial text-sm font-bold text-slate-900 dark:text-white mb-1">256-bit SSL</p>
+            <p className="text-xs text-slate-600 dark:text-slate-300">
               Все данные передаются по защищённому протоколу HTTPS с валидацией авторизации через Telegram Login Widget.
             </p>
           </div>

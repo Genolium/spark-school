@@ -16,7 +16,7 @@ export function KibiRoadmap() {
       subtitle: "Фундамент и позиционирование",
       tag: "Stage 01 • Анализ",
       tagClass: "bento-pill text-slate-300",
-      image: "/stage-01.jpg",
+      image: "/stage-01.webp",
       shortDesc: "Распаковка твоего бэкграунда, поиск уникального угла подачи и миссии, которая отзовётся у американской комиссии.",
       deliverables: [
         "Аудит твоих сильных сторон и увлечений",
@@ -32,7 +32,7 @@ export function KibiRoadmap() {
       subtitle: "Резюме и эссе",
       tag: "Stage 02 • Копирайтинг",
       tagClass: "bento-pill text-slate-300",
-      image: "/stage-02.jpg",
+      image: "/stage-02.webp",
       shortDesc: "Создание документов американского стандарта. Никаких шаблонных фраз и сухого перечисления оценок.",
       deliverables: [
         "Резюме по международным стандартам",
@@ -48,7 +48,7 @@ export function KibiRoadmap() {
       subtitle: "Режиссура и хук 5 секунд",
       tag: "Stage 03 • Продакшн",
       tagClass: "bento-pill text-slate-300",
-      image: "/stage-03.jpg",
+      image: "/stage-03.webp",
       shortDesc: "Съемка и монтаж видеовизитки на обычный смартфон. Удержание внимания комиссии с первых 5 секунд.",
       deliverables: [
         "Сценарная сетка и покадровый план ролика",
@@ -64,7 +64,7 @@ export function KibiRoadmap() {
       subtitle: "Боевая Zoom-симуляция 45 минут",
       tag: "Stage 04 • Практика",
       tagClass: "bento-pill text-slate-300",
-      image: "/stage-04.jpg",
+      image: "/stage-04.webp",
       shortDesc: "Полноценная репетиция собеседования на программу в формате 1-на-1 с разбором.",
       deliverables: [
         "Подборка вопросов прошлых лет, разбитых на группы",
@@ -80,7 +80,7 @@ export function KibiRoadmap() {
       subtitle: "DS-160, Посольство, Вылет в США",
       tag: "Stage 05 • Финал",
       tagClass: "bento-pill text-slate-300",
-      image: "/stage-05.jpg",
+      image: "/stage-05.webp",
       shortDesc: "Пошаговый план прохождения американского консульства, получение визы J-1 и логистика перелёта на кампус.",
       deliverables: [
         "Безошибочное заполнение визовой анкеты DS-160",

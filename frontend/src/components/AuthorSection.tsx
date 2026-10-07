@@ -31,12 +31,11 @@ export function AuthorSection() {
           <div className="lg:col-span-5 relative">
             <div className="relative w-full aspect-[4/5] rounded-2xl overflow-hidden border border-emerald-500/20 dark:border-white/20 shadow-2xl">
               <BlurImage
-                src="/ilya-author.jpg"
+                src="/ilya-author.webp"
                 alt="так называемый Иль — Финалист программы SPARK 2026, грант $20,000"
                 fill
                 loading="lazy"
-                quality={100}
-                unoptimized
+                quality={85}
                 className="object-cover object-top"
                 sizes="(max-width: 1024px) 100vw, 40vw"
               />

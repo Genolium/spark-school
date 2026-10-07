@@ -30,10 +30,24 @@ http://so-called-spark.ru, http://www.so-called-spark.ru, http://sparkprep.ru, :
 
     encode zstd gzip
 
+    # Static asset caching (Next.js immutable chunks & fonts)
+    @static {
+        path /_next/static/* /fonts/*
+    }
+    header @static Cache-Control "public, max-age=31536000, immutable"
+
+    # Static media assets caching
+    @media {
+        path *.jpg *.jpeg *.png *.webp *.avif *.svg *.ico *.woff2 *.ttf
+    }
+    header @media Cache-Control "public, max-age=86400, stale-while-revalidate=604800"
+
     # Modern Security Headers
     header {
         X-Content-Type-Options nosniff
         X-Frame-Options SAMEORIGIN
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "camera=(), microphone=(), geolocation=()"
         -Server
     }
 }

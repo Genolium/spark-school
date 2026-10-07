@@ -52,9 +52,9 @@ export default function OfferPage() {
               <Shield className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-editorial text-base font-bold text-slate-900 dark:text-white mb-1">
+              <h2 className="font-editorial text-base font-bold text-slate-900 dark:text-white mb-1">
                 Краткая суть для участника:
-              </h3>
+              </h2>
               <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed font-doc">
                 Данный договор регулирует покупку доступа к программе проекта «так называемый SPARK» 2027 согласно выбранному тарифу (Акселератор: 6 900 ₽, VIP: 14 900 ₽). Оплата является полным и безоговорочным акцептом настоящей оферты. Услуги включают обучающие материалы, шаблоны документов, закрытый Telegram-чат и индивидуальные менторские сессии в зависимости от выбранного тарифа.
               </p>

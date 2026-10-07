@@ -55,16 +55,16 @@ export function SocialProofStrip({ onOpenChances }: SocialProofStripProps) {
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 dark:text-emerald-400" />
                 100% покрытие расходов
               </span>
-              <span className="text-xs font-mono text-slate-500 dark:text-slate-400">#Full_Grant</span>
+              <span className="text-xs font-mono text-slate-600 dark:text-slate-300">#Full_Grant</span>
             </div>
 
             <div className="text-6xl sm:text-7xl lg:text-[88px] font-black font-mono tracking-tighter leading-[0.95] text-emerald-600 dark:text-emerald-400 drop-shadow-[0_8px_30px_rgba(16,185,129,0.25)] dark:drop-shadow-[0_12px_45px_rgba(52,211,153,0.4)] flex items-baseline gap-2 my-1">
               <span>$20,000</span>
             </div>
 
-            <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white mt-2 tracking-tight">
+            <h2 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white mt-2 tracking-tight">
               Грант Госдепа США
-            </h3>
+            </h2>
 
             <p className="text-sm text-slate-600 dark:text-slate-300 mt-2.5 leading-relaxed font-normal">
               Обучение, жильё, перелёт и стипендия. Финалист программы практически ничего не платит — основные расходы полностью покрываются грантом (личные путешествия — по большей части за свои деньги).

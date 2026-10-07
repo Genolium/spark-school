@@ -90,7 +90,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
             </p>
 
             <div className="mb-6 pb-6 border-b border-emerald-500/20 dark:border-white/10">
-              <div className="text-slate-400 line-through text-sm font-mono">
+              <div className="text-slate-500 dark:text-slate-400 line-through text-sm font-mono">
                 9 900 ₽
               </div>
               <div className="text-3xl sm:text-4xl font-black font-mono text-emerald-600 dark:text-emerald-400 tracking-tight">
@@ -163,7 +163,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
             </p>
 
             <div className="mb-6 pb-6 border-b border-emerald-500/15 dark:border-white/10">
-              <div className="text-slate-400 line-through text-sm font-mono">
+              <div className="text-slate-500 dark:text-slate-400 line-through text-sm font-mono">
                 19 900 ₽
               </div>
               <div className="text-3xl sm:text-4xl font-black font-mono text-amber-600 dark:text-amber-400 tracking-tight">

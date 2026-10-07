@@ -218,7 +218,7 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                 <div className="text-right">
                   {promoResult?.valid ? (
                     <div>
-                      <span className="line-through text-slate-400 text-xs font-mono mr-1.5">
+                      <span className="line-through text-slate-500 dark:text-slate-400 text-xs font-mono mr-1.5">
                         {activeTierConfig.price.toLocaleString("ru-RU")} ₽
                       </span>
                       <span className="text-emerald-600 dark:text-emerald-400 font-black font-mono text-lg">

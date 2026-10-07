@@ -12,30 +12,9 @@ const golosHeading = Golos_Text({
   display: "swap",
 });
 
-// 2. PT Root UI (ParaType) — главный интерфейсный гротеск (униширинный стандарт из статьи)
+// 2. PT Root UI (ParaType) — главный интерфейсный гротеск (переменный шрифт Variable Font)
 const ptRootUI = localFont({
-  src: [
-    {
-      path: "../../public/fonts/pt-root-ui-vf/PT-Root-UI_Light.ttf",
-      weight: "300",
-      style: "normal",
-    },
-    {
-      path: "../../public/fonts/pt-root-ui-vf/PT-Root-UI_Regular.ttf",
-      weight: "400",
-      style: "normal",
-    },
-    {
-      path: "../../public/fonts/pt-root-ui-vf/PT-Root-UI_Medium.ttf",
-      weight: "500",
-      style: "normal",
-    },
-    {
-      path: "../../public/fonts/pt-root-ui-vf/PT-Root-UI_Bold.ttf",
-      weight: "700",
-      style: "normal",
-    },
-  ],
+  src: "../../public/fonts/pt-root-ui-vf/PT-Root-UI_VF.ttf",
   variable: "--font-sans",
   display: "swap",
 });
@@ -49,19 +28,9 @@ const ptAstraSans = localFont({
       style: "normal",
     },
     {
-      path: "../../public/fonts/pt-astra-sans/PT-Astra-Sans_Italic.ttf",
-      weight: "400",
-      style: "italic",
-    },
-    {
       path: "../../public/fonts/pt-astra-sans/PT-Astra-Sans_Bold.ttf",
       weight: "700",
       style: "normal",
-    },
-    {
-      path: "../../public/fonts/pt-astra-sans/PT-Astra-Sans_Bold-Italic.ttf",
-      weight: "700",
-      style: "italic",
     },
   ],
   variable: "--font-doc",
@@ -361,6 +330,8 @@ export default function RootLayout({
               src="https://mc.yandex.ru/watch/113185946"
               style={{ position: "absolute", left: "-9999px" }}
               alt=""
+              width="1"
+              height="1"
             />
           </div>
         </noscript>
