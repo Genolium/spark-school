@@ -159,13 +159,13 @@ export function DeadlineCountdown({
         
         {/* Left: Info Title */}
         <div className="space-y-1.5 max-w-xl">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-mono font-bold uppercase tracking-wider bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border border-emerald-500/30">
             <Flame className="w-3.5 h-3.5 text-amber-500 animate-pulse" />
             <span>Официальный дедлайн подачи</span>
           </div>
 
           <h3 className="font-heading text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-            До закрытия приёма заявок: <span className="text-emerald-600 dark:text-emerald-400 font-extrabold">20 ноября в 23:59</span>
+            До закрытия приёма заявок: <span className="text-emerald-700 dark:text-emerald-400 font-extrabold">20 ноября в 23:59</span>
           </h3>
 
           <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-doc leading-relaxed">
@@ -182,7 +182,7 @@ export function DeadlineCountdown({
               <div className="text-2xl sm:text-3xl font-black font-mono text-slate-900 dark:text-white tracking-tight">
                 {pad(timeLeft.days)}
               </div>
-              <div className="text-[10px] sm:text-xs font-mono uppercase text-slate-500 dark:text-slate-400 font-semibold mt-0.5">
+              <div className="text-[10px] sm:text-xs font-mono uppercase text-slate-700 dark:text-slate-300 font-semibold mt-0.5">
                 дней
               </div>
             </div>
@@ -192,7 +192,7 @@ export function DeadlineCountdown({
               <div className="text-2xl sm:text-3xl font-black font-mono text-slate-900 dark:text-white tracking-tight">
                 {pad(timeLeft.hours)}
               </div>
-              <div className="text-[10px] sm:text-xs font-mono uppercase text-slate-500 dark:text-slate-400 font-semibold mt-0.5">
+              <div className="text-[10px] sm:text-xs font-mono uppercase text-slate-700 dark:text-slate-300 font-semibold mt-0.5">
                 часов
               </div>
             </div>
@@ -202,7 +202,7 @@ export function DeadlineCountdown({
               <div className="text-2xl sm:text-3xl font-black font-mono text-slate-900 dark:text-white tracking-tight">
                 {pad(timeLeft.minutes)}
               </div>
-              <div className="text-[10px] sm:text-xs font-mono uppercase text-slate-500 dark:text-slate-400 font-semibold mt-0.5">
+              <div className="text-[10px] sm:text-xs font-mono uppercase text-slate-700 dark:text-slate-300 font-semibold mt-0.5">
                 минут
               </div>
             </div>

@@ -131,7 +131,7 @@ export function PlacementMap() {
               }}
               className={`px-4 py-2 rounded-full text-xs font-mono whitespace-nowrap transition-all ${
                 activeRegion === tab.key
-                  ? "bg-emerald-600 text-white font-bold shadow-md dark:bg-white dark:text-[#121316]"
+                  ? "bg-emerald-700 text-white font-bold shadow-md dark:bg-white dark:text-[#121316]"
                   : "bento-pill text-slate-700 dark:text-slate-300 hover:text-emerald-800 dark:hover:text-white"
               }`}
             >
@@ -190,10 +190,10 @@ export function PlacementMap() {
                     setActiveRegion("All");
                     setIsAutoRotating(true);
                   }}
-                  className="inline-flex items-center gap-1.5 text-slate-500 hover:text-emerald-700 dark:text-slate-400 dark:hover:text-emerald-300 font-medium transition-colors cursor-pointer bento-pill sm:bg-transparent sm:border-0 px-2.5 py-1 sm:p-0 rounded-full"
+                  className="inline-flex items-center gap-1.5 text-slate-700 hover:text-emerald-800 dark:text-slate-300 dark:hover:text-emerald-300 font-medium transition-colors cursor-pointer bento-pill sm:bg-transparent sm:border-0 px-2.5 py-1 sm:p-0 rounded-full"
                   title="Нажмите, чтобы включить автообзор"
                 >
-                  <span className="w-2 h-2 rounded-full bg-slate-400" />
+                  <span className="w-2 h-2 rounded-full bg-slate-500" />
                   <span>Включить автообзор</span>
                 </button>
               )}
@@ -403,7 +403,7 @@ export function PlacementMap() {
 
           {/* Quick Clickable Horizontal Strip of Campuses for Mobile/Touch */}
           <div className="mt-4 pt-3 border-t border-emerald-500/15 dark:border-white/10 flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-            <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400 shrink-0">Быстрый выбор:</span>
+            <span className="text-[11px] font-mono text-slate-700 dark:text-slate-300 shrink-0 font-medium">Быстрый выбор:</span>
             {filteredPlacements.map((cp) => (
               <button
                 key={cp.id}
@@ -413,7 +413,7 @@ export function PlacementMap() {
                 }}
                 className={`px-3.5 py-1.5 rounded-full text-[11px] font-mono whitespace-nowrap transition-all ${
                   selectedPlacement.id === cp.id
-                    ? "bg-emerald-600 text-white font-bold shadow-sm dark:bg-white dark:text-[#121316]"
+                    ? "bg-emerald-700 text-white font-bold shadow-sm dark:bg-white dark:text-[#121316]"
                     : "bg-emerald-500/[0.06] text-slate-700 hover:bg-emerald-500/[0.12] dark:bg-white/5 dark:text-slate-300 dark:hover:bg-white/10"
                 }`}
               >
@@ -441,7 +441,7 @@ export function PlacementMap() {
                   {selectedPlacement.type}
                 </span>
 
-                <div className="text-xs font-mono text-slate-500 dark:text-slate-400">
+                <div className="text-xs font-mono text-slate-700 dark:text-slate-300">
                   {selectedPlacement.lat.toFixed(4)}°, {selectedPlacement.lng.toFixed(4)}°
                 </div>
               </div>
@@ -452,18 +452,18 @@ export function PlacementMap() {
               </h3>
 
               {/* Location Badge */}
-              <div className="flex items-center gap-2 text-sm font-mono text-slate-600 dark:text-slate-300 mb-6">
+              <div className="flex items-center gap-2 text-sm font-mono text-slate-700 dark:text-slate-300 mb-6">
                 <MapPin className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
                 <span>
                   {selectedPlacement.city}, {selectedPlacement.state}
                 </span>
                 <span className="text-slate-400 dark:text-white/30">•</span>
-                <span className="text-slate-500 dark:text-slate-400">{selectedPlacement.regionLabel}</span>
+                <span className="text-slate-700 dark:text-slate-300">{selectedPlacement.regionLabel}</span>
               </div>
 
               {/* Campus Highlights */}
               <div className="mb-6 font-doc">
-                <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500 dark:text-slate-400 font-bold mb-2">
+                <div className="text-[11px] font-mono uppercase tracking-wider text-slate-700 dark:text-slate-300 font-bold mb-2">
                   Особенности кампусной среды:
                 </div>
                 <p className="text-xs sm:text-sm text-slate-800 dark:text-slate-200 leading-relaxed">
@@ -489,11 +489,11 @@ export function PlacementMap() {
               {/* Geo Specs Mini Bar */}
               <div className="pt-4 border-t border-emerald-500/15 dark:border-white/10 grid grid-cols-2 gap-3 text-xs font-mono">
                 <div>
-                  <span className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase">Регион США</span>
+                  <span className="text-slate-700 dark:text-slate-300 block text-[10px] uppercase font-medium">Регион США</span>
                   <span className="text-slate-900 dark:text-white font-semibold">{selectedPlacement.regionLabel}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase">Тип финансирования</span>
+                  <span className="text-slate-700 dark:text-slate-300 block text-[10px] uppercase font-medium">Тип финансирования</span>
                   <span className="text-emerald-700 dark:text-emerald-400 font-semibold">Full $20k Grant</span>
                 </div>
               </div>

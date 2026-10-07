@@ -39,7 +39,7 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroPro
               alt="Кампус University of Wyoming и Скалистые горы — место академической стажировки так называемого Иля"
               fill
               priority
-              quality={85}
+              quality={75}
               className="object-cover object-center"
               sizes="100vw"
             />
@@ -52,9 +52,9 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroPro
               alt="Golden Gate Bridge, California — академическая стажировка и путешествия в США"
               fill
               priority
-              quality={85}
+              quality={75}
               className="object-cover object-center"
-              sizes="(max-width: 640px) 100vw, 640px"
+              sizes="100vw"
             />
           </div>
 

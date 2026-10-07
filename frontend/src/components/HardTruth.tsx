@@ -94,9 +94,9 @@ export function HardTruth() {
                   alt={item.deliverable}
                   fill
                   loading="lazy"
-                  quality={90}
+                  quality={75}
                   className="object-cover object-center group-hover:scale-[1.02] transition-transform duration-500"
-                  sizes="(max-width: 768px) 100vw, 600px"
+                  sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 360px"
                 />
               </div>
 
@@ -127,7 +127,7 @@ export function HardTruth() {
             </div>
 
             {/* Bottom Footer Indicator */}
-            <div className="pt-3.5 mt-5 border-t border-emerald-500/15 dark:border-white/10 flex items-center justify-between text-xs font-mono text-slate-500 dark:text-slate-400">
+            <div className="pt-3.5 mt-5 border-t border-emerald-500/15 dark:border-white/10 flex items-center justify-between text-xs font-mono text-slate-700 dark:text-slate-300">
               <span className="text-slate-700 dark:text-slate-300">Раздел 0{idx + 1} программы</span>
               <span className="text-slate-700 dark:text-slate-300 flex items-center gap-1">
                 <span>Шаблоны + личный аудит</span>

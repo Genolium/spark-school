@@ -229,25 +229,25 @@
   /* High-Contrast Buttons */
   .btn-primary-mono {
     border-radius: 9999px;
-    background: #059669;
+    background: #047857;
     color: #FFFFFF;
     font-weight: 700;
-    box-shadow: 0 8px 24px rgba(5, 150, 105, 0.28);
+    box-shadow: 0 8px 24px rgba(4, 120, 87, 0.28);
     transition: background-color 0.2s ease, opacity 0.2s ease, transform 0.2s ease;
   }
 
   .btn-primary-mono:hover {
-    background: #047857;
+    background: #065F46;
   }
 
   .dark .btn-primary-mono {
-    background: #059669;
+    background: #047857;
     color: #FFFFFF;
-    box-shadow: 0 8px 24px rgba(5, 150, 105, 0.35);
+    box-shadow: 0 8px 24px rgba(4, 120, 87, 0.35);
   }
 
   .dark .btn-primary-mono:hover {
-    background: #10B981;
+    background: #059669;
   }
 
   .btn-secondary-frosted {

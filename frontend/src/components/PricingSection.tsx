@@ -44,7 +44,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
             Лимит потока: {places.total_capacity} мест
           </span>
           <span className="text-slate-400 dark:text-white/30">•</span>
-          <span className="text-amber-700 dark:text-amber-400 font-bold">
+          <span className="text-amber-900 dark:text-amber-300 font-bold">
             Осталось {places.spots_left} мест
           </span>
         </div>
