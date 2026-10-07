@@ -108,7 +108,7 @@ console.log('🎨 Copying Next.js frontend files (excluding node_modules & cache
 const frontendConfigs = [
   'frontend/Dockerfile',
   'frontend/package.json',
-  'frontend/pnpm-lock.yaml',
+  'frontend/package-lock.json',
   'frontend/next.config.mjs',
   'frontend/tailwind.config.ts',
   'frontend/postcss.config.js',

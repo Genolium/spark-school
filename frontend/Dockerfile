@@ -3,15 +3,12 @@ FROM node:20-alpine AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-RUN npm install -g pnpm
-
-COPY package.json pnpm-lock.yaml* ./
-RUN pnpm install --frozen-lockfile || pnpm install
+COPY package.json package-lock.json* ./
+RUN npm ci || npm install
 
 # Stage 2: Build Next.js application
 FROM node:20-alpine AS builder
 WORKDIR /app
-RUN npm install -g pnpm
 
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -24,7 +21,7 @@ ENV NEXT_PUBLIC_BOT_USERNAME=$NEXT_PUBLIC_BOT_USERNAME
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 
-RUN pnpm build
+RUN npm run build
 
 # Stage 3: Runner
 FROM node:20-alpine AS runner
