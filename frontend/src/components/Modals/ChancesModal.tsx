@@ -31,7 +31,7 @@ export function ChancesModal({ isOpen, onClose }: ChancesModalProps) {
           label: "Отличные шансы (High Potential)",
           color: "text-teal-500",
           strokeColor: "#14b8a6",
-          description: "Отличный уровень для уверенного прохождения собеседования с американской комиссией. Главный фокус — отточить структуру Google XYZ резюме.",
+          description: "Отличный уровень для уверенного прохождения собеседования с американской комиссией. Главный фокус — отточить структуру резюме американского стандарта.",
         };
       case "b1":
       default:
