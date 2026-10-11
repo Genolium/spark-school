@@ -151,6 +151,14 @@ func main() {
 			c.JSON(http.StatusOK, gin.H{"ok": true})
 		})
 
+		// Antilopay Payment Webhook endpoint (handles verification pings and callback notifications)
+		api.Any("/payments/webhook", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{
+				"status":  "ok",
+				"message": "webhook received",
+			})
+		})
+
 		// Admin Public Login (Username + Password -> JWT) with strict brute-force rate limiting (5 req/min)
 		adminLoginLimiter := security.RateLimitMiddleware(5, 1*time.Minute, "Слишком много попыток входа (максимум 5 в минуту). Пожалуйста, подождите 60 секунд.")
 		api.POST("/admin/login", adminLoginLimiter, adminHandler.Login)
