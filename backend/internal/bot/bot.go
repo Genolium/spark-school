@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf16"
@@ -27,6 +28,7 @@ type BotService struct {
 	db               *gorm.DB
 	cfg              *config.Config
 	affiliateService *services.AffiliateService
+	yooKassaService  *services.YooKassaService
 	sessions         *SessionManager
 	mediaCache       *MediaCache
 	notifyQueue      chan queuedNotification
@@ -35,10 +37,12 @@ type BotService struct {
 
 func NewBotService(cfg *config.Config, db *gorm.DB) *BotService {
 	affService := services.NewAffiliateService(db)
+	ykService := services.NewYooKassaService(cfg)
 	s := &BotService{
 		db:               db,
 		cfg:              cfg,
 		affiliateService: affService,
+		yooKassaService:  ykService,
 		sessions:         NewSessionManager(30 * time.Minute),
 		mediaCache:       NewMediaCache("media"),
 		notifyQueue:      make(chan queuedNotification, 500),
@@ -505,13 +509,17 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 
 		text = fmt.Sprintf(`%s <b>Промокод успешно активирован! Скидка %d%%</b>
 
-<b>Стоимость с учётом скидки %d%%:</b>
+<b>Стоимость со скидкой %d%%:</b>
 %s Акселератор: <b>%d ₽</b> (скидка %d ₽)
 %s VIP: <b>%d ₽</b> (скидка %d ₽)
 
-💳 <b>Быстрая онлайн-оплата в 1 клик (Tribute):</b>
-• Нажмите кнопку «Оплатить Акселератор со скидкой (Tribute)» ниже
-• Для VIP: «Оплатить VIP со скидкой (Tribute)» ниже
+💳 <b>Способы оплаты:</b>
+1️⃣ <b>Быстрая онлайн-оплата (Tribute / Telegram):</b>
+• Оплата картами и через Telegram в 1 клик по кнопкам тарифа ниже
+
+2️⃣ <b>ЮKassa (Официальный эквайринг РФ — СБП / Карты):</b>
+• Безопасная оплата с чеком ФНС (54-ФЗ)
+• Нажмите кнопку «Оплатить через ЮKassa со скидкой» ниже
 
 %s <b>Или перевод по СБП (0%%):</b>
 • Банк: <b>Т-Банк (Тинькофф)</b>
@@ -528,9 +536,13 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 %s <b>Акселератор [Хит]:</b> 6 900 ₽ (по промокоду: <b>6 555 ₽</b>)
 %s <b>VIP:</b> 14 900 ₽ (по промокоду: <b>14 155 ₽</b>) <i>[Строго 3 места]</i>
 
-💳 <b>Быстрая онлайн-оплата в 1 клик (Tribute):</b>
-• Нажмите кнопку «Оплатить Акселератор (Tribute)» ниже
-• Для VIP: нажмите кнопку «Оплатить VIP (Tribute)» ниже
+💳 <b>Способы оплаты:</b>
+1️⃣ <b>Быстрая онлайн-оплата (Tribute / Telegram):</b>
+• Оплата картами и через Telegram в 1 клик по кнопкам тарифа ниже
+
+2️⃣ <b>ЮKassa (Официальный эквайринг РФ — СБП / Карты):</b>
+• Безопасная оплата с чеком ФНС (54-ФЗ)
+• Нажмите кнопку «Оплатить через ЮKassa» ниже
 
 %s <b>Или прямой перевод по реквизитам СБП (0%%):</b>
 • Банк: <b>Т-Банк (Тинькофф)</b>
@@ -564,6 +576,129 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 			plainMsg := tu.Message(chatID, cleanText).WithReplyMarkup(keyboard)
 			_, _ = s.bot.SendMessage(plainMsg)
 		}
+	}
+}
+
+func (s *BotService) handleYooKassaPayment(chatID telego.ChatID, from *telego.User, tier string) {
+	if s.bot == nil {
+		return
+	}
+
+	session := s.getSession(chatID.ID)
+	hasPromo := session.DiscountPct > 0 || session.PromoCode != ""
+
+	tierTitle := "Акселератор"
+	basePrice := 6900.0
+	if tier == "vip" {
+		tierTitle = "VIP"
+		basePrice = 14900.0
+	}
+
+	price := basePrice
+	if hasPromo {
+		pct := session.DiscountPct
+		if pct <= 0 {
+			pct = 5
+		}
+		price = basePrice - (basePrice*float64(pct))/100.0
+	}
+
+	// If YooKassaSecretKey is configured in .env, create live checkout session via API
+	if s.cfg != nil && s.cfg.YooKassaSecretKey != "" && s.yooKassaService != nil {
+		username := ""
+		if from != nil {
+			username = from.Username
+		}
+		botUsername := s.cfg.TelegramBotUsername
+		if botUsername == "" {
+			botUsername = "spark_prep_bot"
+		}
+
+		ykReq := services.YooKassaPaymentRequest{
+			Amount: services.YooKassaAmount{
+				Value:    fmt.Sprintf("%.2f", price),
+				Currency: "RUB",
+			},
+			Capture: true,
+			Confirmation: services.YooKassaConfirmation{
+				Type:      "redirect",
+				ReturnURL: fmt.Sprintf("https://t.me/%s", botUsername),
+			},
+			Description: fmt.Sprintf("Обучение в проекте «так называемый SPARK» — Тариф %s (@%s)", tierTitle, username),
+			Metadata: map[string]string{
+				"tier":        tier,
+				"telegram_id": strconv.FormatInt(chatID.ID, 10),
+				"username":    username,
+				"promo_code":  session.PromoCode,
+			},
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+
+		resp, err := s.yooKassaService.CreatePayment(ctx, ykReq)
+		if err == nil && resp != nil && resp.Confirmation.ConfirmationURL != "" {
+			successText := fmt.Sprintf(`✅ <b>Счёт в ЮKassa успешно сформирован!</b>
+
+📦 Тариф: <b>%s</b>
+💰 Сумма к оплате: <b>%d ₽</b>
+🧾 Фискальный чек ФНС РФ: Самозанятый Васюнин Илья Олегович (ИНН 780739313219)
+🔒 Оплата через защищённый шлюз ЮKassa (СБП, Карты РФ, SberPay)
+
+<i>Нажмите кнопку ниже для безопасной оплаты. Доступ в закрытый канал потока будет выдан автоматически сразу после подтверждения!</i>`, tierTitle, int(price))
+
+			checkoutKb := tu.InlineKeyboard(
+				tu.InlineKeyboardRow(
+					tu.InlineKeyboardButton(fmt.Sprintf("💳 Оплатить в ЮKassa (%d ₽)", int(price))).WithURL(resp.Confirmation.ConfirmationURL),
+				),
+				tu.InlineKeyboardRow(
+					tu.InlineKeyboardButton("⬅️ Назад ко всем способам").WithCallbackData("action_payment"),
+				),
+			)
+
+			m := tu.Message(chatID, successText).WithParseMode(telego.ModeHTML).WithReplyMarkup(checkoutKb)
+			if _, sendErr := s.bot.SendMessage(m); sendErr != nil {
+				cleanMsg := tu.Message(chatID, StripTgEmoji(successText)).WithParseMode(telego.ModeHTML).WithReplyMarkup(checkoutKb)
+				_, _ = s.bot.SendMessage(cleanMsg)
+			}
+			return
+		}
+		log.Printf("[Bot YooKassa] API CreatePayment failed: %v", err)
+	}
+
+	// Fallback when secret key is not set yet in .env or API error
+	fallbackText := fmt.Sprintf(`🇷🇺 <b>Официальная оплата через ЮKassa: Тариф %s (%d ₽)</b>
+
+Официальный магазин ЮKassa (ShopID: <code>1491540</code>) зарегистрирован.
+Вы можете оплатить прямо сейчас без комиссии:
+
+⚡️ <b>1. Онлайн в 1 клик через Telegram (Tribute):</b>
+Карты РФ и зарубежные, СБП — моментальная выдача доступа!
+
+🏛 <b>2. Прямой перевод по СБП (0%%):</b>
+• Банк: <b>Т-Банк (Тинькофф)</b>
+• Телефон: <code>+7 981 163-36-91</code>
+• Получатель: <b>Васюнин Илья Олегович</b>
+• Сумма: <b>%d ₽</b>
+
+Либо напишите @ilyan_vas — куратор сформирует прямой счёт ЮKassa из личного кабинета!`, tierTitle, int(price), int(price))
+
+	fallbackKb := tu.InlineKeyboard(
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("⚡️ Оплатить через Tribute").WithCallbackData("action_payment"),
+		),
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("💬 Написать так называемому Илю").WithURL("https://t.me/ilyan_vas"),
+		),
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("⬅️ Назад к тарифам").WithCallbackData("action_payment"),
+		),
+	)
+
+	m := tu.Message(chatID, fallbackText).WithParseMode(telego.ModeHTML).WithReplyMarkup(fallbackKb)
+	if _, sendErr := s.bot.SendMessage(m); sendErr != nil {
+		cleanMsg := tu.Message(chatID, StripTgEmoji(fallbackText)).WithParseMode(telego.ModeHTML).WithReplyMarkup(fallbackKb)
+		_, _ = s.bot.SendMessage(cleanMsg)
 	}
 }
 
@@ -718,6 +853,32 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 	case "action_payment":
 		session.State = StateWaitingReceipt
 		s.sendPaymentDetails(chatID, &query.From, false)
+		return true
+
+	case "pay_yk_menu":
+		hasPromo := session.DiscountPct > 0 || session.PromoCode != ""
+		ykText := `🇷🇺 <b>Официальная оплата через ЮKassa (ShopID: 1491540)</b>
+
+Платёжный шлюз с официальным чеком ФНС (54-ФЗ):
+• СБП (Система быстрых платежей 0%)
+• Любые банковские карты РФ (МИР, Visa, Mastercard)
+• SberPay / T-Pay / Mir Pay
+
+<b>Выберите тариф для выставления счёта:</b>`
+		kb := YooKassaSelectTierKeyboard(hasPromo)
+		m := tu.Message(chatID, ykText).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
+		if _, err := s.bot.SendMessage(m); err != nil {
+			cleanMsg := tu.Message(chatID, StripTgEmoji(ykText)).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
+			_, _ = s.bot.SendMessage(cleanMsg)
+		}
+		return true
+
+	case "pay_yk_accelerator":
+		s.handleYooKassaPayment(chatID, &query.From, "accelerator")
+		return true
+
+	case "pay_yk_vip":
+		s.handleYooKassaPayment(chatID, &query.From, "vip")
 		return true
 
 	case "promo_enter":

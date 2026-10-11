@@ -27,6 +27,7 @@ type Config struct {
 	EnotShopID         string
 	YooKassaShopID     string
 	YooKassaSecretKey  string
+	TelegramBotUsername string
 }
 
 func Load() *Config {
@@ -40,6 +41,7 @@ func Load() *Config {
 		Port:               getEnv("PORT", "8080"),
 		DatabaseURL:        getEnv("DATABASE_URL", "postgres://spark_user:StrongPassword2026@postgres:5432/spark_db?sslmode=disable"),
 		TelegramBotToken:   getEnv("TELEGRAM_BOT_TOKEN", ""),
+		TelegramBotUsername: getEnv("NEXT_PUBLIC_BOT_USERNAME", getEnv("TELEGRAM_BOT_USERNAME", "spark_prep_bot")),
 		TelegramAPIServer:  getEnv("TELEGRAM_API_SERVER", ""),
 		TelegramInviteLink: getEnv("TELEGRAM_INVITE_LINK", ""),
 		TelegramChannelID:  tgChannelID,

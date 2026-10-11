@@ -39,10 +39,13 @@ func MainMenuKeyboard(frontendURL string) *telego.InlineKeyboardMarkup {
 func PaymentKeyboard() *telego.InlineKeyboardMarkup {
 	return tu.InlineKeyboard(
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("⚡️ Оплатить Акселератор (Tribute)").WithURL("https://web.tribute.tg/p/GIB"),
+			tu.InlineKeyboardButton("⚡️ Оплатить Акселератор (6 900 ₽)").WithURL("https://web.tribute.tg/p/GIB"),
 		),
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("👑 Оплатить VIP (Tribute)").WithURL("https://web.tribute.tg/p/GID"),
+			tu.InlineKeyboardButton("👑 Оплатить VIP (14 900 ₽)").WithURL("https://web.tribute.tg/p/GID"),
+		),
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("🇷🇺 Оплатить через ЮKassa (СБП / Карты)").WithCallbackData("pay_yk_menu"),
 		),
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton("🎟 Применить промокод -5%").WithCallbackData("promo_enter"),
@@ -60,16 +63,40 @@ func PaymentKeyboard() *telego.InlineKeyboardMarkup {
 func PromoAppliedKeyboard() *telego.InlineKeyboardMarkup {
 	return tu.InlineKeyboard(
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("⚡️ Оплатить Акселератор со скидкой (Tribute)").WithURL("https://web.tribute.tg/p/GIB"),
+			tu.InlineKeyboardButton("⚡️ Оплатить Акселератор со скидкой (6 555 ₽)").WithURL("https://web.tribute.tg/p/GIB"),
 		),
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("👑 Оплатить VIP со скидкой (Tribute)").WithURL("https://web.tribute.tg/p/GID"),
+			tu.InlineKeyboardButton("👑 Оплатить VIP со скидкой (14 155 ₽)").WithURL("https://web.tribute.tg/p/GID"),
+		),
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("🇷🇺 Оплатить через ЮKassa со скидкой").WithCallbackData("pay_yk_menu"),
 		),
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton("💬 Написать так называемому Илю в Telegram").WithURL("https://t.me/ilyan_vas"),
 		),
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("⬅️ В меню").WithCallbackData("action_menu"),
+			tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu"),
+		),
+	)
+}
+
+// YooKassaSelectTierKeyboard returns keyboard for selecting tier in YooKassa payment.
+func YooKassaSelectTierKeyboard(hasPromo bool) *telego.InlineKeyboardMarkup {
+	accText := "⚡️ Акселератор (6 900 ₽)"
+	vipText := "👑 VIP (14 900 ₽)"
+	if hasPromo {
+		accText = "⚡️ Акселератор со скидкой (6 555 ₽)"
+		vipText = "👑 VIP со скидкой (14 155 ₽)"
+	}
+	return tu.InlineKeyboard(
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton(accText).WithCallbackData("pay_yk_accelerator"),
+		),
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton(vipText).WithCallbackData("pay_yk_vip"),
+		),
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("⬅️ Назад ко всем способам").WithCallbackData("action_payment"),
 		),
 	)
 }
