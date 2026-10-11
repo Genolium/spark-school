@@ -643,4 +643,27 @@ export const api = {
       return { success: true };
     }
   },
+
+  async createYooKassaPayment(data: {
+    tier: "accelerator" | "vip";
+    telegram_username: string;
+    telegram_id?: number;
+    promo_code?: string;
+    email?: string;
+  }): Promise<{ success: boolean; confirmation_url?: string; payment_id?: string; error?: string }> {
+    try {
+      const res = await fetch(`${API_BASE}/payments/yookassa/create`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      const json = await res.json();
+      if (res.ok && json.confirmation_url) {
+        return { success: true, confirmation_url: json.confirmation_url, payment_id: json.payment_id };
+      }
+      return { success: false, error: json.error || "Не удалось создать платёж в ЮKassa" };
+    } catch (e: any) {
+      return { success: false, error: e?.message || "Ошибка подключения к платёжному шлюзу" };
+    }
+  },
 };

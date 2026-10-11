@@ -493,9 +493,9 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 %s Акселератор: <b>%d ₽</b> (скидка %d ₽)
 %s VIP: <b>%d ₽</b> (скидка %d ₽)
 
-💳 <b>Онлайн-оплата (кнопки ниже или Tribute):</b>
-• Акселератор: https://web.tribute.tg/p/GIB
-• VIP: https://web.tribute.tg/p/GID
+💳 <b>Онлайн-оплата (ЮKassa / Tribute / СБП):</b>
+• ЮKassa на сайте: https://so-called-spark.ru/#pricing (ShopID: 1491540)
+• Tribute в Telegram: https://web.tribute.tg/p/GIB (VIP: https://web.tribute.tg/p/GID)
 
 %s <b>Или перевод по СБП (0%%):</b>
 • Банк: <b>Т-Банк (Тинькофф)</b>
@@ -503,7 +503,7 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 • Получатель: <b>Васюнин Илья Олегович</b>
 • Назначение платежа: <code>SPARK ПРОМО [Тариф]</code>
 
-%s <b>После оплаты прикрепи скриншот чека прямо в этот чат</b> (при оплате через Tribute доступ выдаётся автоматически).`, sparkle, pct, pct, bullet, accPrice, accDiscount, bullet, vipPrice, vipDiscount, checkV, clipGreen)
+%s <b>После онлайн-оплаты доступ в закрытый канал выдаётся автоматически!</b> При переводе по СБП прикрепи чек в этот чат.`, sparkle, pct, pct, bullet, accPrice, accDiscount, bullet, vipPrice, vipDiscount, checkV, clipGreen)
 		keyboard = PromoAppliedKeyboard()
 	} else {
 		text = fmt.Sprintf(`%s <b>Бронирование места в проекте «так называемый SPARK»</b>
@@ -512,17 +512,17 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 %s <b>Акселератор [Хит]:</b> 6 900 ₽ (по промокоду: <b>6 555 ₽</b>)
 %s <b>VIP:</b> 14 900 ₽ (по промокоду: <b>14 155 ₽</b>) <i>[Строго 3 места]</i>
 
-💳 <b>Быстрая онлайн-оплата (Tribute / Карты РФ, СБП, Зарубежные):</b>
-• Акселератор: https://web.tribute.tg/p/GIB
-• VIP: https://web.tribute.tg/p/GID
+💳 <b>Быстрая онлайн-оплата (ЮKassa / Tribute / СБП):</b>
+• ЮKassa на сайте: https://so-called-spark.ru/#pricing (ShopID: 1491540)
+• Tribute в Telegram: https://web.tribute.tg/p/GIB (VIP: https://web.tribute.tg/p/GID)
 
-%s <b>Или перевод по реквизитам СБП (0%%):</b>
+%s <b>Или прямой перевод по реквизитам СБП (0%%):</b>
 • Банк: <b>Т-Банк (Тинькофф)</b>
 • Телефон: <code>+7 981 163-36-91</code>
 • Получатель: <b>Васюнин Илья Олегович</b>
 • Назначение: <code>SPARK [Тариф]</code>
 
-%s <b>После оплаты через Tribute доступ выдаётся сразу</b>, а при переводе по СБП просто отправь скриншот чека в этот чат!`, lightning, num1, num2, calendar, paperclip)
+%s <b>После оплаты через ЮKassa/Tribute доступ выдаётся сразу</b>, а при переводе по СБП просто отправь скриншот чека в этот чат!`, lightning, num1, num2, calendar, paperclip)
 		keyboard = PaymentKeyboard()
 	}
 

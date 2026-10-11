@@ -474,6 +474,20 @@ describe('Tier 4: Repository Hygiene & Acceptance Scan', () => {
     assert.match(keyboardsContent, /https:\/\/web\.tribute\.tg\/p\/GIB/, 'Tribute Accelerator link GIB must be in bot keyboards');
     assert.match(keyboardsContent, /https:\/\/web\.tribute\.tg\/p\/GID/, 'Tribute VIP link GID must be in bot keyboards');
   });
+
+  it('4.7 Official YooKassa Integration: ShopID 1491540, API client, and checkout handlers are configured', () => {
+    const configPath = path.join(ROOT, 'backend', 'internal', 'config', 'config.go');
+    const configContent = fs.readFileSync(configPath, 'utf8');
+    assert.match(configContent, /1491540/, 'YooKassa ShopID 1491540 must be default in config.go');
+
+    const ykHandlerPath = path.join(ROOT, 'backend', 'internal', 'handlers', 'yookassa.go');
+    assert.ok(fs.existsSync(ykHandlerPath), 'backend/internal/handlers/yookassa.go must exist');
+
+    const paymentModalPath = path.join(ROOT, 'frontend', 'src', 'components', 'Modals', 'PaymentModal.tsx');
+    const paymentModalContent = fs.readFileSync(paymentModalPath, 'utf8');
+    assert.match(paymentModalContent, /1491540/, 'PaymentModal must display YooKassa ShopID 1491540');
+    assert.match(paymentModalContent, /createYooKassaPayment/, 'PaymentModal must trigger createYooKassaPayment');
+  });
 });
 
 // ============================================================================

@@ -77,6 +77,10 @@ func main() {
 	paymentWebhookHandler := handlers.NewPaymentWebhookHandler(
 		db, cfg, affiliateService, botService.SendNotification, botService.CreateOneTimeInviteLink,
 	)
+	yooKassaService := services.NewYooKassaService(cfg)
+	yooKassaHandler := handlers.NewYooKassaHandler(
+		db, cfg, yooKassaService, affiliateService, botService.SendNotification, botService.CreateOneTimeInviteLink,
+	)
 
 	// Gin Router
 	router := gin.New()
@@ -106,11 +110,13 @@ func main() {
 	// Webhook Rate Limiter (60 req/min) to prevent DoS floods on payment gateways
 	webhookLimiter := security.RateLimitMiddleware(60, 1*time.Minute, "Превышен лимит запросов к платежному шлюзу. Пожалуйста, подождите.")
 
-	// Top-level direct webhook routes (matches reverse proxy for /api/payments/webhook & /api/payments/tribute)
+	// Top-level direct webhook routes (matches reverse proxy for /api/payments/*)
 	router.Any("/api/payments/webhook", webhookLimiter, paymentWebhookHandler.HandleAntilopayWebhook)
 	router.Any("/payments/webhook", webhookLimiter, paymentWebhookHandler.HandleAntilopayWebhook)
 	router.Any("/api/payments/tribute", webhookLimiter, paymentWebhookHandler.HandleTributeWebhook)
 	router.Any("/payments/tribute", webhookLimiter, paymentWebhookHandler.HandleTributeWebhook)
+	router.Any("/api/payments/yookassa", webhookLimiter, yooKassaHandler.HandleWebhook)
+	router.Any("/payments/yookassa", webhookLimiter, yooKassaHandler.HandleWebhook)
 
 	// API v1 Routes with general Rate Limiting (120 req/min per IP)
 	api := router.Group("/api/v1")
@@ -166,6 +172,8 @@ func main() {
 		// Payment Webhook endpoints (handles verification pings, callbacks, HMAC validation & access grant)
 		api.Any("/payments/webhook", paymentWebhookHandler.HandleAntilopayWebhook)
 		api.Any("/payments/tribute", paymentWebhookHandler.HandleTributeWebhook)
+		api.POST("/payments/yookassa/create", yooKassaHandler.CreateCheckout)
+		api.Any("/payments/yookassa", yooKassaHandler.HandleWebhook)
 
 		// Admin Public Login (Username + Password -> JWT) with strict brute-force rate limiting (5 req/min)
 		adminLoginLimiter := security.RateLimitMiddleware(5, 1*time.Minute, "Слишком много попыток входа (максимум 5 в минуту). Пожалуйста, подождите 60 секунд.")

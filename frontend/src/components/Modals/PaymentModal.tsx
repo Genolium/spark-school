@@ -92,10 +92,37 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
     return "";
   };
 
+  const [loadingYooKassa, setLoadingYooKassa] = useState(false);
+
+  const handlePayWithYooKassa = async () => {
+    if (!tgUsername.trim()) {
+      alert("Пожалуйста, укажите ваш Telegram Username для автоматической выдачи доступа");
+      return;
+    }
+    setLoadingYooKassa(true);
+    try {
+      const res = await api.createYooKassaPayment({
+        tier,
+        telegram_username: tgUsername.trim(),
+        promo_code: promoResult?.valid ? promoResult.code : undefined,
+        email: email.trim() || undefined,
+      });
+      if (res.success && res.confirmation_url) {
+        window.location.href = res.confirmation_url;
+        return;
+      }
+      setSubmitted(true);
+    } catch {
+      setSubmitted(true);
+    } finally {
+      setLoadingYooKassa(false);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!tgUsername) return;
-    setSubmitted(true);
+    handlePayWithYooKassa();
   };
 
   const activeTierConfig = TIERS[tier];
@@ -348,22 +375,37 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                 <div className="pt-2 space-y-2.5">
                   <button
                     type="submit"
-                    className="btn-primary-mono w-full py-3.5 text-base font-bold flex items-center justify-center gap-2 shadow-xl active:scale-95 cursor-pointer"
+                    disabled={loadingYooKassa}
+                    className="btn-primary-mono w-full py-4 text-base font-bold flex items-center justify-center gap-2 shadow-xl active:scale-95 cursor-pointer disabled:opacity-50"
                   >
-                    <span>Перейти к способам оплаты {finalPrice.toLocaleString("ru-RU")} ₽</span>
+                    <CreditCard className="w-5 h-5" />
+                    <span>
+                      {loadingYooKassa
+                        ? "Формирование счёта в ЮKassa..."
+                        : `Оплатить через ЮKassa (${finalPrice.toLocaleString("ru-RU")} ₽)`}
+                    </span>
                     <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
                   </button>
 
-                  <a
-                    href={tier === "vip" ? "https://web.tribute.tg/p/GID" : "https://web.tribute.tg/p/GIB"}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full py-3 px-4 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-xs font-mono font-bold text-emerald-800 dark:text-emerald-300 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
-                  >
-                    <CreditCard className="w-4 h-4" />
-                    <span>Быстрая онлайн-оплата Tribute (Карты РФ, СБП, Мир, Зарубежные)</span>
-                    <ArrowUpRight className="w-3.5 h-3.5" />
-                  </a>
+                  <div className="grid grid-cols-2 gap-2">
+                    <a
+                      href={tier === "vip" ? "https://web.tribute.tg/p/GID" : "https://web.tribute.tg/p/GIB"}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="py-2.5 px-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-xs font-mono font-bold text-emerald-800 dark:text-emerald-300 flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm text-center"
+                    >
+                      <span>Tribute (@tribute)</span>
+                      <ArrowUpRight className="w-3.5 h-3.5" />
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={() => setSubmitted(true)}
+                      className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15 border border-slate-200 dark:border-white/10 text-xs font-mono font-medium text-slate-800 dark:text-slate-200 flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm text-center"
+                    >
+                      <span>Реквизиты СБП 0%</span>
+                    </button>
+                  </div>
                 </div>
 
                 <p className="text-[11px] font-mono text-center text-slate-500 dark:text-slate-400 mt-2">
@@ -379,7 +421,7 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
 
                 <div className="flex items-center justify-center gap-2 text-[11px] font-mono text-slate-500 dark:text-slate-400 pt-1">
                   <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>Безопасный эквайринг • Фискальный чек ФНС РФ (Васюнин Илья Олегович)</span>
+                  <span>ЮKassa ShopID 1491540 • Фискальный чек ФНС РФ (Васюнин Илья Олегович)</span>
                 </div>
               </form>
             </div>
@@ -390,7 +432,7 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
               </div>
 
               <h4 className="text-2xl font-bold text-slate-900 dark:text-white mb-1">
-                Заявка принята!
+                Выбор способа оплаты
               </h4>
               <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mb-2">
                 Тариф: <b>{activeTierConfig.name}</b>
@@ -399,21 +441,33 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                 Сумма к оплате: <span className="text-emerald-600 dark:text-emerald-400 font-bold">{finalPrice.toLocaleString("ru-RU")} ₽</span>
               </p>
 
-              {/* Primary Action: Tribute Online Checkout */}
+              {/* YooKassa Official Checkout Button */}
               <div className="max-w-sm mx-auto mb-4 space-y-2">
+                <button
+                  type="button"
+                  onClick={handlePayWithYooKassa}
+                  disabled={loadingYooKassa}
+                  className="btn-primary-mono w-full py-3.5 text-sm font-bold flex items-center justify-center gap-2 shadow-xl cursor-pointer"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>
+                    {loadingYooKassa
+                      ? "Формирование счёта в ЮKassa..."
+                      : `Оплатить онлайн через ЮKassa (${finalPrice.toLocaleString("ru-RU")} ₽)`}
+                  </span>
+                  <ArrowUpRight className="w-4 h-4" />
+                </button>
+
                 <a
                   href={tier === "vip" ? "https://web.tribute.tg/p/GID" : "https://web.tribute.tg/p/GIB"}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="btn-primary-mono w-full py-3.5 text-sm font-bold flex items-center justify-center gap-2 shadow-xl cursor-pointer"
+                  className="w-full py-3 px-4 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-xs font-mono font-bold text-emerald-800 dark:text-emerald-300 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm text-center"
                 >
                   <CreditCard className="w-4 h-4" />
-                  <span>Оплатить картой / СБП через Tribute</span>
-                  <ArrowUpRight className="w-4 h-4" />
+                  <span>Или оплатить через Tribute (Зарубежные/РФ карты)</span>
+                  <ArrowUpRight className="w-3.5 h-3.5" />
                 </a>
-                <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
-                  Мгновенное зачисление и автоматическая выдача доступа
-                </p>
               </div>
 
               {/* Payment Details Card for manual SBP */}

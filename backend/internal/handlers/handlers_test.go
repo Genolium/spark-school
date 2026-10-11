@@ -640,3 +640,131 @@ func TestHandleTributeWebhook_Security_UnderpaymentFlagged(t *testing.T) {
 	}
 }
 
+func TestYooKassaHandler_Webhook_Success(t *testing.T) {
+	cfg := &config.Config{
+		YooKassaShopID:  "1491540",
+		AdminTelegramID: 888777,
+	}
+
+	var notifiedStudentMsg string
+	var notifiedAdminMsg string
+	notifyFunc := func(telegramID int64, message string) error {
+		if telegramID == 888777 {
+			notifiedAdminMsg = message
+		} else {
+			notifiedStudentMsg = message
+		}
+		return nil
+	}
+
+	inviteGen := func(ctx context.Context, channelID int64) (string, error) {
+		return "https://t.me/+yookassa_dyn_invite", nil
+	}
+
+	handler := NewYooKassaHandler(nil, cfg, nil, nil, notifyFunc, inviteGen)
+
+	r := gin.New()
+	r.POST("/api/payments/yookassa", handler.HandleWebhook)
+
+	payload := map[string]interface{}{
+		"type":  "notification",
+		"event": "payment.succeeded",
+		"object": map[string]interface{}{
+			"id":     "22d6d5eb-000f-5000-8000-18db351245c7",
+			"status": "succeeded",
+			"paid":   true,
+			"amount": map[string]interface{}{
+				"value":    "6900.00",
+				"currency": "RUB",
+			},
+			"description": "Оплата участия в проекте «так называемый SPARK» (Тариф Акселератор)",
+			"metadata": map[string]string{
+				"telegram_id": "555444",
+				"username":    "yookassa_buyer",
+				"tier":        "accelerator",
+			},
+			"payment_method": map[string]string{
+				"type": "bank_card",
+			},
+		},
+	}
+	bodyBytes, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest("POST", "/api/payments/yookassa", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	if !strings.Contains(notifiedStudentMsg, "https://t.me/+yookassa_dyn_invite") {
+		t.Errorf("expected student notification to contain invite link, got: %s", notifiedStudentMsg)
+	}
+
+	if !strings.Contains(notifiedAdminMsg, "ЮKASSA") || !strings.Contains(notifiedAdminMsg, "1491540") {
+		t.Errorf("expected admin notification to mention ЮKASSA and ShopID 1491540, got: %s", notifiedAdminMsg)
+	}
+}
+
+func TestYooKassaHandler_Webhook_Underpayment(t *testing.T) {
+	cfg := &config.Config{
+		YooKassaShopID:  "1491540",
+		AdminTelegramID: 888777,
+	}
+
+	var studentNotified bool
+	var adminAlertReceived bool
+	notifyFunc := func(telegramID int64, message string) error {
+		if telegramID == 888777 {
+			adminAlertReceived = true
+		} else {
+			studentNotified = true
+		}
+		return nil
+	}
+
+	handler := NewYooKassaHandler(nil, cfg, nil, nil, notifyFunc)
+
+	r := gin.New()
+	r.POST("/api/payments/yookassa", handler.HandleWebhook)
+
+	// Underpayment of 10 RUB
+	payload := map[string]interface{}{
+		"type":  "notification",
+		"event": "payment.succeeded",
+		"object": map[string]interface{}{
+			"id":     "underpaid_yk_1",
+			"status": "succeeded",
+			"paid":   true,
+			"amount": map[string]interface{}{
+				"value":    "10.00",
+				"currency": "RUB",
+			},
+			"metadata": map[string]string{
+				"telegram_id": "555444",
+				"tier":        "accelerator",
+			},
+		},
+	}
+	bodyBytes, _ := json.Marshal(payload)
+
+	req := httptest.NewRequest("POST", "/api/payments/yookassa", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK acknowledgment, got %d", w.Code)
+	}
+
+	if studentNotified {
+		t.Error("CRITICAL: Student received access for underpaid YooKassa transaction!")
+	}
+
+	if !adminAlertReceived {
+		t.Error("Expected admin alert for underpaid YooKassa transaction")
+	}
+}
+
