@@ -21,11 +21,30 @@ export default function HomePage() {
   const [isChancesOpen, setIsChancesOpen] = useState(false);
   const [selectedTier, setSelectedTier] = useState<PricingTier>("accelerator");
 
-  const handleOpenPayment = (tier?: PricingTier) => {
-    if (tier) {
-      setSelectedTier(tier);
+  const handleOpenPayment = (tier: PricingTier = "accelerator") => {
+    let refCode = "";
+    if (typeof window !== "undefined") {
+      try {
+        const urlParam = new URLSearchParams(window.location.search).get("ref");
+        if (urlParam) {
+          refCode = urlParam.trim();
+        } else {
+          const stored = localStorage.getItem("spark_ref");
+          if (stored) refCode = stored.trim();
+        }
+      } catch {
+        // Safe fallback
+      }
     }
-    setIsPaymentOpen(true);
+    const cleanRef = refCode.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 16);
+    let startParam = `pay_${tier}`;
+    if (cleanRef) {
+      startParam = `pay_${tier}_ref_${cleanRef}`;
+    }
+    const botUrl = `https://t.me/spark_prep_bot?start=${startParam}`;
+    if (typeof window !== "undefined") {
+      window.location.href = botUrl;
+    }
   };
 
   useEffect(() => {

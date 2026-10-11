@@ -123,15 +123,14 @@ export function Header({ onOpenPayment }: HeaderProps) {
             )}
           </button>
 
-          <a
-            href="https://t.me/ilyan_vas"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn-primary-mono px-3.5 sm:px-5 py-2 text-xs sm:text-[13px] flex items-center gap-1.5 active:scale-95 shadow-lg shrink-0"
+          <button
+            type="button"
+            onClick={onOpenPayment}
+            className="btn-primary-mono px-3.5 sm:px-5 py-2 text-xs sm:text-[13px] flex items-center gap-1.5 active:scale-95 shadow-lg shrink-0 cursor-pointer"
           >
             <span>Занять место</span>
             <ArrowUpRight className="w-3.5 h-3.5 stroke-[2.5]" />
-          </a>
+          </button>
 
           {/* Mobile Menu Trigger Button */}
           <button
