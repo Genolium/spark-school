@@ -459,6 +459,21 @@ describe('Tier 4: Repository Hygiene & Acceptance Scan', () => {
     }
   });
 
+  it('4.6 Verification & Payments: Enot meta tag and Tribute checkout links are present', () => {
+    const layoutPath = path.join(ROOT, 'frontend', 'src', 'app', 'layout.tsx');
+    const layoutContent = fs.readFileSync(layoutPath, 'utf8');
+    assert.match(layoutContent, /4f507993/, 'Enot meta tag 4f507993 must be in layout.tsx');
+
+    const paymentModalPath = path.join(ROOT, 'frontend', 'src', 'components', 'Modals', 'PaymentModal.tsx');
+    const paymentModalContent = fs.readFileSync(paymentModalPath, 'utf8');
+    assert.match(paymentModalContent, /https:\/\/web\.tribute\.tg\/p\/GIB/, 'Tribute Accelerator link GIB must be in PaymentModal');
+    assert.match(paymentModalContent, /https:\/\/web\.tribute\.tg\/p\/GID/, 'Tribute VIP link GID must be in PaymentModal');
+
+    const keyboardsPath = path.join(ROOT, 'backend', 'internal', 'bot', 'keyboards.go');
+    const keyboardsContent = fs.readFileSync(keyboardsPath, 'utf8');
+    assert.match(keyboardsContent, /https:\/\/web\.tribute\.tg\/p\/GIB/, 'Tribute Accelerator link GIB must be in bot keyboards');
+    assert.match(keyboardsContent, /https:\/\/web\.tribute\.tg\/p\/GID/, 'Tribute VIP link GID must be in bot keyboards');
+  });
 });
 
 // ============================================================================

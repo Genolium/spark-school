@@ -22,6 +22,9 @@ type Config struct {
 	FrontendURL        string
 	AntilopayPublicKey string
 	AntilopaySecretID  string
+	TributeAPIKey      string
+	EnotSecretKey      string
+	EnotShopID         string
 }
 
 func Load() *Config {
@@ -46,6 +49,9 @@ func Load() *Config {
 		FrontendURL:        getEnv("FRONTEND_URL", "http://localhost:3000"),
 		AntilopayPublicKey: getEnv("ANTILOPAY_PUBLIC_KEY", ""),
 		AntilopaySecretID:  getEnv("ANTILOPAY_SECRET_ID", ""),
+		TributeAPIKey:      getEnv("TRIBUTE_API_KEY", ""),
+		EnotSecretKey:      getEnv("ENOT_SECRET_KEY", ""),
+		EnotShopID:         getEnv("ENOT_SHOP_ID", ""),
 	}
 }
 

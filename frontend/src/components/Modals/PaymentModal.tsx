@@ -345,14 +345,25 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                   )}
                 </div>
 
-                <div className="pt-2">
+                <div className="pt-2 space-y-2.5">
                   <button
                     type="submit"
                     className="btn-primary-mono w-full py-3.5 text-base font-bold flex items-center justify-center gap-2 shadow-xl active:scale-95 cursor-pointer"
                   >
-                    <span>Перейти к оплате {finalPrice.toLocaleString("ru-RU")} ₽</span>
+                    <span>Перейти к способам оплаты {finalPrice.toLocaleString("ru-RU")} ₽</span>
                     <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
                   </button>
+
+                  <a
+                    href={tier === "vip" ? "https://web.tribute.tg/p/GID" : "https://web.tribute.tg/p/GIB"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-3 px-4 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-xs font-mono font-bold text-emerald-800 dark:text-emerald-300 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    <span>Быстрая онлайн-оплата Tribute (Карты РФ, СБП, Мир, Зарубежные)</span>
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </a>
                 </div>
 
                 <p className="text-[11px] font-mono text-center text-slate-500 dark:text-slate-400 mt-2">
@@ -388,35 +399,52 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                 Сумма к оплате: <span className="text-emerald-600 dark:text-emerald-400 font-bold">{finalPrice.toLocaleString("ru-RU")} ₽</span>
               </p>
 
-              {/* Payment Details Card */}
+              {/* Primary Action: Tribute Online Checkout */}
+              <div className="max-w-sm mx-auto mb-4 space-y-2">
+                <a
+                  href={tier === "vip" ? "https://web.tribute.tg/p/GID" : "https://web.tribute.tg/p/GIB"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-primary-mono w-full py-3.5 text-sm font-bold flex items-center justify-center gap-2 shadow-xl cursor-pointer"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>Оплатить картой / СБП через Tribute</span>
+                  <ArrowUpRight className="w-4 h-4" />
+                </a>
+                <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                  Мгновенное зачисление и автоматическая выдача доступа
+                </p>
+              </div>
+
+              {/* Payment Details Card for manual SBP */}
               <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 dark:bg-white/[0.04] dark:border-white/10 text-left text-xs font-mono space-y-1.5 mb-5 max-w-sm mx-auto text-slate-800 dark:text-slate-200">
-                <div className="text-slate-500 dark:text-slate-400 text-[11px] uppercase font-bold">Реквизиты для перевода (СБП 0%):</div>
+                <div className="text-slate-500 dark:text-slate-400 text-[11px] uppercase font-bold">Или ручной перевод (СБП 0%):</div>
                 <div>• Банк: <b className="text-slate-900 dark:text-white">Т-Банк (Тинькофф)</b></div>
                 <div>• Телефон: <code className="bg-emerald-100/70 dark:bg-white/10 px-1 py-0.5 rounded text-emerald-900 dark:text-emerald-300 font-bold">+7 981 163-36-91</code></div>
                 <div>• Получатель: <b className="text-slate-900 dark:text-white">Васюнин Илья Олегович</b></div>
                 <div>• Назначение: <code className="bg-emerald-100/70 dark:bg-white/10 px-1 py-0.5 rounded text-emerald-900 dark:text-emerald-300 font-bold">SPARK {tier.toUpperCase()}</code></div>
               </div>
 
-              <p className="text-xs text-slate-600 dark:text-slate-400 max-w-xs mx-auto mb-5 font-doc">
-                После перевода отправь чек через официального бота или напрямую куратору в Telegram:
+              <p className="text-xs text-slate-600 dark:text-slate-400 max-w-xs mx-auto mb-4 font-doc">
+                При переводе по СБП отправь чек боту или куратору для подтверждения:
               </p>
 
-              <div className="flex flex-col gap-3 max-w-xs mx-auto">
+              <div className="flex flex-col gap-2.5 max-w-xs mx-auto">
                 <a
                   href={botPayUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="btn-primary-mono inline-flex items-center justify-center gap-2 px-6 py-3.5 text-xs font-bold shadow-xl cursor-pointer"
+                  className="px-6 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-mono text-slate-800 dark:bg-white/10 dark:hover:bg-white/15 dark:text-slate-200 flex items-center justify-center gap-2 transition-all font-semibold cursor-pointer border border-slate-200 dark:border-white/10"
                 >
                   <Send className="w-4 h-4" />
-                  <span>Оплатить через Telegram-бота</span>
+                  <span>Открыть в Telegram-боте</span>
                 </a>
 
                 <a
                   href="https://t.me/ilyan_vas"
                   target="_blank"
                   rel="noreferrer"
-                  className="px-6 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-mono text-slate-800 dark:bg-white/5 dark:hover:bg-white/10 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white border border-slate-200 dark:border-white/10 flex items-center justify-center gap-2 transition-all font-semibold cursor-pointer"
+                  className="px-6 py-3 rounded-xl bg-slate-50 hover:bg-slate-100 text-xs font-mono text-slate-700 dark:bg-white/5 dark:hover:bg-white/10 dark:text-slate-300 flex items-center justify-center gap-2 transition-all font-semibold cursor-pointer border border-slate-200 dark:border-white/10"
                 >
                   <span>Написать куратору (@ilyan_vas)</span>
                 </a>

@@ -123,6 +123,7 @@ type PaymentTransaction struct {
 	Status         string    `gorm:"size:32;not null" json:"status"` // 'SUCCESS', 'FAIL', 'PENDING'
 	Currency       string    `gorm:"size:10;default:'RUB'" json:"currency"`
 	PayMethod      string    `gorm:"size:32" json:"pay_method"`
+	ProductName    string    `gorm:"size:128" json:"product_name"`
 	PromoCode      string    `gorm:"size:32" json:"promo_code"`
 	CustomerEmail  string    `gorm:"size:128" json:"customer_email"`
 	CustomerPhone  string    `gorm:"size:64" json:"customer_phone"`

@@ -144,6 +144,7 @@ export const metadata: Metadata = {
     yandex: "345a2f8dfaaff053",
     other: {
       "apay-tag": "RG3T2FTEIA5IEW5UUDHP7BMRODEY2BHG",
+      "enot": "4f507993",
     },
   },
   category: "education",
@@ -287,6 +288,7 @@ export default function RootLayout({
       <head>
         <meta name="yandex-verification" content="345a2f8dfaaff053" />
         <meta name="apay-tag" content="RG3T2FTEIA5IEW5UUDHP7BMRODEY2BHG" />
+        <meta name="enot" content="4f507993" />
         <script
           dangerouslySetInnerHTML={{
             __html: `

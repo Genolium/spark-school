@@ -39,6 +39,12 @@ func MainMenuKeyboard(frontendURL string) *telego.InlineKeyboardMarkup {
 func PaymentKeyboard() *telego.InlineKeyboardMarkup {
 	return tu.InlineKeyboard(
 		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("💳 Оплатить Акселератор (6 900 ₽)").WithURL("https://web.tribute.tg/p/GIB"),
+		),
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("👑 Оплатить VIP (14 900 ₽)").WithURL("https://web.tribute.tg/p/GID"),
+		),
+		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton("🎟 Применить промокод -5%").WithCallbackData("promo_enter"),
 		),
 		tu.InlineKeyboardRow(
@@ -53,6 +59,12 @@ func PaymentKeyboard() *telego.InlineKeyboardMarkup {
 // PromoAppliedKeyboard returns keyboard after successful promo code redemption.
 func PromoAppliedKeyboard() *telego.InlineKeyboardMarkup {
 	return tu.InlineKeyboard(
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("💳 Оплатить Акселератор (Tribute)").WithURL("https://web.tribute.tg/p/GIB"),
+		),
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("👑 Оплатить VIP (Tribute)").WithURL("https://web.tribute.tg/p/GID"),
+		),
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton("💬 Написать так называемому Илю в Telegram").WithURL("https://t.me/ilyan_vas"),
 		),

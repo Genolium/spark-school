@@ -3,6 +3,9 @@ package handlers
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -440,6 +443,94 @@ func TestAdminToggleAccess_WithPromoCode_Mock(t *testing.T) {
 	}
 	if res["promo_code"] != "SPARK5" {
 		t.Errorf("expected promo_code=SPARK5, got %v", res["promo_code"])
+	}
+}
+
+func TestTributeSignatureVerification(t *testing.T) {
+	apiKey := "test_tribute_secret_key"
+	body := []byte(`{"name":"new_subscription","payload":{"amount":6900,"telegram_user_id":12345678}}`)
+
+	mac := hmac.New(sha256.New, []byte(apiKey))
+	mac.Write(body)
+	validSig := hex.EncodeToString(mac.Sum(nil))
+
+	if !VerifyTributeSignature(apiKey, body, validSig) {
+		t.Error("expected valid signature to pass verification")
+	}
+
+	if VerifyTributeSignature(apiKey, body, "invalid_signature_hex") {
+		t.Error("expected invalid signature to fail verification")
+	}
+
+	// Permissive when API key is empty
+	if !VerifyTributeSignature("", body, "any_signature") {
+		t.Error("expected empty API key to be permissive")
+	}
+}
+
+func TestHandleTributeWebhook(t *testing.T) {
+	apiKey := "test_tribute_secret_key"
+	cfg := &config.Config{
+		TributeAPIKey:   apiKey,
+		AdminTelegramID: 999888,
+	}
+
+	var notifiedStudentMsg string
+	var notifiedAdminMsg string
+	notifyFunc := func(telegramID int64, message string) error {
+		if telegramID == 999888 {
+			notifiedAdminMsg = message
+		} else {
+			notifiedStudentMsg = message
+		}
+		return nil
+	}
+
+	inviteGen := func(ctx context.Context, channelID int64) (string, error) {
+		return "https://t.me/+tribute_dyn_invite", nil
+	}
+
+	handler := NewPaymentWebhookHandler(nil, cfg, nil, notifyFunc, inviteGen)
+
+	r := gin.New()
+	r.POST("/api/payments/tribute", handler.HandleTributeWebhook)
+
+	payload := map[string]interface{}{
+		"name": "new_subscription",
+		"payload": map[string]interface{}{
+			"subscription_id":   "sub_test_123",
+			"subscription_name": "Акселератор",
+			"amount":            6900,
+			"currency":          "rub",
+			"telegram_user_id":  777666,
+			"user": map[string]interface{}{
+				"username": "tribute_student",
+			},
+		},
+	}
+	bodyBytes, _ := json.Marshal(payload)
+
+	mac := hmac.New(sha256.New, []byte(apiKey))
+	mac.Write(bodyBytes)
+	sig := hex.EncodeToString(mac.Sum(nil))
+
+	req := httptest.NewRequest("POST", "/api/payments/tribute", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("trbt-signature", sig)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d: %s", w.Code, w.Body.String())
+	}
+
+	if !strings.Contains(notifiedStudentMsg, "https://t.me/+tribute_dyn_invite") {
+		t.Errorf("expected student invite link in notification, got: %s", notifiedStudentMsg)
+	}
+
+	if !strings.Contains(notifiedAdminMsg, "TRIBUTE") {
+		t.Errorf("expected admin notification to mention TRIBUTE, got: %s", notifiedAdminMsg)
 	}
 }
 
