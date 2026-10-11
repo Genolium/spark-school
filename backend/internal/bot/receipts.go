@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"log"
 	"strings"
 	"time"
 
@@ -119,34 +120,91 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) bool {
 	return true
 }
 
-// SendAdminReceiptCard sends the review notification with photo and 1-click action buttons.
+// SendAdminReceiptCard sends the review notification with photo/document and 1-click action buttons,
+// with robust text fallback if Telegram media API fails (e.g. invalid fileID, mock or expired media).
 func (s *BotService) SendAdminReceiptCard(adminID int64, receipt *models.PaymentReceipt) error {
-	if s.bot == nil || adminID == 0 {
+	if s.bot == nil || adminID == 0 || receipt == nil {
 		return nil
 	}
 
 	adminChatID := tu.ID(adminID)
-	caption := fmt.Sprintf(`🔔 <b>Новый чек на оплату проекта «так называемый SPARK»!</b>
 
-Студент: <b>@%s</b>
-ID: <code>%d</code>
-Тариф: <b>%s</b>
-Сумма: <b>%.0f ₽</b>
-Чек ID: #%d
+	studentDisplay := receipt.Username
+	if studentDisplay == "" {
+		studentDisplay = fmt.Sprintf("ID %d", receipt.TelegramID)
+	} else if !strings.HasPrefix(studentDisplay, "@") {
+		studentDisplay = "@" + studentDisplay
+	}
 
-Подтвердите поступление средств и выдачу доступа:`, receipt.Username, receipt.TelegramID, strings.ToUpper(receipt.Tier), receipt.Amount, receipt.ID)
+	dateStr := ""
+	if !receipt.CreatedAt.IsZero() {
+		dateStr = receipt.CreatedAt.Format("15:04 02.01.2006")
+	} else {
+		dateStr = time.Now().Format("15:04 02.01.2006")
+	}
+
+	caption := fmt.Sprintf(`🧾 <b>Чек об оплате #%d</b>
+
+👤 Студент: <b>%s</b>
+🆔 ID: <code>%d</code>
+🎓 Тариф: <b>%s</b>
+💰 Сумма: <b>%.0f ₽</b>
+📅 Дата: <i>%s</i>
+
+Подтвердите поступление средств и выдачу доступа:`,
+		receipt.ID,
+		studentDisplay,
+		receipt.TelegramID,
+		strings.ToUpper(receipt.Tier),
+		receipt.Amount,
+		dateStr,
+	)
 
 	btnApprove := tu.InlineKeyboardButton("✅ Одобрить и выдать доступ").WithCallbackData(fmt.Sprintf("receipt_approve_%d", receipt.ID))
 	btnReject := tu.InlineKeyboardButton("❌ Отклонить").WithCallbackData(fmt.Sprintf("receipt_reject_%d", receipt.ID))
-	keyboard := tu.InlineKeyboard(tu.InlineKeyboardRow(btnApprove, btnReject))
 
+	rows := [][]telego.InlineKeyboardButton{
+		{btnApprove, btnReject},
+	}
+	if receipt.Username != "" {
+		cleanUser := strings.TrimPrefix(receipt.Username, "@")
+		rows = append(rows, []telego.InlineKeyboardButton{
+			tu.InlineKeyboardButton(fmt.Sprintf("💬 Написать @%s", cleanUser)).WithURL("https://t.me/" + cleanUser),
+		})
+	}
+	keyboard := tu.InlineKeyboard(rows...)
+
+	// 1. Try sending as Photo if FileID exists
 	if receipt.FileID != "" {
-		photoMsg := tu.Photo(adminChatID, tu.FileFromID(receipt.FileID)).WithCaption(caption).WithParseMode(telego.ModeHTML).WithReplyMarkup(keyboard)
-		_, err := s.bot.SendPhoto(photoMsg)
-		return err
+		photoMsg := tu.Photo(adminChatID, tu.FileFromID(receipt.FileID)).
+			WithCaption(caption).
+			WithParseMode(telego.ModeHTML).
+			WithReplyMarkup(keyboard)
+		if _, err := s.bot.SendPhoto(photoMsg); err == nil {
+			return nil
+		} else {
+			log.Printf("[Bot Receipt Card] SendPhoto failed for receipt #%d (FileID=%s): %v. Trying SendDocument...", receipt.ID, receipt.FileID, err)
+		}
+
+		// 2. Try sending as Document (if uploaded as uncompressed image or PDF)
+		docMsg := tu.Document(adminChatID, tu.FileFromID(receipt.FileID)).
+			WithCaption(caption).
+			WithParseMode(telego.ModeHTML).
+			WithReplyMarkup(keyboard)
+		if _, err := s.bot.SendDocument(docMsg); err == nil {
+			return nil
+		} else {
+			log.Printf("[Bot Receipt Card] SendDocument failed for receipt #%d (FileID=%s): %v. Falling back to text message...", receipt.ID, receipt.FileID, err)
+		}
 	}
 
-	msg := tu.Message(adminChatID, caption).WithParseMode(telego.ModeHTML).WithReplyMarkup(keyboard)
-	_, err := s.bot.SendMessage(msg)
+	// 3. Fallback: Always guarantee delivering the actionable text card to the curator
+	textMsg := tu.Message(adminChatID, caption).
+		WithParseMode(telego.ModeHTML).
+		WithReplyMarkup(keyboard)
+	_, err := s.bot.SendMessage(textMsg)
+	if err != nil {
+		log.Printf("[Bot Receipt Card] SendMessage failed for receipt #%d: %v", receipt.ID, err)
+	}
 	return err
 }
