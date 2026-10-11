@@ -747,6 +747,12 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 			return true
 		}
 
+	case "admin_receipts":
+		if s.IsAdmin(query.From.ID) {
+			s.SendAdminReceipts(chatID)
+			return true
+		}
+
 	case "admin_promos":
 		if s.IsAdmin(query.From.ID) && s.db != nil {
 			var promos []models.PromoCode

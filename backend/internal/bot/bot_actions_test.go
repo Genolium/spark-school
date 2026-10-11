@@ -113,6 +113,22 @@ func TestBot_AdminPanelSecurity(t *testing.T) {
 	if !handledAdmin {
 		t.Errorf("admin should be permitted to execute admin_stats callback")
 	}
+
+	// 4. Admin accessing admin_receipts callback handled safely
+	adminReceiptsQuery := &telego.CallbackQuery{
+		ID:   "cb_admin_receipts",
+		Data: "admin_receipts",
+		From: telego.User{
+			ID: 123456789,
+		},
+		Message: &telego.Message{
+			Chat: telego.Chat{ID: 123456789, Type: "private"},
+		},
+	}
+	handledReceipts := service.HandleCallbackQuery(adminReceiptsQuery)
+	if !handledReceipts {
+		t.Errorf("admin should be permitted to execute admin_receipts callback")
+	}
 }
 
 func TestBot_SendAccessNotificationToStudent_GracefulFallback(t *testing.T) {

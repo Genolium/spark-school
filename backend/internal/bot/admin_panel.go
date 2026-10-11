@@ -87,6 +87,57 @@ func (s *BotService) SendAdminLiveStats(chatID telego.ChatID) {
 	_, _ = s.bot.SendMessage(m)
 }
 
+// SendAdminReceipts fetches pending receipts and presents them for moderation.
+func (s *BotService) SendAdminReceipts(chatID telego.ChatID) {
+	if s.bot == nil {
+		return
+	}
+
+	var pendingReceipts []models.PaymentReceipt
+	if s.db != nil {
+		s.db.Where("status = ?", "pending").Order("created_at asc").Limit(10).Find(&pendingReceipts)
+	}
+
+	if len(pendingReceipts) == 0 {
+		emptyText := `🧾 <b>Чеки на модерации</b>
+
+🎉 <b>Все чеки проверены!</b>
+На данный момент нет чеков, ожидающих подтверждения.
+
+<i>Как только студент отправит чек в боте, вам моментально придёт карточка с кнопками подтверждения.</i>`
+
+		btnRefresh := tu.InlineKeyboardButton("🔄 Обновить").WithCallbackData("admin_receipts")
+		btnBack := tu.InlineKeyboardButton("⬅️ В админку").WithCallbackData("admin_menu")
+		kb := tu.InlineKeyboard(tu.InlineKeyboardRow(btnRefresh), tu.InlineKeyboardRow(btnBack))
+
+		m := tu.Message(chatID, emptyText).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
+		_, _ = s.bot.SendMessage(m)
+		return
+	}
+
+	headerText := fmt.Sprintf(`🧾 <b>Чеки на модерации (%d шт.)</b>
+
+Найдено ожидающих проверки платежей: <b>%d</b>.
+Ниже отправлены карточки каждого чека с кнопками подтверждения:`, len(pendingReceipts), len(pendingReceipts))
+
+	m := tu.Message(chatID, headerText).WithParseMode(telego.ModeHTML)
+	_, _ = s.bot.SendMessage(m)
+
+	for _, receipt := range pendingReceipts {
+		r := receipt
+		_ = s.SendAdminReceiptCard(chatID.ID, &r)
+		time.Sleep(35 * time.Millisecond)
+	}
+
+	controlText := "⬆️ Выберите действие по чекам выше или вернитесь в главное меню:"
+	btnRefresh := tu.InlineKeyboardButton("🔄 Обновить список чеков").WithCallbackData("admin_receipts")
+	btnBack := tu.InlineKeyboardButton("⬅️ Назад в админку").WithCallbackData("admin_menu")
+	kb := tu.InlineKeyboard(tu.InlineKeyboardRow(btnRefresh), tu.InlineKeyboardRow(btnBack))
+
+	ctrlMsg := tu.Message(chatID, controlText).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
+	_, _ = s.bot.SendMessage(ctrlMsg)
+}
+
 // HandleAdminPromoCommand processes /promo create [CODE] [DISCOUNT%]
 func (s *BotService) HandleAdminPromoCommand(chatID telego.ChatID, from *telego.User, text string) {
 	if !s.IsAdmin(from.ID) {
