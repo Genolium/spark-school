@@ -83,13 +83,7 @@ func main() {
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
 
-	// Top-level direct webhook route (matches Caddy reverse proxy for /api/payments/webhook & /api/payments/tribute)
-	router.Any("/api/payments/webhook", paymentWebhookHandler.HandleAntilopayWebhook)
-	router.Any("/payments/webhook", paymentWebhookHandler.HandleAntilopayWebhook)
-	router.Any("/api/payments/tribute", paymentWebhookHandler.HandleTributeWebhook)
-	router.Any("/payments/tribute", paymentWebhookHandler.HandleTributeWebhook)
-
-	// Security Middleware: Headers & Body Payload Limit (2MB)
+	// Security Middleware: Headers & Body Payload Limit (2MB) - applied globally to ALL routes
 	router.Use(security.SecurityHeadersMiddleware())
 	router.Use(security.MaxBodySizeMiddleware(2 * 1024 * 1024))
 
@@ -108,6 +102,15 @@ func main() {
 		AllowCredentials: true,
 		MaxAge:           12 * time.Hour,
 	}))
+
+	// Webhook Rate Limiter (60 req/min) to prevent DoS floods on payment gateways
+	webhookLimiter := security.RateLimitMiddleware(60, 1*time.Minute, "Превышен лимит запросов к платежному шлюзу. Пожалуйста, подождите.")
+
+	// Top-level direct webhook routes (matches reverse proxy for /api/payments/webhook & /api/payments/tribute)
+	router.Any("/api/payments/webhook", webhookLimiter, paymentWebhookHandler.HandleAntilopayWebhook)
+	router.Any("/payments/webhook", webhookLimiter, paymentWebhookHandler.HandleAntilopayWebhook)
+	router.Any("/api/payments/tribute", webhookLimiter, paymentWebhookHandler.HandleTributeWebhook)
+	router.Any("/payments/tribute", webhookLimiter, paymentWebhookHandler.HandleTributeWebhook)
 
 	// API v1 Routes with general Rate Limiting (120 req/min per IP)
 	api := router.Group("/api/v1")

@@ -132,12 +132,17 @@ func (h *PaymentWebhookHandler) HandleAntilopayWebhook(c *gin.Context) {
 		return
 	}
 
-	// 2. Signature verification if public key is configured
+	// 2. Strict Signature verification if public key is configured
 	signHeader := c.GetHeader("X-Apay-Callback")
-	if h.cfg != nil && h.cfg.AntilopayPublicKey != "" && signHeader != "" {
+	if h.cfg != nil && h.cfg.AntilopayPublicKey != "" {
+		if signHeader == "" {
+			log.Printf("[ANTILOPAY-SECURITY] Missing required signature header (X-Apay-Callback)")
+			c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "message": "missing signature header"})
+			return
+		}
 		if err := VerifyAntilopaySignature(h.cfg.AntilopayPublicKey, bodyBytes, signHeader); err != nil {
 			log.Printf("[ANTILOPAY-SECURITY] Signature verification failed: %v", err)
-			c.JSON(http.StatusOK, gin.H{"status": "error", "message": "invalid signature"})
+			c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "message": "invalid signature"})
 			return
 		}
 		log.Printf("[ANTILOPAY-SECURITY] Signature verified successfully with RSA-SHA256")
@@ -147,7 +152,7 @@ func (h *PaymentWebhookHandler) HandleAntilopayWebhook(c *gin.Context) {
 	var payload AntilopayCallbackPayload
 	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
 		log.Printf("[ANTILOPAY] JSON parse error: %v", err)
-		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "unmarshal error"})
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "unmarshal error"})
 		return
 	}
 
@@ -160,8 +165,8 @@ func (h *PaymentWebhookHandler) HandleAntilopayWebhook(c *gin.Context) {
 
 	paymentID := strings.TrimSpace(payload.PaymentID)
 	if paymentID == "" {
-		// Fallback order ID if payment ID is missing
-		paymentID = "PAY_" + strconv.FormatInt(time.Now().UnixNano(), 10)
+		// Deterministic fallback from body hash to guarantee replay-attack prevention
+		paymentID = "APAY_HASH_" + ComputeHash(bodyBytes)[:20]
 	}
 
 	// 4. Idempotency Check: prevent duplicate processing & double rewards
@@ -234,7 +239,55 @@ func (h *PaymentWebhookHandler) HandleAntilopayWebhook(c *gin.Context) {
 		tier = "vip"
 	}
 
-	// 6. Record PaymentTransaction in DB
+	// 6. Anti-Underpayment & Tampering Protection
+	if strings.ToUpper(payload.Status) == "SUCCESS" && payload.Amount < MinCoursePaymentThreshold {
+		log.Printf("[SECURITY-ALERT] Antilopay payment %s underpayment detected: %.2f %s. Minimum required: %.2f.",
+			paymentID, payload.Amount, payload.Currency, MinCoursePaymentThreshold)
+
+		transaction := models.PaymentTransaction{
+			PaymentID:      paymentID,
+			OrderID:        payload.OrderID,
+			TelegramID:     telegramID,
+			Username:       username,
+			Tier:           tier,
+			Amount:         payload.Amount,
+			OriginalAmount: payload.OriginalAmount,
+			Fee:            payload.Fee,
+			Status:         "FLAGGED_UNDERPAID",
+			Currency:       payload.Currency,
+			PayMethod:      payload.PayMethod,
+			PromoCode:      promoCode,
+			CustomerEmail:  payload.Customer.Email,
+			CustomerPhone:  payload.Customer.Phone,
+			RawCallback:    rawBodyStr,
+			CreatedAt:      time.Now(),
+			UpdatedAt:      time.Now(),
+		}
+		if h.db != nil {
+			_ = h.db.Create(&transaction)
+		}
+
+		adminTG := int64(123456789)
+		if h.cfg != nil && h.cfg.AdminTelegramID != 0 {
+			adminTG = h.cfg.AdminTelegramID
+		}
+		if h.notifyFunc != nil && adminTG != 0 {
+			alertMsg := fmt.Sprintf(
+				"⚠️ <b>ВНИМАНИЕ: ПОДОЗРИТЕЛЬНАЯ ОПЛАТА ANTILOPAY!</b> ⚠️\n\n"+
+					"👤 <b>Студент:</b> ID %d (@%s)\n"+
+					"💰 <b>Сумма:</b> %.2f %s <i>(МЕНЬШЕ МИНИМУМА 6 000 ₽)</i>\n"+
+					"🆔 <b>ID платежа:</b> <code>%s</code>\n\n"+
+					"⛔️ <b>Доступ НЕ выдан.</b> Проверьте транзакцию вручную!",
+				telegramID, username, payload.Amount, payload.Currency, paymentID,
+			)
+			_ = h.notifyFunc(adminTG, alertMsg)
+		}
+
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "payment_flagged_underpaid"})
+		return
+	}
+
+	// Record PaymentTransaction in DB
 	transaction := models.PaymentTransaction{
 		PaymentID:      paymentID,
 		OrderID:        payload.OrderID,

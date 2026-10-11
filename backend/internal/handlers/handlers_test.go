@@ -462,9 +462,12 @@ func TestTributeSignatureVerification(t *testing.T) {
 		t.Error("expected invalid signature to fail verification")
 	}
 
-	// Permissive when API key is empty
-	if !VerifyTributeSignature("", body, "any_signature") {
-		t.Error("expected empty API key to be permissive")
+	// Strictly fail-closed: empty API key or empty signature must fail
+	if VerifyTributeSignature("", body, "any_signature") {
+		t.Error("expected empty API key to fail verification (fail-closed)")
+	}
+	if VerifyTributeSignature(apiKey, body, "") {
+		t.Error("expected empty signature to fail verification (fail-closed)")
 	}
 }
 
@@ -531,6 +534,109 @@ func TestHandleTributeWebhook(t *testing.T) {
 
 	if !strings.Contains(notifiedAdminMsg, "TRIBUTE") {
 		t.Errorf("expected admin notification to mention TRIBUTE, got: %s", notifiedAdminMsg)
+	}
+}
+
+func TestHandleTributeWebhook_Security_MissingSignature(t *testing.T) {
+	cfg := &config.Config{
+		TributeAPIKey: "secret_key_123",
+	}
+	handler := NewPaymentWebhookHandler(nil, cfg, nil, nil)
+	r := gin.New()
+	r.POST("/api/payments/tribute", handler.HandleTributeWebhook)
+
+	body := []byte(`{"payload":{"amount":6900,"telegram_user_id":1234}}`)
+	req := httptest.NewRequest("POST", "/api/payments/tribute", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	// No signature header
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized for missing signature header, got %d", w.Code)
+	}
+}
+
+func TestHandleTributeWebhook_Security_InvalidSignature(t *testing.T) {
+	cfg := &config.Config{
+		TributeAPIKey: "secret_key_123",
+	}
+	handler := NewPaymentWebhookHandler(nil, cfg, nil, nil)
+	r := gin.New()
+	r.POST("/api/payments/tribute", handler.HandleTributeWebhook)
+
+	body := []byte(`{"payload":{"amount":6900,"telegram_user_id":1234}}`)
+	req := httptest.NewRequest("POST", "/api/payments/tribute", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("trbt-signature", "deadbeefbadsignature1234567890")
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 Unauthorized for invalid signature, got %d", w.Code)
+	}
+}
+
+func TestHandleTributeWebhook_Security_UnderpaymentFlagged(t *testing.T) {
+	apiKey := "test_tribute_secret_key"
+	cfg := &config.Config{
+		TributeAPIKey:   apiKey,
+		AdminTelegramID: 999888,
+	}
+
+	var studentNotified bool
+	var adminAlertReceived bool
+	notifyFunc := func(telegramID int64, message string) error {
+		if telegramID == 999888 {
+			adminAlertReceived = true
+			if !strings.Contains(message, "ПОДОЗРИТЕЛЬНАЯ ОПЛАТА") {
+				t.Errorf("expected admin alert to contain suspicion warning, got: %s", message)
+			}
+		} else {
+			studentNotified = true
+		}
+		return nil
+	}
+
+	handler := NewPaymentWebhookHandler(nil, cfg, nil, notifyFunc)
+	r := gin.New()
+	r.POST("/api/payments/tribute", handler.HandleTributeWebhook)
+
+	// Attacker tries to pay 100 RUB instead of 6900 RUB
+	payload := map[string]interface{}{
+		"name": "new_subscription",
+		"payload": map[string]interface{}{
+			"subscription_id":  "sub_underpaid_1",
+			"amount":           100.0, // 100 RUB
+			"currency":         "rub",
+			"telegram_user_id": 999999,
+		},
+	}
+	bodyBytes, _ := json.Marshal(payload)
+
+	mac := hmac.New(sha256.New, []byte(apiKey))
+	mac.Write(bodyBytes)
+	sig := hex.EncodeToString(mac.Sum(nil))
+
+	req := httptest.NewRequest("POST", "/api/payments/tribute", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("trbt-signature", sig)
+
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK acknowledgment, got %d", w.Code)
+	}
+
+	if studentNotified {
+		t.Error("CRITICAL SECURITY VULNERABILITY: student received access for an underpaid order (100 RUB)!")
+	}
+
+	if !adminAlertReceived {
+		t.Error("expected admin to be notified of suspicious underpayment attempt")
 	}
 }
 

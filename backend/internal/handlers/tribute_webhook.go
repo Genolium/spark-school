@@ -7,16 +7,24 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spark-school/backend/internal/models"
+	"gorm.io/gorm"
 )
+
+// Minimum allowable payment amount to prevent underpayment/tampering attacks.
+// 6 000 ₽ safely covers Accelerator with 5% promo (6 555 ₽).
+const MinCoursePaymentThreshold = 6000.00
+const MinVipPaymentThreshold = 13000.00
 
 // TributeWebhookPayload models the incoming notification from Tribute (@tribute / web.tribute.tg).
 type TributeWebhookPayload struct {
@@ -32,14 +40,13 @@ type TributeWebhookPayload struct {
 }
 
 // VerifyTributeSignature checks HMAC-SHA256 signature from the trbt-signature header.
+// It is strictly fail-closed: requires non-empty secret key and non-empty signature.
 func VerifyTributeSignature(apiKey string, body []byte, signatureHex string) bool {
 	cleanKey := strings.TrimSpace(apiKey)
 	cleanSign := strings.TrimSpace(strings.ToLower(signatureHex))
-	if cleanKey == "" {
-		// If Tribute API key is not yet configured, allow to prevent dropping valid payments
-		return true
-	}
-	if cleanSign == "" {
+
+	// Strict fail-closed: never permit verification without configured key or signature
+	if cleanKey == "" || cleanSign == "" {
 		return false
 	}
 
@@ -50,25 +57,26 @@ func VerifyTributeSignature(apiKey string, body []byte, signatureHex string) boo
 	return hmac.Equal([]byte(expectedHex), []byte(cleanSign))
 }
 
-// HandleTributeWebhook handles incoming payment webhooks from Tribute.
+// HandleTributeWebhook handles incoming payment webhooks from Tribute with multi-layer defense.
 // POST /api/payments/tribute and /payments/tribute
 func (h *PaymentWebhookHandler) HandleTributeWebhook(c *gin.Context) {
+	// 1. Read raw body (enforces 2MB maximum limit from middleware)
 	bodyBytes, err := io.ReadAll(c.Request.Body)
 	if err != nil {
-		log.Printf("[TRIBUTE] Error reading request body: %v", err)
-		c.JSON(http.StatusOK, gin.H{"status": "ok", "error": "cannot read body"})
+		log.Printf("[TRIBUTE-SECURITY] Error reading request body: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "cannot read request body"})
 		return
 	}
 
 	rawBodyStr := string(bodyBytes)
-	log.Printf("[TRIBUTE] Callback received (%d bytes): %s", len(bodyBytes), rawBodyStr)
 
+	// If empty ping / test check from reverse proxy
 	if len(bodyBytes) == 0 {
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "empty ping acknowledged"})
 		return
 	}
 
-	// Signature verification via trbt-signature header
+	// 2. Strict Authentication & HMAC-SHA256 Signature Verification
 	signatureHeader := c.GetHeader("trbt-signature")
 	if signatureHeader == "" {
 		signatureHeader = c.GetHeader("Trbt-Signature")
@@ -77,24 +85,46 @@ func (h *PaymentWebhookHandler) HandleTributeWebhook(c *gin.Context) {
 		signatureHeader = c.GetHeader("X-Trbt-Signature")
 	}
 
-	if h.cfg != nil && h.cfg.TributeAPIKey != "" {
-		if !VerifyTributeSignature(h.cfg.TributeAPIKey, bodyBytes, signatureHeader) {
-			log.Printf("[TRIBUTE-SECURITY] Invalid HMAC signature! Header: %s", signatureHeader)
+	apiKey := ""
+	if h.cfg != nil {
+		apiKey = strings.TrimSpace(h.cfg.TributeAPIKey)
+	}
+
+	isTestMode := gin.Mode() == gin.TestMode || os.Getenv("ENV") == "test"
+
+	if apiKey == "" {
+		if !isTestMode {
+			log.Printf("[CRITICAL-SECURITY] Tribute webhook invoked but TRIBUTE_API_KEY is not configured! Rejecting request to prevent unauthorized access grant.")
+			c.JSON(http.StatusServiceUnavailable, gin.H{
+				"status":  "error",
+				"message": "payment gateway signature verification is not configured",
+			})
+			return
+		}
+	} else {
+		if signatureHeader == "" {
+			log.Printf("[TRIBUTE-SECURITY] Missing required signature header (trbt-signature)")
+			c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "message": "missing trbt-signature header"})
+			return
+		}
+
+		if !VerifyTributeSignature(apiKey, bodyBytes, signatureHeader) {
+			log.Printf("[TRIBUTE-SECURITY] Signature verification failed! Header: %s, BodyLen: %d", signatureHeader, len(bodyBytes))
 			c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "message": "invalid signature"})
 			return
 		}
 		log.Printf("[TRIBUTE-SECURITY] Signature verified successfully with HMAC-SHA256")
 	}
 
-	// Parse JSON
+	// 3. Parse JSON Payload
 	var payload TributeWebhookPayload
 	if err := json.Unmarshal(bodyBytes, &payload); err != nil {
-		log.Printf("[TRIBUTE] JSON parse error: %v", err)
-		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "unmarshal error"})
+		log.Printf("[TRIBUTE-SECURITY] JSON unmarshal error: %v", err)
+		c.JSON(http.StatusBadRequest, gin.H{"status": "error", "message": "invalid json payload"})
 		return
 	}
 
-	// Extract data from nested payload or top level
+	// 4. Extract and normalize fields
 	var telegramID int64 = payload.TelegramUserID
 	var username string
 	var amount float64 = payload.Amount
@@ -165,96 +195,178 @@ func (h *PaymentWebhookHandler) HandleTributeWebhook(c *gin.Context) {
 		}
 	}
 
-	// Normalize amount: Tribute often reports amounts in kopecks (e.g. 690000 = 6900 RUB)
-	if amount >= 50000 {
-		amount = amount / 100.0
-	}
+	// Sanitize text inputs for logging and Telegram HTML formatting
+	username = strings.TrimSpace(html.EscapeString(username))
+	productName = strings.TrimSpace(html.EscapeString(productName))
+	currency = strings.ToUpper(strings.TrimSpace(html.EscapeString(currency)))
 	if currency == "" {
 		currency = "RUB"
 	}
 
-	// Determine tier:
-	// VIP is 14 900 ₽ (or 14 155 ₽ with promo)
-	// Accelerator is 6 900 ₽ (or 6 555 ₽ with promo)
-	tier := "accelerator"
-	lowerProduct := strings.ToLower(productName)
-	if amount >= 13000 || strings.Contains(lowerProduct, "vip") || strings.Contains(lowerProduct, "вип") {
-		tier = "vip"
+	// Normalize amount: Tribute reports amounts in minor units (kopecks/cents) when >= 50000
+	if amount >= 50000 {
+		amount = amount / 100.0
 	}
 
+	// 5. Deterministic Replay-Resistant Idempotency Key
+	// If paymentID is missing, derive a deterministic hash from payload body to prevent replay attacks
 	if paymentID == "" {
-		paymentID = fmt.Sprintf("TRBT_%d_%d", telegramID, time.Now().Unix())
+		bodyHash := ComputeHash(bodyBytes)
+		paymentID = fmt.Sprintf("TRBT_HASH_%s", bodyHash[:20])
 	} else if !strings.HasPrefix(paymentID, "TRBT_") {
 		paymentID = "TRBT_" + paymentID
 	}
 
-	// Idempotency check: prevent duplicate processing
+	// 6. Anti-Underpayment & Amount Tampering Protection
+	// Determine Tier strictly by settled amount and title
+	tier := "accelerator"
+	lowerProduct := strings.ToLower(productName)
+	if amount >= MinVipPaymentThreshold || strings.Contains(lowerProduct, "vip") || strings.Contains(lowerProduct, "вип") {
+		tier = "vip"
+	}
+
+	// Fraud check: if amount is below minimum course price (e.g. attacker sends 1 ₽ or 50 ₽),
+	// DO NOT grant access. Flag transaction for manual investigation.
+	if amount < MinCoursePaymentThreshold {
+		log.Printf("[SECURITY-ALERT] Tribute payment %s underpayment detected: %.2f %s. Minimum required: %.2f. Flagging without access grant.",
+			paymentID, amount, currency, MinCoursePaymentThreshold)
+
+		// Record suspicious transaction in DB for audit
+		if h.db != nil {
+			flaggedTx := models.PaymentTransaction{
+				PaymentID:      paymentID,
+				OrderID:        paymentID,
+				TelegramID:     telegramID,
+				Username:       username,
+				Tier:           tier,
+				Amount:         amount,
+				OriginalAmount: amount,
+				Status:         "FLAGGED_UNDERPAID",
+				Currency:       currency,
+				PayMethod:      "TRIBUTE",
+				ProductName:    productName,
+				RawCallback:    rawBodyStr,
+				CreatedAt:      time.Now(),
+				UpdatedAt:      time.Now(),
+			}
+			_ = h.db.Create(&flaggedTx)
+		}
+
+		// Alert Ilya about suspicious payment
+		adminTG := int64(123456789)
+		if h.cfg != nil && h.cfg.AdminTelegramID != 0 {
+			adminTG = h.cfg.AdminTelegramID
+		}
+		if h.notifyFunc != nil && adminTG != 0 {
+			alertMsg := fmt.Sprintf(
+				"⚠️ <b>ВНИМАНИЕ: ПОДОЗРИТЕЛЬНАЯ ОПЛАТА TRIBUTE!</b> ⚠️\n\n"+
+					"👤 <b>Студент:</b> ID %d (@%s)\n"+
+					"💰 <b>Сумма:</b> %.2f %s <i>(МЕНЬШЕ МИНИМУМА 6 000 ₽)</i>\n"+
+					"📦 <b>Товар:</b> %s\n"+
+					"🆔 <b>ID платежа:</b> <code>%s</code>\n\n"+
+					"⛔️ <b>Доступ НЕ выдан.</b> Проверьте транзакцию в кабинете Tribute вручную!",
+				telegramID, username, amount, currency, productName, paymentID,
+			)
+			_ = h.notifyFunc(adminTG, alertMsg)
+		}
+
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "payment_flagged_underpaid"})
+		return
+	}
+
+	// 7. Atomic Concurrency Control & Idempotency Execution
+	var isAlreadyProcessed bool
+	var user models.User
+
 	if h.db != nil {
-		var existing models.PaymentTransaction
-		if err := h.db.Where("payment_id = ?", paymentID).First(&existing).Error; err == nil {
-			log.Printf("[TRIBUTE-IDEMPOTENCY] Payment %s already processed. Skipping duplicate.", paymentID)
+		err = h.db.Transaction(func(tx *gorm.DB) error {
+			// Idempotency check inside transaction
+			var existing models.PaymentTransaction
+			if err := tx.Where("payment_id = ?", paymentID).First(&existing).Error; err == nil {
+				isAlreadyProcessed = true
+				return nil
+			}
+
+			// Record PaymentTransaction
+			transaction := models.PaymentTransaction{
+				PaymentID:      paymentID,
+				OrderID:        paymentID,
+				TelegramID:     telegramID,
+				Username:       username,
+				Tier:           tier,
+				Amount:         amount,
+				OriginalAmount: amount,
+				Status:         "SUCCESS",
+				Currency:       currency,
+				PayMethod:      "TRIBUTE",
+				ProductName:    productName,
+				RawCallback:    rawBodyStr,
+				CreatedAt:      time.Now(),
+				UpdatedAt:      time.Now(),
+			}
+
+			if err := tx.Create(&transaction).Error; err != nil {
+				// Detect unique index collision (parallel race condition)
+				if strings.Contains(strings.ToLower(err.Error()), "duplicate") || strings.Contains(strings.ToLower(err.Error()), "unique") {
+					isAlreadyProcessed = true
+					return nil
+				}
+				return err
+			}
+
+			// Update or Create Student Record
+			if telegramID > 0 {
+				now := time.Now()
+				if err := tx.Where("telegram_id = ?", telegramID).First(&user).Error; err == nil {
+					user.HasAccess = true
+					user.AccessGrantedAt = &now
+					user.Tier = tier
+					user.PaidAmount = amount
+					if username != "" && user.Username == "" {
+						user.Username = username
+					}
+					if err := tx.Save(&user).Error; err != nil {
+						return err
+					}
+				} else {
+					user = models.User{
+						TelegramID:      telegramID,
+						Username:        username,
+						FirstName:       "Студент",
+						Role:            "student",
+						HasAccess:       true,
+						AccessGrantedAt: &now,
+						Tier:            tier,
+						PaidAmount:      amount,
+					}
+					if err := tx.Create(&user).Error; err != nil {
+						return err
+					}
+				}
+
+				// Process Affiliate Commission atomically
+				if h.affiliateService != nil && user.ID != 0 {
+					_ = h.affiliateService.ProcessCoursePurchaseTx(tx, user.ID, amount)
+				}
+			}
+
+			return nil
+		})
+
+		if err != nil {
+			log.Printf("[TRIBUTE-ERROR] DB transaction error: %v", err)
+			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "database error"})
+			return
+		}
+
+		if isAlreadyProcessed {
+			log.Printf("[TRIBUTE-IDEMPOTENCY] Payment %s already processed. Skipping duplicate callback safely.", paymentID)
 			c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "already_processed"})
 			return
 		}
 	}
 
-	// Record transaction in DB
-	transaction := models.PaymentTransaction{
-		PaymentID:      paymentID,
-		OrderID:        paymentID,
-		TelegramID:     telegramID,
-		Username:       username,
-		Tier:           tier,
-		Amount:         amount,
-		OriginalAmount: amount,
-		Status:         "SUCCESS",
-		Currency:       currency,
-		PayMethod:      "TRIBUTE",
-		ProductName:    productName,
-		RawCallback:    rawBodyStr,
-		CreatedAt:      time.Now(),
-		UpdatedAt:      time.Now(),
-	}
-
-	if h.db != nil {
-		_ = h.db.Create(&transaction)
-	}
-
-	tierNameRU := "Акселератор (6 900 ₽)"
-	if tier == "vip" {
-		tierNameRU = "VIP-сопровождение (14 900 ₽)"
-	}
-
-	// Update or create student in DB
-	if h.db != nil && telegramID > 0 {
-		var user models.User
-		now := time.Now()
-		err := h.db.Where("telegram_id = ?", telegramID).First(&user).Error
-		if err == nil {
-			user.HasAccess = true
-			user.AccessGrantedAt = &now
-			user.Tier = tier
-			user.PaidAmount = amount
-			h.db.Save(&user)
-			if user.Username != "" && username == "" {
-				username = user.Username
-			}
-		} else {
-			newUser := models.User{
-				TelegramID:      telegramID,
-				Username:        username,
-				FirstName:       "Студент",
-				Role:            "student",
-				HasAccess:       true,
-				AccessGrantedAt: &now,
-				Tier:            tier,
-				PaidAmount:      amount,
-			}
-			h.db.Create(&newUser)
-		}
-	}
-
-	// Generate single-use invite link for channel
+	// 8. Generate Single-Use Telegram Channel Invite Link (Only on successful settlement)
 	inviteLink := ""
 	if h.cfg != nil {
 		inviteLink = h.cfg.TelegramInviteLink
@@ -269,7 +381,12 @@ func (h *PaymentWebhookHandler) HandleTributeWebhook(c *gin.Context) {
 		}
 	}
 
-	// Send confirmation and channel link to student via Telegram bot
+	tierNameRU := "Акселератор (6 900 ₽)"
+	if tier == "vip" {
+		tierNameRU = "VIP-сопровождение (14 900 ₽)"
+	}
+
+	// 9. Deliver Channel Invite Link to Student
 	if h.notifyFunc != nil && telegramID > 0 {
 		studentMsg := fmt.Sprintf(
 			"🎉 <b>Оплата подтверждена через Tribute!</b>\n\n"+
@@ -283,7 +400,7 @@ func (h *PaymentWebhookHandler) HandleTributeWebhook(c *gin.Context) {
 		_ = h.notifyFunc(telegramID, studentMsg)
 	}
 
-	// Push alert to Ilya in Telegram
+	// 10. Instant Push Notification to Ilya (Admin)
 	adminTG := int64(123456789)
 	if h.cfg != nil && h.cfg.AdminTelegramID != 0 {
 		adminTG = h.cfg.AdminTelegramID
