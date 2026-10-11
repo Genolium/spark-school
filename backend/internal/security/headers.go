@@ -24,15 +24,15 @@ func SecurityHeadersMiddleware() gin.HandlerFunc {
 		// Restrict dangerous browser features
 		c.Header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
 
-		// Content Security Policy permitting YouTube embeds
+		// Content Security Policy permitting YouTube embeds & YooKassa acquiring
 		csp := "default-src 'self'; " +
-			"img-src 'self' data: https: https://*.telegram.org; " +
-			"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://telegram.org; " +
+			"img-src 'self' data: https: https://*.telegram.org https://*.yoomoney.ru https://*.yookassa.ru; " +
+			"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://telegram.org https://yookassa.ru https://*.yookassa.ru; " +
 			"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
 			"font-src 'self' data: https://fonts.gstatic.com; " +
-			"frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com; " +
+			"frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://yookassa.ru https://*.yookassa.ru; " +
 			"frame-ancestors 'self'; " +
-			"connect-src 'self' http://localhost:* https://*.sparkprep.ru https://sparkprep.ru;"
+			"connect-src 'self' http://localhost:* https://*.sparkprep.ru https://sparkprep.ru https://so-called-spark.ru https://*.so-called-spark.ru https://api.yookassa.ru https://yookassa.ru;"
 		c.Header("Content-Security-Policy", csp)
 
 		c.Next()

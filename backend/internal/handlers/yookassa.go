@@ -8,6 +8,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -59,7 +60,7 @@ type CreateYooKassaCheckoutRequest struct {
 }
 
 // CreateCheckout creates a payment session via official YooKassa API and returns the redirect URL.
-// POST /api/v1/payments/yookassa/create
+// POST /api/payments/yookassa/create
 func (h *YooKassaHandler) CreateCheckout(c *gin.Context) {
 	var req CreateYooKassaCheckoutRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -72,7 +73,31 @@ func (h *YooKassaHandler) CreateCheckout(c *gin.Context) {
 		tier = "accelerator"
 	}
 
+	// Security: Sanitize Telegram ID (user IDs are strictly positive)
+	telegramID := req.TelegramID
+	if telegramID < 0 || telegramID > 1000000000000 {
+		telegramID = 0
+	}
+
+	// Security: Sanitize Username (strip @, restrict length, allow only valid Telegram username chars)
+	rawUsername := strings.TrimPrefix(strings.TrimSpace(req.TelegramUsername), "@")
+	if len(rawUsername) > 64 {
+		rawUsername = rawUsername[:64]
+	}
+	var cleanUserBuilder strings.Builder
+	for _, r := range rawUsername {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' {
+			cleanUserBuilder.WriteRune(r)
+		}
+	}
+	cleanUsername := cleanUserBuilder.String()
+
+	// Security: Sanitize Promo code
 	cleanPromo := strings.ToUpper(strings.TrimSpace(req.PromoCode))
+	if len(cleanPromo) > 32 {
+		cleanPromo = cleanPromo[:32]
+	}
+
 	basePrice := 6900.00
 	if tier == "vip" {
 		basePrice = 14900.00
@@ -111,11 +136,11 @@ func (h *YooKassaHandler) CreateCheckout(c *gin.Context) {
 
 	metadata := map[string]string{
 		"tier":       tier,
-		"username":   strings.TrimPrefix(req.TelegramUsername, "@"),
+		"username":   cleanUsername,
 		"promo_code": cleanPromo,
 	}
-	if req.TelegramID > 0 {
-		metadata["telegram_id"] = strconv.FormatInt(req.TelegramID, 10)
+	if telegramID > 0 {
+		metadata["telegram_id"] = strconv.FormatInt(telegramID, 10)
 	}
 
 	ykReq := services.YooKassaPaymentRequest{
@@ -141,8 +166,7 @@ func (h *YooKassaHandler) CreateCheckout(c *gin.Context) {
 	if err != nil {
 		log.Printf("[YOOKASSA-ERROR] CreatePayment failed: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
-			"error":   "Не удалось сформировать счёт в ЮKassa. Пожалуйста, попробуйте позже.",
-			"details": err.Error(),
+			"error": "Не удалось сформировать счёт в ЮKassa. Пожалуйста, попробуйте позже.",
 		})
 		return
 	}
@@ -209,9 +233,17 @@ func (h *YooKassaHandler) HandleWebhook(c *gin.Context) {
 		return
 	}
 
-	// Gold Standard Security Verification:
-	// Verify payment directly against official YooKassa API to eliminate spoofing risks
-	if h.yooKassaService != nil && h.cfg != nil && h.cfg.YooKassaSecretKey != "" {
+	// Security: Gold Standard Server-to-Server Verification
+	// Verify payment directly against official YooKassa API to eliminate spoofing risks.
+	// Fail-closed: If secret key is missing in production, reject immediately.
+	isTestMode := gin.Mode() == gin.TestMode || os.Getenv("ENV") == "test"
+	if h.cfg == nil || strings.TrimSpace(h.cfg.YooKassaSecretKey) == "" {
+		if !isTestMode {
+			log.Printf("[CRITICAL-SECURITY] YooKassa webhook received but YOOKASSA_SECRET_KEY is not configured! Rejecting to prevent unverified access.")
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "payment gateway verification not configured"})
+			return
+		}
+	} else if h.yooKassaService != nil {
 		verifiedPayment, err := h.yooKassaService.GetPayment(c.Request.Context(), paymentID)
 		if err != nil {
 			log.Printf("[YOOKASSA-SECURITY] Failed to verify payment with YooKassa API: %v", err)
@@ -224,6 +256,19 @@ func (h *YooKassaHandler) HandleWebhook(c *gin.Context) {
 				paymentID, verifiedPayment.Status, verifiedPayment.Paid)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "payment not confirmed by yookassa"})
 			return
+		}
+
+		// ZERO-TRUST DEFENSE: Overwrite payload fields with authoritative data directly from YooKassa server
+		payload.Object.Status = verifiedPayment.Status
+		payload.Object.Paid = verifiedPayment.Paid
+		if verifiedPayment.Amount.Value != "" {
+			payload.Object.Amount = verifiedPayment.Amount
+		}
+		if len(verifiedPayment.Metadata) > 0 {
+			payload.Object.Metadata = verifiedPayment.Metadata
+		}
+		if verifiedPayment.Description != "" {
+			payload.Object.Description = verifiedPayment.Description
 		}
 		log.Printf("[YOOKASSA-SECURITY] Payment %s verified directly with YooKassa API: 100%% authentic.", paymentID)
 	}

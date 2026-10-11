@@ -172,8 +172,12 @@ func main() {
 		// Payment Webhook endpoints (handles verification pings, callbacks, HMAC validation & access grant)
 		api.Any("/payments/webhook", paymentWebhookHandler.HandleAntilopayWebhook)
 		api.Any("/payments/tribute", paymentWebhookHandler.HandleTributeWebhook)
-		api.POST("/payments/yookassa/create", yooKassaHandler.CreateCheckout)
-		api.Any("/payments/yookassa", yooKassaHandler.HandleWebhook)
+
+		// YooKassa Payment Endpoints with strict per-IP rate limiting
+		yooKassaCreateLimiter := security.RateLimitMiddleware(20, 1*time.Minute, "Слишком много запросов на создание платежа. Пожалуйста, подождите 60 секунд.")
+		yooKassaWebhookLimiter := security.RateLimitMiddleware(60, 1*time.Minute, "Превышен лимит запросов к вебхуку.")
+		api.POST("/payments/yookassa/create", yooKassaCreateLimiter, yooKassaHandler.CreateCheckout)
+		api.Any("/payments/yookassa", yooKassaWebhookLimiter, yooKassaHandler.HandleWebhook)
 
 		// Admin Public Login (Username + Password -> JWT) with strict brute-force rate limiting (5 req/min)
 		adminLoginLimiter := security.RateLimitMiddleware(5, 1*time.Minute, "Слишком много попыток входа (максимум 5 в минуту). Пожалуйста, подождите 60 секунд.")

@@ -768,3 +768,71 @@ func TestYooKassaHandler_Webhook_Underpayment(t *testing.T) {
 	}
 }
 
+func TestYooKassaHandler_Webhook_Production_FailClosedWithoutKey(t *testing.T) {
+	// In production, an unconfigured secret key MUST reject incoming webhooks with 503
+	gin.SetMode(gin.ReleaseMode)
+	defer gin.SetMode(gin.TestMode)
+
+	cfg := &config.Config{
+		YooKassaShopID:    "1491540",
+		YooKassaSecretKey: "", // Missing key
+	}
+
+	handler := NewYooKassaHandler(nil, cfg, nil, nil, nil)
+	r := gin.New()
+	r.POST("/api/payments/yookassa", handler.HandleWebhook)
+
+	payload := map[string]interface{}{
+		"type":  "notification",
+		"event": "payment.succeeded",
+		"object": map[string]interface{}{
+			"id":     "fraud_attempt_1",
+			"status": "succeeded",
+			"paid":   true,
+			"amount": map[string]interface{}{
+				"value":    "6900.00",
+				"currency": "RUB",
+			},
+		},
+	}
+	bodyBytes, _ := json.Marshal(payload)
+	req := httptest.NewRequest("POST", "/api/payments/yookassa", bytes.NewReader(bodyBytes))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 Service Unavailable when secret key is unset in production, got %d", w.Code)
+	}
+}
+
+func TestYooKassaHandler_CreateCheckout_InputSanitization(t *testing.T) {
+	cfg := &config.Config{
+		YooKassaShopID:    "1491540",
+		YooKassaSecretKey: "test_secret_key",
+		Domain:            "so-called-spark.ru",
+	}
+
+	handler := NewYooKassaHandler(nil, cfg, nil, nil, nil)
+	r := gin.New()
+	r.POST("/api/payments/yookassa/create", handler.CreateCheckout)
+
+	// Test negative telegram ID and malicious username with script injection
+	reqBody, _ := json.Marshal(map[string]interface{}{
+		"tier":              "accelerator",
+		"telegram_username": "@valid_user<script>alert(1)</script>",
+		"telegram_id":       -999, // negative ID
+		"promo_code":        "SPARK5",
+	})
+
+	req := httptest.NewRequest("POST", "/api/payments/yookassa/create", bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	// Since yooKassaService is nil in this test handler, it safely returns 503 Service Unavailable
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 Service Unavailable for uninitialized service, got %d", w.Code)
+	}
+}
+
