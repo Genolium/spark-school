@@ -161,6 +161,11 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 		return false
 	}
 
+	// Always persist and sync every interacting user as a lead in Postgres CRM
+	if msg.From != nil {
+		s.syncTelegramUser(msg.From)
+	}
+
 	chatID := tu.ID(msg.Chat.ID)
 	session := s.getSession(msg.Chat.ID)
 
@@ -242,6 +247,16 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 					session.DiscountPct = discount
 					withPromo = true
 				}
+			}
+
+			if u := s.syncTelegramUser(msg.From); u != nil {
+				if tier != "" {
+					u.Tier = tier
+				}
+				if withPromo && session.PromoCode != "" {
+					u.PromoCode = session.PromoCode
+				}
+				s.db.Save(u)
 			}
 
 			s.sendPaymentDetails(chatID, msg.From, withPromo)
@@ -550,6 +565,12 @@ func (s *BotService) processPromoInput(chatID telego.ChatID, from *telego.User, 
 		}
 		session.DiscountPct = discount
 		session.State = StateWaitingReceipt
+
+		if u := s.syncTelegramUser(from); u != nil {
+			u.PromoCode = promo.Code
+			s.db.Save(u)
+		}
+
 		s.sendPaymentDetails(chatID, from, true)
 	} else {
 		session.State = StateDefault
@@ -630,6 +651,9 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 	if query == nil {
 		return false
 	}
+
+	// Always sync every interacting user as a lead in Postgres CRM
+	s.syncTelegramUser(&query.From)
 
 	data := query.Data
 

@@ -156,3 +156,18 @@ func TestBot_SendAccessNotificationToStudent_GracefulFallback(t *testing.T) {
 	}
 }
 
+func TestBot_SyncTelegramUser_LeadCreation(t *testing.T) {
+	service := NewBotService(&config.Config{}, nil)
+	defer service.Stop()
+
+	// 1. Nil user returns nil
+	if u := service.syncTelegramUser(nil); u != nil {
+		t.Errorf("expected nil for nil user, got %v", u)
+	}
+
+	// 2. Zero ID returns nil
+	if u := service.syncTelegramUser(&telego.User{ID: 0}); u != nil {
+		t.Errorf("expected nil for zero ID, got %v", u)
+	}
+}
+

@@ -19,6 +19,10 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) bool {
 		return false
 	}
 
+	if msg.From != nil {
+		s.syncTelegramUser(msg.From)
+	}
+
 	chatID := tu.ID(msg.Chat.ID)
 	session := s.getSession(msg.Chat.ID)
 
@@ -95,6 +99,14 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) bool {
 		m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML)
 		_, _ = s.bot.SendMessage(m)
 		return true
+	}
+
+	if u := s.syncTelegramUser(msg.From); u != nil {
+		u.Tier = chosenTier
+		if session.PromoCode != "" {
+			u.PromoCode = session.PromoCode
+		}
+		s.db.Save(u)
 	}
 
 	session.State = StateDefault

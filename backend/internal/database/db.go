@@ -67,6 +67,18 @@ func Init(cfg *config.Config) *gorm.DB {
 	db.Exec("UPDATE users SET tier = 'accelerator' WHERE tier IS NULL OR tier = ''")
 	db.Exec("UPDATE users SET paid_amount = 6900.00 WHERE has_access = true AND (paid_amount IS NULL OR paid_amount = 0)")
 
+	// Backfill users from payment_receipts if missing in users table
+	db.Exec(`
+		INSERT INTO users (telegram_id, username, first_name, role, has_access, tier, paid_amount, created_at)
+		SELECT DISTINCT pr.telegram_id, pr.username, COALESCE(NULLIF(pr.username, ''), 'Студент'), 'student', 
+		       (pr.status = 'approved'), pr.tier, 
+		       CASE WHEN pr.status = 'approved' THEN pr.amount ELSE 0 END, 
+		       pr.created_at
+		FROM payment_receipts pr
+		WHERE pr.telegram_id > 0 
+		  AND NOT EXISTS (SELECT 1 FROM users u WHERE u.telegram_id = pr.telegram_id)
+	`)
+
 	// Clean up legacy LMS tables if they exist from prior schema
 	_ = db.Migrator().DropTable("user_progress", "lessons", "modules")
 
