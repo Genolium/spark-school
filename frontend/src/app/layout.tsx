@@ -142,6 +142,9 @@ export const metadata: Metadata = {
   },
   verification: {
     yandex: "345a2f8dfaaff053",
+    other: {
+      "apay-tag": "RG3T2FTEIA5IEW5UUDHP7BMRODEY2BHG",
+    },
   },
   category: "education",
 };
@@ -283,6 +286,7 @@ export default function RootLayout({
     >
       <head>
         <meta name="yandex-verification" content="345a2f8dfaaff053" />
+        <meta name="apay-tag" content="RG3T2FTEIA5IEW5UUDHP7BMRODEY2BHG" />
         <script
           dangerouslySetInnerHTML={{
             __html: `
