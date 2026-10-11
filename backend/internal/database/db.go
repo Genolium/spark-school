@@ -58,6 +58,7 @@ func Init(cfg *config.Config) *gorm.DB {
 		&models.PaymentReceipt{},
 		&models.OutboxEvent{},
 		&models.PaymentTransaction{},
+		&models.DripLead{},
 	)
 	if err != nil {
 		log.Printf("[WARN] Notice during database auto-migration: %v", err)

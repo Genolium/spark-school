@@ -132,5 +132,16 @@ type PaymentTransaction struct {
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 
-
-
+// DripLead tracks progress of 72-hour automated nurture sequences for prospective students.
+type DripLead struct {
+	ID              uint      `gorm:"primaryKey" json:"id"`
+	TelegramID      int64     `gorm:"uniqueIndex;not null" json:"telegram_id"`
+	Username        string    `gorm:"size:64" json:"username"`
+	FirstName       string    `gorm:"size:128" json:"first_name"`
+	Stage           int       `gorm:"default:0" json:"stage"` // 0: new, 1: 2h sent, 2: 24h sent, 3: 48h sent, -1: cancelled/purchased
+	CalculatedScore int       `gorm:"default:0" json:"calculated_score"`
+	NextTriggerAt   time.Time `gorm:"index;not null" json:"next_trigger_at"`
+	IsCompleted     bool      `gorm:"default:false;index" json:"is_completed"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
+}

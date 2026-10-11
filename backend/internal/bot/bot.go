@@ -70,6 +70,9 @@ func NewBotService(cfg *config.Config, db *gorm.DB) *BotService {
 	// Start rate-limited outbound message worker
 	go s.startQueueWorker()
 
+	// Start 72-hour drip lead nurture worker
+	go s.startDripWorker()
+
 	return s
 }
 
@@ -482,6 +485,10 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 
 	session := s.getSession(chatID.ID)
 	session.State = StateWaitingReceipt
+
+	if from != nil {
+		s.RegisterOrUpdateDripLead(chatID.ID, from.Username, from.FirstName, 0)
+	}
 
 	var text string
 	var keyboard *telego.InlineKeyboardMarkup
@@ -1013,6 +1020,10 @@ func (s *BotService) sendAccessNotificationToStudent(studentTelegramID int64, st
 	if studentTelegramID == 0 {
 		return fmt.Errorf("student Telegram ID is 0")
 	}
+
+	// Student received access — immediately cancel any automated drip follow-ups
+	s.CancelDrip(studentTelegramID)
+
 	if s.bot == nil {
 		log.Printf("[Bot Approval Mock] sendAccessNotificationToStudent to %d: %s", studentTelegramID, studentMsg)
 		return nil

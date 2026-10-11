@@ -128,6 +128,7 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) bool 
 		}
 
 		session.CalcEnglishLevel = data
+		s.RegisterOrUpdateDripLead(chatID.ID, query.From.Username, query.From.FirstName, score)
 
 		star := TgEmoji(EmojiSparkleGreen, "✨")
 		sun := TgEmoji(EmojiSunGreen, "☀️")
