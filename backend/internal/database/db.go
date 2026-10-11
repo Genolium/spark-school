@@ -47,8 +47,50 @@ func Init(cfg *config.Config) *gorm.DB {
 		log.Printf("[WARN] Goose migration failed (falling back to GORM AutoMigrate): %v", err)
 	}
 
-	// Run GORM Auto-Migrations fallback to ensure all struct fields match
-	err = db.AutoMigrate(
+	// Direct DDL to guarantee critical tables exist immediately
+	db.Exec(`
+		CREATE TABLE IF NOT EXISTS drip_leads (
+			id BIGSERIAL PRIMARY KEY,
+			telegram_id BIGINT UNIQUE NOT NULL,
+			username VARCHAR(64),
+			first_name VARCHAR(128),
+			stage INT DEFAULT 0,
+			calculated_score INT DEFAULT 0,
+			next_trigger_at TIMESTAMP WITH TIME ZONE NOT NULL,
+			is_completed BOOLEAN DEFAULT FALSE,
+			created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+			updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+		);
+		CREATE INDEX IF NOT EXISTS idx_drip_leads_next_trigger_at ON drip_leads(next_trigger_at);
+		CREATE INDEX IF NOT EXISTS idx_drip_leads_is_completed ON drip_leads(is_completed);
+
+		CREATE TABLE IF NOT EXISTS payment_transactions (
+			id BIGSERIAL PRIMARY KEY,
+			payment_id VARCHAR(64) UNIQUE NOT NULL,
+			order_id VARCHAR(100),
+			telegram_id BIGINT,
+			username VARCHAR(64),
+			tier VARCHAR(32) DEFAULT 'accelerator',
+			amount NUMERIC(10, 2) NOT NULL,
+			original_amount NUMERIC(10, 2),
+			fee NUMERIC(10, 2),
+			status VARCHAR(32) NOT NULL,
+			currency VARCHAR(10) DEFAULT 'RUB',
+			pay_method VARCHAR(32),
+			product_name VARCHAR(128),
+			promo_code VARCHAR(32),
+			customer_email VARCHAR(128),
+			customer_phone VARCHAR(64),
+			raw_callback TEXT,
+			created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+			updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+		);
+		CREATE INDEX IF NOT EXISTS idx_payment_transactions_telegram_id ON payment_transactions(telegram_id);
+		CREATE INDEX IF NOT EXISTS idx_payment_transactions_order_id ON payment_transactions(order_id);
+	`)
+
+	// Run GORM Auto-Migrations per-model so single constraint warnings don't block subsequent models
+	modelsToMigrate := []any{
 		&models.User{},
 		&models.Referral{},
 		&models.AffiliateProfile{},
@@ -59,9 +101,11 @@ func Init(cfg *config.Config) *gorm.DB {
 		&models.OutboxEvent{},
 		&models.PaymentTransaction{},
 		&models.DripLead{},
-	)
-	if err != nil {
-		log.Printf("[WARN] Notice during database auto-migration: %v", err)
+	}
+	for _, m := range modelsToMigrate {
+		if mErr := db.AutoMigrate(m); mErr != nil {
+			log.Printf("[Database AutoMigrate] Note on %T: %v", m, mErr)
+		}
 	}
 
 	// Backfill existing active students with defaults if empty

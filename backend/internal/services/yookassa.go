@@ -51,6 +51,28 @@ type YooKassaConfirmation struct {
 	ConfirmationURL string `json:"confirmation_url,omitempty"`
 }
 
+// YooKassaCustomer represents receipt customer info for 54-FZ.
+type YooKassaCustomer struct {
+	Email string `json:"email,omitempty"`
+	Phone string `json:"phone,omitempty"`
+}
+
+// YooKassaReceiptItem represents line item in 54-FZ fiscal receipt.
+type YooKassaReceiptItem struct {
+	Description    string         `json:"description"`
+	Quantity       string         `json:"quantity"`
+	Amount         YooKassaAmount `json:"amount"`
+	VatCode        int            `json:"vat_code"` // 1: без НДС (для самозанятых и УСН)
+	PaymentMode    string         `json:"payment_mode,omitempty"` // "full_payment"
+	PaymentSubject string         `json:"payment_subject,omitempty"` // "service"
+}
+
+// YooKassaReceipt represents 54-FZ fiscal receipt data.
+type YooKassaReceipt struct {
+	Customer YooKassaCustomer     `json:"customer"`
+	Items    []YooKassaReceiptItem `json:"items"`
+}
+
 // YooKassaPaymentRequest payload for POST /v3/payments.
 type YooKassaPaymentRequest struct {
 	Amount       YooKassaAmount         `json:"amount"`
@@ -58,6 +80,7 @@ type YooKassaPaymentRequest struct {
 	Confirmation YooKassaConfirmation   `json:"confirmation"`
 	Description  string                 `json:"description"`
 	Metadata     map[string]string      `json:"metadata,omitempty"`
+	Receipt      *YooKassaReceipt       `json:"receipt,omitempty"`
 }
 
 // YooKassaPaymentResponse response from YooKassa API.
@@ -78,6 +101,37 @@ func (s *YooKassaService) CreatePayment(ctx context.Context, req YooKassaPayment
 		return nil, fmt.Errorf("yookassa credentials are not configured")
 	}
 
+	resp, err := s.doCreatePayment(ctx, req)
+	if err != nil && req.Receipt == nil && (strings.Contains(err.Error(), "receipt") || strings.Contains(err.Error(), "400")) {
+		// Shop requires 54-FZ fiscal receipt; auto-construct compliant receipt for self-employed/USN
+		customerEmail := "student@so-called-spark.ru"
+		if req.Metadata != nil && req.Metadata["email"] != "" {
+			customerEmail = req.Metadata["email"]
+		} else if req.Metadata != nil && req.Metadata["username"] != "" {
+			customerEmail = req.Metadata["username"] + "@t.me"
+		}
+
+		reqWithReceipt := req
+		reqWithReceipt.Receipt = &YooKassaReceipt{
+			Customer: YooKassaCustomer{Email: customerEmail},
+			Items: []YooKassaReceiptItem{
+				{
+					Description:    req.Description,
+					Quantity:       "1.00",
+					Amount:         req.Amount,
+					VatCode:        1, // 1: без НДС
+					PaymentMode:    "full_payment",
+					PaymentSubject: "service",
+				},
+			},
+		}
+		return s.doCreatePayment(ctx, reqWithReceipt)
+	}
+
+	return resp, err
+}
+
+func (s *YooKassaService) doCreatePayment(ctx context.Context, req YooKassaPaymentRequest) (*YooKassaPaymentResponse, error) {
 	bodyBytes, err := json.Marshal(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal payment request: %w", err)

@@ -27,7 +27,7 @@ type User struct {
 // Referral establishes the multi-tier relationship between students.
 type Referral struct {
 	ID               uint      `gorm:"primaryKey" json:"id"`
-	UserID           uint      `gorm:"uniqueIndex;not null" json:"user_id"`
+	UserID           uint      `gorm:"index;not null" json:"user_id"`
 	ReferredByID     *uint     `json:"referred_by_id"`     // Level 1 referrer
 	ParentReferrerID *uint     `json:"parent_referrer_id"` // Level 2 referrer
 	CreatedAt        time.Time `json:"created_at"`
