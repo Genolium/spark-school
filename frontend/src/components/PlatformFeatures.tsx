@@ -173,7 +173,7 @@ export function PlatformFeatures() {
               Гайд по Duolingo на 130+
             </h3>
             <p className="font-doc text-xs sm:text-sm text-slate-600 dark:text-slate-300 leading-relaxed">
-              Алгоритмы сдачи языкового экзамена от профессионального приглашённого преподавателя английского.
+              Пошаговые проверенные алгоритмы сдачи языкового тестирования DET на 130+ баллов для подтверждения уровня перед комиссией.
             </p>
           </div>
 

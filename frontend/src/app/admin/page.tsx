@@ -77,12 +77,16 @@ export default function AdminPage() {
     setUnlocked(false);
   };
 
-  const handleToggleAccess = async (userId: number, currentAccess: boolean) => {
+  const handleToggleAccess = async (
+    userId: number,
+    currentAccess: boolean,
+    extra?: { tier?: "accelerator" | "vip"; paid_amount?: number; promo_code?: string }
+  ) => {
     const nextAccess = !currentAccess;
     setStudents((prev) =>
-      prev.map((s) => (s.id === userId ? { ...s, has_access: nextAccess } : s))
+      prev.map((s) => (s.id === userId ? { ...s, has_access: nextAccess, ...(extra || {}) } : s))
     );
-    await api.toggleUserAccess(userId, nextAccess);
+    await api.toggleUserAccess(userId, nextAccess, extra);
     loadAdminData();
   };
 

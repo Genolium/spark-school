@@ -169,14 +169,59 @@ func (h *PromoHandler) Create(c *gin.Context) {
 	c.JSON(http.StatusCreated, promo)
 }
 
-// List returns all registered promo codes for the admin panel.
+type PromoWithStats struct {
+	models.PromoCode
+	TotalRevenue float64  `json:"total_revenue"`
+	Students     []string `json:"students"`
+}
+
+// List returns all registered promo codes with detailed usage and revenue stats for the admin panel.
 func (h *PromoHandler) List(c *gin.Context) {
 	var promos []models.PromoCode
 	if err := h.db.Order("created_at desc").Find(&promos).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка получения промокодов"})
 		return
 	}
-	c.JSON(http.StatusOK, promos)
+
+	// Fetch all students who used a promo code
+	var studentsWithPromo []models.User
+	h.db.Where("promo_code != '' AND promo_code IS NOT NULL").Find(&studentsWithPromo)
+
+	result := make([]PromoWithStats, len(promos))
+	for i, promo := range promos {
+		result[i] = PromoWithStats{
+			PromoCode: promo,
+			Students:  make([]string, 0),
+		}
+
+		cleanCode := strings.ToUpper(promo.Code)
+		for _, s := range studentsWithPromo {
+			if strings.ToUpper(s.PromoCode) == cleanCode {
+				studentDesc := s.FirstName
+				if s.LastName != "" {
+					studentDesc += " " + s.LastName
+				}
+				if s.Username != "" {
+					studentDesc += " (@" + s.Username + ")"
+				} else {
+					studentDesc += fmt.Sprintf(" (ID: %d)", s.TelegramID)
+				}
+				result[i].Students = append(result[i].Students, studentDesc)
+
+				if s.PaidAmount > 0 {
+					result[i].TotalRevenue += s.PaidAmount
+				} else if s.HasAccess {
+					if strings.ToLower(s.Tier) == "vip" {
+						result[i].TotalRevenue += 14155.0
+					} else {
+						result[i].TotalRevenue += 6555.0
+					}
+				}
+			}
+		}
+	}
+
+	c.JSON(http.StatusOK, result)
 }
 
 // ToggleStatus activates or deactivates a promo code.

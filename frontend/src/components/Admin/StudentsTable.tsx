@@ -1,12 +1,12 @@
 "use client";
 
 import React, { useState } from "react";
-import { Search, UserCheck, Lock, Plus, Pencil, Trash2 } from "lucide-react";
+import { Search, UserCheck, Lock, Plus, Pencil, Trash2, Tag, CreditCard } from "lucide-react";
 import { UserProfile, api } from "@/lib/api";
 
 interface StudentsTableProps {
   students: UserProfile[];
-  onToggleAccess: (userId: number, currentAccess: boolean) => void;
+  onToggleAccess: (userId: number, currentAccess: boolean, extra?: { tier?: "accelerator" | "vip"; paid_amount?: number; promo_code?: string }) => void;
   onRefresh: () => void;
 }
 
@@ -17,6 +17,9 @@ interface FormState {
   username: string;
   role: "student" | "admin";
   has_access: boolean;
+  tier: "accelerator" | "vip";
+  paid_amount: string;
+  promo_code: string;
 }
 
 const emptyForm: FormState = {
@@ -26,6 +29,9 @@ const emptyForm: FormState = {
   username: "",
   role: "student",
   has_access: false,
+  tier: "accelerator",
+  paid_amount: "6900",
+  promo_code: "",
 };
 
 const inputCls =
@@ -40,15 +46,40 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
   const [error, setError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<UserProfile | null>(null);
 
+  // Quick activate modal
+  const [activateTarget, setActivateTarget] = useState<UserProfile | null>(null);
+  const [activateTier, setActivateTier] = useState<"accelerator" | "vip">("accelerator");
+  const [activatePromo, setActivatePromo] = useState("");
+  const [activateAmount, setActivateAmount] = useState("6900");
+
   const filtered = students.filter((s) => {
     const q = query.toLowerCase();
     return (
       s.username?.toLowerCase().includes(q) ||
       s.first_name?.toLowerCase().includes(q) ||
       s.last_name?.toLowerCase().includes(q) ||
-      String(s.telegram_id).includes(q)
+      String(s.telegram_id).includes(q) ||
+      s.promo_code?.toLowerCase().includes(q)
     );
   });
+
+  const calculateDefaultAmount = (tier: "accelerator" | "vip", promo: string): string => {
+    const hasDiscount = promo.trim().length > 0;
+    if (tier === "vip") {
+      return hasDiscount ? "14155" : "14900";
+    }
+    return hasDiscount ? "6555" : "6900";
+  };
+
+  const handleTierChange = (newTier: "accelerator" | "vip") => {
+    const newAmount = calculateDefaultAmount(newTier, form.promo_code);
+    setForm({ ...form, tier: newTier, paid_amount: newAmount });
+  };
+
+  const handlePromoChange = (newPromo: string) => {
+    const newAmount = calculateDefaultAmount(form.tier, newPromo);
+    setForm({ ...form, promo_code: newPromo, paid_amount: newAmount });
+  };
 
   const openCreate = () => {
     setForm(emptyForm);
@@ -58,6 +89,10 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
   };
 
   const openEdit = (s: UserProfile) => {
+    const currentTier = s.tier || "accelerator";
+    const currentPromo = s.promo_code || "";
+    const currentAmount = s.paid_amount ? String(s.paid_amount) : calculateDefaultAmount(currentTier, currentPromo);
+
     setForm({
       telegram_id: String(s.telegram_id),
       first_name: s.first_name || "",
@@ -65,6 +100,9 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
       username: s.username || "",
       role: s.role,
       has_access: s.has_access,
+      tier: currentTier,
+      paid_amount: currentAmount,
+      promo_code: currentPromo,
     });
     setEditingId(s.id);
     setError(null);
@@ -75,6 +113,8 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
     e.preventDefault();
     setSaving(true);
     setError(null);
+
+    const paidNum = parseFloat(form.paid_amount) || 0;
 
     let res: { success: boolean; error?: string };
     if (modal === "create") {
@@ -91,6 +131,9 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
         username: form.username.trim(),
         role: form.role,
         has_access: form.has_access,
+        tier: form.tier,
+        paid_amount: paidNum,
+        promo_code: form.promo_code.trim().toUpperCase(),
       });
     } else {
       res = await api.updateAdminUser(editingId as number, {
@@ -99,6 +142,9 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
         username: form.username.trim(),
         role: form.role,
         has_access: form.has_access,
+        tier: form.tier,
+        paid_amount: paidNum,
+        promo_code: form.promo_code.trim().toUpperCase(),
       });
     }
 
@@ -123,6 +169,26 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
     }
   };
 
+  const handleOpenActivate = (student: UserProfile) => {
+    const studentTier = student.tier || "accelerator";
+    const studentPromo = student.promo_code || "";
+    setActivateTarget(student);
+    setActivateTier(studentTier);
+    setActivatePromo(studentPromo);
+    setActivateAmount(student.paid_amount ? String(student.paid_amount) : calculateDefaultAmount(studentTier, studentPromo));
+  };
+
+  const handleConfirmActivate = () => {
+    if (!activateTarget) return;
+    const paidNum = parseFloat(activateAmount) || 0;
+    onToggleAccess(activateTarget.id, false, {
+      tier: activateTier,
+      promo_code: activatePromo.trim().toUpperCase(),
+      paid_amount: paidNum,
+    });
+    setActivateTarget(null);
+  };
+
   return (
     <div className="p-6 sm:p-8 rounded-[32px] border border-slate-200 dark:border-white/15 bg-white dark:bg-black/30 shadow-sm mb-8">
       {/* Header and Search */}
@@ -132,7 +198,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
             Управление студентами и ручной эквайринг
           </h3>
           <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-1">
-            Создавайте, редактируйте и удаляйте студентов, переключайте доступ после оплаты
+            Выбирайте тариф, отслеживайте сумму оплаты, промокоды и активируйте доступ
           </p>
         </div>
 
@@ -141,7 +207,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Поиск по @username, имени, ID..."
+              placeholder="Поиск по @username, имени, промокоду..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className={`${inputCls} pl-10 pr-4`}
@@ -170,98 +236,206 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
             <tr className="border-b border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               <th className="pb-3 font-semibold">Студент</th>
               <th className="pb-3 font-semibold">Telegram ID</th>
-              <th className="pb-3 font-semibold">Роль</th>
-              <th className="pb-3 font-semibold">Статус доступа</th>
+              <th className="pb-3 font-semibold">Тариф</th>
+              <th className="pb-3 font-semibold">Оплачено</th>
+              <th className="pb-3 font-semibold">Промокод</th>
+              <th className="pb-3 font-semibold">Статус</th>
               <th className="pb-3 font-semibold text-right">Действия</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-white/5">
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={5} className="py-8 text-center text-slate-500">
+                <td colSpan={7} className="py-8 text-center text-slate-500">
                   Студенты не найдены
                 </td>
               </tr>
             )}
-            {filtered.map((s) => (
-              <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
-                <td className="py-4">
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-white/10 text-slate-900 dark:text-white font-bold flex items-center justify-center text-xs shrink-0">
-                      {s.first_name ? s.first_name[0] : "U"}
-                    </div>
-                    <div>
-                      <div className="text-slate-900 dark:text-white font-bold text-sm">
-                        {s.first_name} {s.last_name}
+            {filtered.map((s) => {
+              const isVIP = s.tier === "vip";
+              const displayAmount = s.paid_amount
+                ? s.paid_amount.toLocaleString("ru-RU") + " ₽"
+                : s.has_access
+                ? (isVIP ? "14 900 ₽" : "6 900 ₽")
+                : "0 ₽";
+
+              return (
+                <tr key={s.id} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
+                  <td className="py-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-white/10 text-slate-900 dark:text-white font-bold flex items-center justify-center text-xs shrink-0">
+                        {s.first_name ? s.first_name[0] : "U"}
                       </div>
-                      <div className="text-slate-500 dark:text-slate-400">
-                        @{s.username || "no_username"}
+                      <div>
+                        <div className="text-slate-900 dark:text-white font-bold text-sm">
+                          {s.first_name} {s.last_name}
+                        </div>
+                        <div className="text-slate-500 dark:text-slate-400">
+                          @{s.username || "no_username"}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                </td>
+                  </td>
 
-                <td className="py-4 text-slate-600 dark:text-slate-300">{s.telegram_id}</td>
+                  <td className="py-4 text-slate-600 dark:text-slate-300">{s.telegram_id}</td>
 
-                <td className="py-4">
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                      s.role === "admin"
-                        ? "bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/30"
-                        : "bg-slate-100 dark:bg-white/10 text-slate-600 dark:text-slate-300"
-                    }`}
-                  >
-                    {s.role === "admin" ? "Администратор" : "Студент"}
-                  </span>
-                </td>
-
-                <td className="py-4">
-                  {s.has_access ? (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25">
-                      <UserCheck className="w-3.5 h-3.5" />
-                      Активен
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/25">
-                      <Lock className="w-3.5 h-3.5" />
-                      Закрыт
-                    </span>
-                  )}
-                </td>
-
-                <td className="py-4">
-                  <div className="flex items-center justify-end gap-2">
-                    <button
-                      onClick={() => onToggleAccess(s.id, s.has_access)}
-                      className={`px-3 py-2 rounded-xl text-[11px] font-bold transition-all border ${
-                        s.has_access
-                          ? "bg-rose-500/10 text-rose-600 dark:text-rose-300 hover:bg-rose-500/20 border-rose-500/30"
-                          : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20 border-emerald-500/30"
+                  {/* Tier Badge */}
+                  <td className="py-4">
+                    <span
+                      className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 ${
+                        isVIP
+                          ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                          : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30"
                       }`}
                     >
-                      {s.has_access ? "Отозвать доступ" : "Активировать доступ"}
-                    </button>
-                    <button
-                      onClick={() => openEdit(s)}
-                      title="Редактировать"
-                      className="p-2 rounded-xl border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10 transition-all"
-                    >
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      onClick={() => setDeleteTarget(s)}
-                      title="Удалить"
-                      className="p-2 rounded-xl border border-rose-500/30 text-rose-600 dark:text-rose-300 hover:bg-rose-500/10 transition-all"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                      {isVIP ? "★ VIP" : "Акселератор"}
+                    </span>
+                  </td>
+
+                  {/* Paid Amount */}
+                  <td className="py-4 font-bold text-slate-900 dark:text-white">
+                    {displayAmount}
+                  </td>
+
+                  {/* Promo Code */}
+                  <td className="py-4">
+                    {s.promo_code ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-700 dark:text-amber-400 font-bold text-[11px]">
+                        <Tag className="w-3 h-3" />
+                        <span>{s.promo_code}</span>
+                      </span>
+                    ) : (
+                      <span className="text-slate-400">—</span>
+                    )}
+                  </td>
+
+                  {/* Status Badge */}
+                  <td className="py-4">
+                    {s.has_access ? (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25">
+                        <UserCheck className="w-3.5 h-3.5" />
+                        Активен
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-semibold bg-rose-500/15 text-rose-600 dark:text-rose-300 border border-rose-500/25">
+                        <Lock className="w-3.5 h-3.5" />
+                        Закрыт
+                      </span>
+                    )}
+                  </td>
+
+                  {/* Actions */}
+                  <td className="py-4">
+                    <div className="flex items-center justify-end gap-2">
+                      {s.has_access ? (
+                        <button
+                          onClick={() => onToggleAccess(s.id, true)}
+                          className="px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all border bg-rose-500/10 text-rose-600 dark:text-rose-300 hover:bg-rose-500/20 border-rose-500/30"
+                        >
+                          Отозвать
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleOpenActivate(s)}
+                          className="px-3 py-1.5 rounded-xl text-[11px] font-bold transition-all border bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 hover:bg-emerald-500/20 border-emerald-500/30"
+                        >
+                          Активировать
+                        </button>
+                      )}
+                      <button
+                        onClick={() => openEdit(s)}
+                        title="Редактировать"
+                        className="p-1.5 rounded-xl border border-slate-200 dark:border-white/10 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10 transition-all"
+                      >
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button
+                        onClick={() => setDeleteTarget(s)}
+                        title="Удалить"
+                        className="p-1.5 rounded-xl border border-rose-500/30 text-rose-600 dark:text-rose-300 hover:bg-rose-500/10 transition-all"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
+
+      {/* Quick Activate Modal */}
+      {activateTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-white dark:bg-[#12161D] border border-slate-200 dark:border-white/20 rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl text-slate-900 dark:text-white">
+            <h3 className="text-lg font-bold">Активировать доступ студенту</h3>
+            <p className="text-xs font-mono text-slate-500 dark:text-slate-400">
+              {activateTarget.first_name} {activateTarget.last_name} (@{activateTarget.username || activateTarget.telegram_id})
+            </p>
+
+            <div className="space-y-3">
+              <label className="block text-[11px] font-mono text-slate-500">
+                Тариф
+                <select
+                  value={activateTier}
+                  onChange={(e) => {
+                    const t = e.target.value as "accelerator" | "vip";
+                    setActivateTier(t);
+                    setActivateAmount(calculateDefaultAmount(t, activatePromo));
+                  }}
+                  className={`${inputCls} mt-1 font-semibold`}
+                >
+                  <option value="accelerator">Акселератор (6 900 ₽)</option>
+                  <option value="vip">★ VIP-сопровождение (14 900 ₽)</option>
+                </select>
+              </label>
+
+              <label className="block text-[11px] font-mono text-slate-500">
+                Промокод (если применялся)
+                <input
+                  value={activatePromo}
+                  onChange={(e) => {
+                    const p = e.target.value.toUpperCase();
+                    setActivatePromo(p);
+                    setActivateAmount(calculateDefaultAmount(activateTier, p));
+                  }}
+                  className={`${inputCls} mt-1`}
+                  placeholder="SPARK26"
+                />
+              </label>
+
+              <label className="block text-[11px] font-mono text-slate-500">
+                Фактическая сумма оплаты (₽)
+                <input
+                  type="number"
+                  value={activateAmount}
+                  onChange={(e) => setActivateAmount(e.target.value)}
+                  className={`${inputCls} mt-1 font-bold`}
+                  placeholder="6900"
+                />
+              </label>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setActivateTarget(null)}
+                className="flex-1 px-4 py-2 rounded-xl border border-slate-200 dark:border-white/10 text-xs font-mono"
+              >
+                Отмена
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmActivate}
+                className="flex-1 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-mono font-bold shadow-md"
+              >
+                Выдать доступ
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Create / Edit modal */}
       {modal && (
@@ -301,6 +475,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
                   placeholder="123456789"
                 />
               </label>
+
               <div className="grid grid-cols-2 gap-3">
                 <label className="block text-[11px] font-mono text-slate-500">
                   Имя
@@ -319,33 +494,74 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
                   />
                 </label>
               </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block text-[11px] font-mono text-slate-500">
+                  Username
+                  <input
+                    value={form.username}
+                    onChange={(e) => setForm({ ...form, username: e.target.value })}
+                    className={`${inputCls} mt-1`}
+                    placeholder="@username"
+                  />
+                </label>
+                <label className="block text-[11px] font-mono text-slate-500">
+                  Роль
+                  <select
+                    value={form.role}
+                    onChange={(e) => setForm({ ...form, role: e.target.value as "student" | "admin" })}
+                    className={`${inputCls} mt-1`}
+                  >
+                    <option value="student">Студент</option>
+                    <option value="admin">Администратор</option>
+                  </select>
+                </label>
+              </div>
+
+              {/* Tier Selection */}
+              <div className="grid grid-cols-2 gap-3">
+                <label className="block text-[11px] font-mono text-slate-500">
+                  Тариф
+                  <select
+                    value={form.tier}
+                    onChange={(e) => handleTierChange(e.target.value as "accelerator" | "vip")}
+                    className={`${inputCls} mt-1 font-semibold`}
+                  >
+                    <option value="accelerator">Акселератор (6 900 ₽)</option>
+                    <option value="vip">★ VIP (14 900 ₽)</option>
+                  </select>
+                </label>
+
+                <label className="block text-[11px] font-mono text-slate-500">
+                  Промокод
+                  <input
+                    value={form.promo_code}
+                    onChange={(e) => handlePromoChange(e.target.value.toUpperCase())}
+                    className={`${inputCls} mt-1`}
+                    placeholder="SPARK26"
+                  />
+                </label>
+              </div>
+
+              {/* Paid Amount Input */}
               <label className="block text-[11px] font-mono text-slate-500">
-                Username
+                Сумма оплаты (₽)
                 <input
-                  value={form.username}
-                  onChange={(e) => setForm({ ...form, username: e.target.value })}
-                  className={`${inputCls} mt-1`}
-                  placeholder="@username"
+                  type="number"
+                  value={form.paid_amount}
+                  onChange={(e) => setForm({ ...form, paid_amount: e.target.value })}
+                  className={`${inputCls} mt-1 font-bold`}
+                  placeholder="6900"
                 />
               </label>
-              <label className="block text-[11px] font-mono text-slate-500">
-                Роль
-                <select
-                  value={form.role}
-                  onChange={(e) => setForm({ ...form, role: e.target.value as "student" | "admin" })}
-                  className={`${inputCls} mt-1`}
-                >
-                  <option value="student">Студент</option>
-                  <option value="admin">Администратор</option>
-                </select>
-              </label>
-              <label className="flex items-center gap-2 text-xs font-mono text-slate-700 dark:text-slate-300">
+
+              <label className="flex items-center gap-2 text-xs font-mono text-slate-700 dark:text-slate-300 pt-1">
                 <input
                   type="checkbox"
                   checked={form.has_access}
                   onChange={(e) => setForm({ ...form, has_access: e.target.checked })}
                 />
-                Доступ к закрытому каналу
+                Доступ к закрытому каналу и материалам
               </label>
             </div>
 

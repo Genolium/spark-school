@@ -57,10 +57,15 @@ func Init(cfg *config.Config) *gorm.DB {
 		&models.PromoCode{},
 		&models.PaymentReceipt{},
 		&models.OutboxEvent{},
+		&models.PaymentTransaction{},
 	)
 	if err != nil {
 		log.Printf("[WARN] Notice during database auto-migration: %v", err)
 	}
+
+	// Backfill existing active students with defaults if empty
+	db.Exec("UPDATE users SET tier = 'accelerator' WHERE tier IS NULL OR tier = ''")
+	db.Exec("UPDATE users SET paid_amount = 6900.00 WHERE has_access = true AND (paid_amount IS NULL OR paid_amount = 0)")
 
 	// Clean up legacy LMS tables if they exist from prior schema
 	_ = db.Migrator().DropTable("user_progress", "lessons", "modules")

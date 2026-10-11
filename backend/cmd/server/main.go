@@ -74,11 +74,18 @@ func main() {
 		}
 		return nil
 	})
+	paymentWebhookHandler := handlers.NewPaymentWebhookHandler(
+		db, cfg, affiliateService, botService.SendNotification, botService.CreateOneTimeInviteLink,
+	)
 
 	// Gin Router
 	router := gin.New()
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
+
+	// Top-level direct webhook route (matches Caddy reverse proxy for /api/payments/webhook)
+	router.Any("/api/payments/webhook", paymentWebhookHandler.HandleAntilopayWebhook)
+	router.Any("/payments/webhook", paymentWebhookHandler.HandleAntilopayWebhook)
 
 	// Security Middleware: Headers & Body Payload Limit (2MB)
 	router.Use(security.SecurityHeadersMiddleware())
@@ -151,13 +158,8 @@ func main() {
 			c.JSON(http.StatusOK, gin.H{"ok": true})
 		})
 
-		// Antilopay Payment Webhook endpoint (handles verification pings and callback notifications)
-		api.Any("/payments/webhook", func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{
-				"status":  "ok",
-				"message": "webhook received",
-			})
-		})
+		// Antilopay Payment Webhook endpoint (handles verification pings, callbacks, HMAC validation & access grant)
+		api.Any("/payments/webhook", paymentWebhookHandler.HandleAntilopayWebhook)
 
 		// Admin Public Login (Username + Password -> JWT) with strict brute-force rate limiting (5 req/min)
 		adminLoginLimiter := security.RateLimitMiddleware(5, 1*time.Minute, "Слишком много попыток входа (максимум 5 в минуту). Пожалуйста, подождите 60 секунд.")

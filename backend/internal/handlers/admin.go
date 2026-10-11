@@ -102,6 +102,7 @@ func (h *AdminHandler) Login(c *gin.Context) {
 }
 
 // GetStats returns revenue, enrollments, and conversion metrics for the admin dashboard.
+// GetStats returns revenue, enrollments, and conversion metrics for the admin dashboard.
 func (h *AdminHandler) GetStats(c *gin.Context) {
 	var totalUsers int64
 	h.db.Model(&models.User{}).Where("role != ?", "admin").Count(&totalUsers)
@@ -115,10 +116,29 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 	var pendingPayoutsSum float64
 	h.db.Model(&models.PayoutRequest{}).Where("status = 'pending'").Select("COALESCE(SUM(amount), 0)").Scan(&pendingPayoutsSum)
 
+	// Calculate accurate gross revenue: sum of paid_amount for all active students with access
 	var grossVolume float64
-	h.db.Model(&models.PaymentReceipt{}).Where("status = 'approved'").Select("COALESCE(SUM(amount), 0)").Scan(&grossVolume)
-	if grossVolume == 0 && activeStudents > 0 {
-		grossVolume = float64(activeStudents) * 6900.0
+	var activeUsers []models.User
+	h.db.Model(&models.User{}).Where("has_access = true AND role != ?", "admin").Find(&activeUsers)
+	for _, u := range activeUsers {
+		if u.PaidAmount > 0 {
+			grossVolume += u.PaidAmount
+		} else {
+			// Fallback based on tier
+			if strings.ToLower(u.Tier) == "vip" {
+				if u.PromoCode != "" {
+					grossVolume += 14155.0
+				} else {
+					grossVolume += 14900.0
+				}
+			} else {
+				if u.PromoCode != "" {
+					grossVolume += 6555.0
+				} else {
+					grossVolume += 6900.0
+				}
+			}
+		}
 	}
 
 	conversionRate := 0.0
@@ -164,12 +184,15 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 
 // CreateUserRequest payload for manually adding a user/student
 type CreateUserRequest struct {
-	TelegramID int64  `json:"telegram_id" binding:"required"`
-	Username   string `json:"username"`
-	FirstName  string `json:"first_name" binding:"required"`
-	LastName   string `json:"last_name"`
-	Role       string `json:"role"`
-	HasAccess  bool   `json:"has_access"`
+	TelegramID int64    `json:"telegram_id" binding:"required"`
+	Username   string   `json:"username"`
+	FirstName  string   `json:"first_name" binding:"required"`
+	LastName   string   `json:"last_name"`
+	Role       string   `json:"role"`
+	HasAccess  bool     `json:"has_access"`
+	Tier       string   `json:"tier"`        // 'accelerator', 'vip'
+	PaidAmount *float64 `json:"paid_amount"` // custom paid sum
+	PromoCode  string   `json:"promo_code"`  // promo code used
 }
 
 // CreateUser handles admin manual creation of a user/student
@@ -185,6 +208,31 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 		role = "student"
 	}
 
+	tier := strings.ToLower(strings.TrimSpace(req.Tier))
+	if tier == "" {
+		tier = "accelerator"
+	}
+	cleanPromo := strings.ToUpper(strings.TrimSpace(req.PromoCode))
+
+	paidAmount := 0.0
+	if req.PaidAmount != nil {
+		paidAmount = *req.PaidAmount
+	} else if req.HasAccess {
+		if tier == "vip" {
+			if cleanPromo != "" {
+				paidAmount = 14155.0
+			} else {
+				paidAmount = 14900.0
+			}
+		} else {
+			if cleanPromo != "" {
+				paidAmount = 6555.0
+			} else {
+				paidAmount = 6900.0
+			}
+		}
+	}
+
 	user := models.User{
 		TelegramID: req.TelegramID,
 		Username:   strings.TrimPrefix(req.Username, "@"),
@@ -192,6 +240,9 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 		LastName:   req.LastName,
 		Role:       role,
 		HasAccess:  req.HasAccess,
+		Tier:       tier,
+		PaidAmount: paidAmount,
+		PromoCode:  cleanPromo,
 	}
 
 	if req.HasAccess {
@@ -204,16 +255,24 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 		return
 	}
 
+	// If promo was specified with access granted, increment promo uses atomically
+	if req.HasAccess && cleanPromo != "" {
+		_, _ = RedeemPromoCode(h.db, cleanPromo)
+	}
+
 	c.JSON(http.StatusCreated, user)
 }
 
 // UpdateUserRequest payload for updating user profile
 type UpdateUserRequest struct {
-	Username  string `json:"username"`
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
-	Role      string `json:"role"`
-	HasAccess *bool  `json:"has_access"`
+	Username   string   `json:"username"`
+	FirstName  string   `json:"first_name"`
+	LastName   string   `json:"last_name"`
+	Role       string   `json:"role"`
+	HasAccess  *bool    `json:"has_access"`
+	Tier       string   `json:"tier"`
+	PaidAmount *float64 `json:"paid_amount"`
+	PromoCode  *string  `json:"promo_code"`
 }
 
 // UpdateUser updates user details
@@ -243,11 +302,35 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 	if req.Role != "" {
 		user.Role = req.Role
 	}
+	if req.Tier != "" {
+		user.Tier = strings.ToLower(strings.TrimSpace(req.Tier))
+	}
+	if req.PaidAmount != nil {
+		user.PaidAmount = *req.PaidAmount
+	}
+	if req.PromoCode != nil {
+		user.PromoCode = strings.ToUpper(strings.TrimSpace(*req.PromoCode))
+	}
 	if req.HasAccess != nil {
 		user.HasAccess = *req.HasAccess
 		if *req.HasAccess && user.AccessGrantedAt == nil {
 			now := time.Now()
 			user.AccessGrantedAt = &now
+			if user.PaidAmount == 0 {
+				if user.Tier == "vip" {
+					if user.PromoCode != "" {
+						user.PaidAmount = 14155.0
+					} else {
+						user.PaidAmount = 14900.0
+					}
+				} else {
+					if user.PromoCode != "" {
+						user.PaidAmount = 6555.0
+					} else {
+						user.PaidAmount = 6900.0
+					}
+				}
+			}
 		}
 	}
 
@@ -279,8 +362,10 @@ func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 	}
 
 	var req struct {
-		HasAccess bool   `json:"has_access"`
-		PromoCode string `json:"promo_code,omitempty"`
+		HasAccess  bool     `json:"has_access"`
+		PromoCode  string   `json:"promo_code,omitempty"`
+		Tier       string   `json:"tier,omitempty"`
+		PaidAmount *float64 `json:"paid_amount,omitempty"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request body"})
@@ -335,9 +420,33 @@ func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 
 		wasActive = user.HasAccess
 		user.HasAccess = req.HasAccess
+		if req.Tier != "" {
+			user.Tier = strings.ToLower(strings.TrimSpace(req.Tier))
+		}
+		if cleanPromo != "" {
+			user.PromoCode = cleanPromo
+		}
+		if req.PaidAmount != nil {
+			user.PaidAmount = *req.PaidAmount
+		}
 		if req.HasAccess && user.AccessGrantedAt == nil {
 			now := time.Now()
 			user.AccessGrantedAt = &now
+			if user.PaidAmount == 0 {
+				if user.Tier == "vip" {
+					if user.PromoCode != "" {
+						user.PaidAmount = 14155.0
+					} else {
+						user.PaidAmount = 14900.0
+					}
+				} else {
+					if user.PromoCode != "" {
+						user.PaidAmount = 6555.0
+					} else {
+						user.PaidAmount = 6900.0
+					}
+				}
+			}
 		}
 		if err := tx.Save(&user).Error; err != nil {
 			return err
@@ -356,7 +465,10 @@ func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 
 			// 2. Affiliate Commission Settlement (inside same transaction)
 			if h.affiliateService != nil {
-				purchasePrice := 6900.0
+				purchasePrice := user.PaidAmount
+				if purchasePrice <= 0 {
+					purchasePrice = 6900.0
+				}
 				var userReceipt models.PaymentReceipt
 				if err := tx.Where("telegram_id = ?", user.TelegramID).Order("id DESC").First(&userReceipt).Error; err == nil && userReceipt.Amount > 0 {
 					purchasePrice = userReceipt.Amount

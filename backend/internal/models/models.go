@@ -15,6 +15,9 @@ type User struct {
 	Role            string     `gorm:"size:20;default:'student'" json:"role"` // 'student', 'admin'
 	HasAccess       bool       `gorm:"default:false" json:"has_access"`
 	AccessGrantedAt *time.Time `json:"access_granted_at"`
+	Tier            string     `gorm:"size:32;default:'accelerator'" json:"tier"` // 'accelerator', 'vip'
+	PaidAmount      float64    `gorm:"type:numeric(10,2);default:0.00" json:"paid_amount"`
+	PromoCode       string     `gorm:"size:32" json:"promo_code"`
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
 
@@ -104,6 +107,28 @@ type OutboxEvent struct {
 	LastError   string     `gorm:"type:text" json:"last_error,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
 	ProcessedAt *time.Time `json:"processed_at,omitempty"`
+}
+
+// PaymentTransaction logs verified Antilopay/gateway payments with idempotency guarantee.
+type PaymentTransaction struct {
+	ID             uint      `gorm:"primaryKey" json:"id"`
+	PaymentID      string    `gorm:"uniqueIndex;size:64;not null" json:"payment_id"`
+	OrderID        string    `gorm:"index;size:100" json:"order_id"`
+	TelegramID     int64     `gorm:"index" json:"telegram_id"`
+	Username       string    `gorm:"size:64" json:"username"`
+	Tier           string    `gorm:"size:32;default:'accelerator'" json:"tier"`
+	Amount         float64   `gorm:"type:numeric(10,2);not null" json:"amount"`
+	OriginalAmount float64   `gorm:"type:numeric(10,2)" json:"original_amount"`
+	Fee            float64   `gorm:"type:numeric(10,2)" json:"fee"`
+	Status         string    `gorm:"size:32;not null" json:"status"` // 'SUCCESS', 'FAIL', 'PENDING'
+	Currency       string    `gorm:"size:10;default:'RUB'" json:"currency"`
+	PayMethod      string    `gorm:"size:32" json:"pay_method"`
+	PromoCode      string    `gorm:"size:32" json:"promo_code"`
+	CustomerEmail  string    `gorm:"size:128" json:"customer_email"`
+	CustomerPhone  string    `gorm:"size:64" json:"customer_phone"`
+	RawCallback    string    `gorm:"type:text" json:"raw_callback"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 

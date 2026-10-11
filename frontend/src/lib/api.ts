@@ -10,6 +10,9 @@ export interface UserProfile {
   role: "student" | "admin";
   has_access: boolean;
   access_granted_at?: string;
+  tier?: "accelerator" | "vip";
+  paid_amount?: number;
+  promo_code?: string;
 }
 
 export interface AdminStats {
@@ -62,6 +65,8 @@ export interface PromoCode {
   reward_amount: number;
   is_active: boolean;
   created_at: string;
+  total_revenue?: number;
+  students?: string[];
 }
 
 export interface ValidatePromoResponse {
@@ -241,7 +246,11 @@ export const api = {
   },
 
   // Toggle user access in Admin
-  async toggleUserAccess(userId: number, hasAccess: boolean): Promise<boolean> {
+  async toggleUserAccess(
+    userId: number,
+    hasAccess: boolean,
+    extra?: { tier?: string; paid_amount?: number; promo_code?: string }
+  ): Promise<boolean> {
     const token = getAdminToken();
     try {
       const res = await fetch(`${API_BASE}/admin/users/${userId}/access`, {
@@ -250,7 +259,7 @@ export const api = {
           "Content-Type": "application/json",
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
-        body: JSON.stringify({ has_access: hasAccess }),
+        body: JSON.stringify({ has_access: hasAccess, ...extra }),
         credentials: "include",
       });
       if (res.ok) return true;
@@ -487,6 +496,9 @@ export const api = {
     username?: string;
     role?: "student" | "admin";
     has_access?: boolean;
+    tier?: "accelerator" | "vip";
+    paid_amount?: number;
+    promo_code?: string;
   }): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
     const token = getAdminToken();
     try {
@@ -513,6 +525,9 @@ export const api = {
           username: data.username || "",
           role: data.role || "student",
           has_access: !!data.has_access,
+          tier: data.tier || "accelerator",
+          paid_amount: data.paid_amount || 0,
+          promo_code: data.promo_code || "",
         },
       };
     }
@@ -526,6 +541,9 @@ export const api = {
       username?: string;
       role?: "student" | "admin";
       has_access?: boolean;
+      tier?: "accelerator" | "vip";
+      paid_amount?: number;
+      promo_code?: string;
     }
   ): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
     const token = getAdminToken();

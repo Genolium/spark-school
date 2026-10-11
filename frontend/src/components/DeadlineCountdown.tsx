@@ -174,46 +174,47 @@ export function DeadlineCountdown({
         </div>
 
         {/* Right: Digital Countdown Grid */}
-        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4 w-full lg:w-auto">
-          <div className="grid grid-cols-4 gap-2 sm:gap-3 text-center">
+        <div className="flex flex-col sm:flex-row items-center gap-3 sm:gap-4 w-full lg:w-auto shrink-0">
+          <div className="grid grid-cols-4 gap-2 sm:gap-2.5 text-center w-full sm:w-auto">
             
             {/* Days */}
-            <div className="p-2.5 sm:p-3.5 rounded-2xl bg-white/80 dark:bg-black/40 border border-emerald-500/20 backdrop-blur-md shadow-inner">
-              <div className="text-2xl sm:text-3xl font-black font-mono text-slate-900 dark:text-white tracking-tight">
+            <div className="py-2.5 px-3 sm:py-3 sm:px-3.5 rounded-2xl bg-white dark:bg-white/[0.05] border border-emerald-500/20 dark:border-white/10 shadow-sm min-w-[62px] sm:min-w-[70px] flex flex-col items-center justify-center">
+              <div className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-900 dark:text-white tracking-tight tabular-nums leading-none">
                 {pad(timeLeft.days)}
               </div>
-              <div className="text-[10px] sm:text-xs font-mono uppercase text-slate-700 dark:text-slate-300 font-semibold mt-0.5">
+              <div className="text-[10px] sm:text-[11px] font-mono uppercase text-slate-500 dark:text-slate-400 font-semibold mt-1">
                 дней
               </div>
             </div>
 
             {/* Hours */}
-            <div className="p-2.5 sm:p-3.5 rounded-2xl bg-white/80 dark:bg-black/40 border border-emerald-500/20 backdrop-blur-md shadow-inner">
-              <div className="text-2xl sm:text-3xl font-black font-mono text-slate-900 dark:text-white tracking-tight">
+            <div className="py-2.5 px-3 sm:py-3 sm:px-3.5 rounded-2xl bg-white dark:bg-white/[0.05] border border-emerald-500/20 dark:border-white/10 shadow-sm min-w-[62px] sm:min-w-[70px] flex flex-col items-center justify-center">
+              <div className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-900 dark:text-white tracking-tight tabular-nums leading-none">
                 {pad(timeLeft.hours)}
               </div>
-              <div className="text-[10px] sm:text-xs font-mono uppercase text-slate-700 dark:text-slate-300 font-semibold mt-0.5">
+              <div className="text-[10px] sm:text-[11px] font-mono uppercase text-slate-500 dark:text-slate-400 font-semibold mt-1">
                 часов
               </div>
             </div>
 
             {/* Minutes */}
-            <div className="p-2.5 sm:p-3.5 rounded-2xl bg-white/80 dark:bg-black/40 border border-emerald-500/20 backdrop-blur-md shadow-inner">
-              <div className="text-2xl sm:text-3xl font-black font-mono text-slate-900 dark:text-white tracking-tight">
+            <div className="py-2.5 px-3 sm:py-3 sm:px-3.5 rounded-2xl bg-white dark:bg-white/[0.05] border border-emerald-500/20 dark:border-white/10 shadow-sm min-w-[62px] sm:min-w-[70px] flex flex-col items-center justify-center">
+              <div className="text-2xl sm:text-3xl font-extrabold font-heading text-slate-900 dark:text-white tracking-tight tabular-nums leading-none">
                 {pad(timeLeft.minutes)}
               </div>
-              <div className="text-[10px] sm:text-xs font-mono uppercase text-slate-700 dark:text-slate-300 font-semibold mt-0.5">
+              <div className="text-[10px] sm:text-[11px] font-mono uppercase text-slate-500 dark:text-slate-400 font-semibold mt-1">
                 минут
               </div>
             </div>
 
             {/* Seconds */}
-            <div className="p-2.5 sm:p-3.5 rounded-2xl bg-emerald-500/10 dark:bg-emerald-500/15 border border-emerald-500/30 backdrop-blur-md shadow-inner">
-              <div className="text-2xl sm:text-3xl font-black font-mono text-emerald-600 dark:text-emerald-400 tracking-tight">
+            <div className="py-2.5 px-3 sm:py-3 sm:px-3.5 rounded-2xl bg-white dark:bg-white/[0.05] border border-emerald-500/30 dark:border-emerald-500/30 shadow-sm min-w-[62px] sm:min-w-[70px] flex flex-col items-center justify-center relative overflow-hidden">
+              <div className="text-2xl sm:text-3xl font-extrabold font-heading text-emerald-700 dark:text-emerald-400 tracking-tight tabular-nums leading-none">
                 {pad(timeLeft.seconds)}
               </div>
-              <div className="text-[10px] sm:text-xs font-mono uppercase text-emerald-700 dark:text-emerald-300 font-semibold mt-0.5">
-                секунд
+              <div className="text-[10px] sm:text-[11px] font-mono uppercase text-emerald-700 dark:text-emerald-400 font-semibold mt-1 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                <span>сек</span>
               </div>
             </div>
 
@@ -223,7 +224,7 @@ export function DeadlineCountdown({
             <button
               type="button"
               onClick={onOpenPayment}
-              className="btn-primary-mono px-5 py-3.5 text-xs sm:text-sm font-bold flex items-center justify-center gap-2 active:scale-95 shadow-lg group"
+              className="btn-primary-mono w-full sm:w-auto px-6 py-3.5 rounded-2xl text-xs sm:text-sm font-bold flex items-center justify-center gap-2 active:scale-95 shadow-md group shrink-0 whitespace-nowrap self-stretch sm:self-auto"
             >
               <span>Подать заявку</span>
               <ArrowUpRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />

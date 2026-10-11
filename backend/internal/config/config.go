@@ -20,6 +20,8 @@ type Config struct {
 	AdminPassword      string
 	Domain             string
 	FrontendURL        string
+	AntilopayPublicKey string
+	AntilopaySecretID  string
 }
 
 func Load() *Config {
@@ -42,6 +44,8 @@ func Load() *Config {
 		AdminPassword:      getEnv("ADMIN_PASSWORD", "SparkAdmin2026!"),
 		Domain:             getEnv("DOMAIN", "sparkprep.ru"),
 		FrontendURL:        getEnv("FRONTEND_URL", "http://localhost:3000"),
+		AntilopayPublicKey: getEnv("ANTILOPAY_PUBLIC_KEY", ""),
+		AntilopaySecretID:  getEnv("ANTILOPAY_SECRET_ID", ""),
 	}
 }
 
