@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"strconv"
 	"strings"
 	"time"
 	"unicode/utf16"
@@ -518,40 +517,34 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 %s Акселератор: <b>%d ₽</b> (скидка %d ₽)
 %s VIP: <b>%d ₽</b> (скидка %d ₽)
 
-💳 <b>Способы оплаты:</b>
-1️⃣ <b>Официальная оплата через ЮKassa / ЮMoney:</b>
-• Банковские карты любых банков РФ, СБП, SberPay, Mir Pay
-• Официальный фискальный чек ФНС (54-ФЗ)
-• Выберите тариф кнопкой ниже для моментальной оплаты
-
-🏛 2️⃣ <b>Прямой перевод по СБП (0%% без комиссии):</b>
+🏛 <b>Прямой перевод по СБП (0%% без комиссии):</b>
 • Банк: <b>Т-Банк (Тинькофф)</b>
 • Номер телефона: <code>+7 981 163-36-91</code>
 • Получатель: <b>Васюнин Илья Олегович</b>
 • Назначение платежа: <code>SPARK ПРОМО [Тариф]</code>
 
-%s <b>После онлайн-оплаты доступ в закрытый канал выдаётся автоматически!</b> При переводе по СБП просто отправьте чек в этот чат.`, sparkle, pct, pct, bullet, accPrice, accDiscount, bullet, vipPrice, vipDiscount, clipGreen)
+%s <b>Как получить доступ:</b>
+1. Выберите тариф кнопкой ниже или переведите нужную сумму по СБП.
+2. <b>Отправьте скриншот чека прямо сюда в чат!</b>
+3. Бот проверит чек и сразу выдаст вам одноразовую ссылку в закрытый канал потока.`, sparkle, pct, pct, bullet, accPrice, accDiscount, bullet, vipPrice, vipDiscount, clipGreen)
 		keyboard = PromoAppliedKeyboard()
 	} else {
 		text = fmt.Sprintf(`%s <b>Бронирование места в проекте «так называемый SPARK»</b>
 
 <b>Тарифы участия:</b>
 %s <b>Акселератор [Хит]:</b> 6 900 ₽ (по промокоду: <b>6 555 ₽</b>)
-%s <b>VIP:</b> 14 900 ₽ (по промокоду: <b>14 155 ₽</b>) <i>[Строго 3 места]</i>
+%s <b>VIP:</b> 14 900 ₽ (по промокоду: <b>14 155 ₽</b>) <i>[Строго ограниченное количество мест]</i>
 
-💳 <b>Способы оплаты:</b>
-1️⃣ <b>Официальная оплата через ЮKassa / ЮMoney:</b>
-• Банковские карты любых банков РФ, СБП, SberPay, Mir Pay
-• Официальный фискальный чек ФНС (54-ФЗ)
-• Выберите тариф кнопкой ниже для моментальной оплаты
-
-🏛 2️⃣ <b>Прямой перевод по реквизитам СБП (0%% без комиссии):</b>
+🏛 <b>Оплата через СБП (0%% без комиссии):</b>
 • Банк: <b>Т-Банк (Тинькофф)</b>
-• Телефон: <code>+7 981 163-36-91</code>
+• Номер телефона: <code>+7 981 163-36-91</code>
 • Получатель: <b>Васюнин Илья Олегович</b>
 • Назначение: <code>SPARK [Тариф]</code>
 
-%s <b>После онлайн-оплаты доступ выдаётся сразу</b>, а при переводе по СБП просто отправьте скриншот чека в этот чат!`, lightning, num1, num2, paperclip)
+%s <b>Как получить доступ:</b>
+1. Выберите тариф кнопкой ниже или сделайте перевод по номеру телефона через СБП.
+2. <b>Отправьте скриншот чека прямо сюда в чат бота!</b>
+3. Бот зафиксирует платёж и сразу выдаст вам персональную ссылку в закрытый канал потока.`, lightning, num1, num2, paperclip)
 		keyboard = PaymentKeyboard()
 	}
 
@@ -580,126 +573,69 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 	}
 }
 
-func (s *BotService) handleYooKassaPayment(chatID telego.ChatID, from *telego.User, tier string) {
+func (s *BotService) handleSbpPayment(chatID telego.ChatID, from *telego.User, tier string) {
 	if s.bot == nil {
 		return
 	}
 
 	session := s.getSession(chatID.ID)
+	session.State = StateWaitingReceipt
 	hasPromo := session.DiscountPct > 0 || session.PromoCode != ""
 
 	tierTitle := "Акселератор"
-	basePrice := 6900.0
+	basePrice := 6900
 	if tier == "vip" {
 		tierTitle = "VIP"
-		basePrice = 14900.0
+		basePrice = 14900
 	}
 
 	price := basePrice
+	discountText := ""
 	if hasPromo {
 		pct := session.DiscountPct
 		if pct <= 0 {
 			pct = 5
 		}
-		price = basePrice - (basePrice*float64(pct))/100.0
+		discount := (basePrice * pct) / 100
+		price = basePrice - discount
+		discountText = fmt.Sprintf(" (скидка %d%% по промокоду <code>%s</code>)", pct, session.PromoCode)
 	}
 
-	// If YooKassaSecretKey is configured in .env, create live checkout session via API
-	if s.cfg != nil && s.cfg.YooKassaSecretKey != "" && s.yooKassaService != nil {
-		username := ""
-		if from != nil {
-			username = from.Username
-		}
-		botUsername := s.cfg.TelegramBotUsername
-		if botUsername == "" {
-			botUsername = "spark_prep_bot"
-		}
+	sbpText := fmt.Sprintf(`🏛 <b>Оплата тарифа «%s» через СБП (0%% без комиссии)</b>
 
-		ykReq := services.YooKassaPaymentRequest{
-			Amount: services.YooKassaAmount{
-				Value:    fmt.Sprintf("%.2f", price),
-				Currency: "RUB",
-			},
-			Capture: true,
-			Confirmation: services.YooKassaConfirmation{
-				Type:      "redirect",
-				ReturnURL: fmt.Sprintf("https://t.me/%s", botUsername),
-			},
-			Description: fmt.Sprintf("Обучение в проекте «так называемый SPARK» — Тариф %s (@%s)", tierTitle, username),
-			Metadata: map[string]string{
-				"tier":        tier,
-				"telegram_id": strconv.FormatInt(chatID.ID, 10),
-				"username":    username,
-				"promo_code":  session.PromoCode,
-			},
-		}
+💰 <b>Сумма к переводу: %d ₽</b>%s
 
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-
-		resp, err := s.yooKassaService.CreatePayment(ctx, ykReq)
-		if err == nil && resp != nil && resp.Confirmation.ConfirmationURL != "" {
-			successText := fmt.Sprintf(`✅ <b>Счёт в ЮKassa успешно сформирован!</b>
-
-📦 Тариф: <b>%s</b>
-💰 Сумма к оплате: <b>%d ₽</b>
-🧾 Фискальный чек ФНС РФ: Самозанятый Васюнин Илья Олегович (ИНН 780739313219)
-🔒 Оплата через защищённый шлюз ЮKassa (СБП, Карты РФ, SberPay)
-
-<i>Нажмите кнопку ниже для безопасной оплаты. Доступ в закрытый канал потока будет выдан автоматически сразу после подтверждения!</i>`, tierTitle, int(price))
-
-			checkoutKb := tu.InlineKeyboard(
-				tu.InlineKeyboardRow(
-					tu.InlineKeyboardButton(fmt.Sprintf("💳 Оплатить в ЮKassa (%d ₽)", int(price))).WithURL(resp.Confirmation.ConfirmationURL),
-				),
-				tu.InlineKeyboardRow(
-					tu.InlineKeyboardButton("⬅️ Назад ко всем способам").WithCallbackData("action_payment"),
-				),
-			)
-
-			m := tu.Message(chatID, successText).WithParseMode(telego.ModeHTML).WithReplyMarkup(checkoutKb)
-			if _, sendErr := s.bot.SendMessage(m); sendErr != nil {
-				cleanMsg := tu.Message(chatID, StripTgEmoji(successText)).WithParseMode(telego.ModeHTML).WithReplyMarkup(checkoutKb)
-				_, _ = s.bot.SendMessage(cleanMsg)
-			}
-			return
-		}
-		log.Printf("[Bot YooKassa] API CreatePayment failed: %v", err)
-	}
-
-	// Fallback when secret key is not set yet in .env or API error:
-	// Direct SBP bank transfer details and personal YooKassa link request (NO TRIBUTE!)
-	fallbackText := fmt.Sprintf(`💳 <b>Оплата тарифа %s: %d ₽</b>
-
-Официальный эквайринг: <b>ЮKassa (ООО НКО «ЮМани»)</b>
-Магазин: ShopID <code>1491540</code> (Самозанятый Васюнин Илья Олегович, ИНН 780739313219)
-
-🏛 <b>Моментальная оплата без комиссии по СБП:</b>
+<b>Реквизиты для перевода:</b>
 • Банк: <b>Т-Банк (Тинькофф)</b>
 • Номер телефона: <code>+7 981 163-36-91</code>
 • Получатель: <b>Васюнин Илья Олегович</b>
-• Сумма: <b>%d ₽</b>
 • Назначение платежа: <code>SPARK %s</code>
 
-📎 <b>После перевода просто отправьте скриншот чека в этот чат!</b>
-Куратор сверит платёж, и бот сразу выдаст одноразовую ссылку в закрытый канал потока.
+📎 <b>Как получить доступ:</b>
+1. Совершите перевод по номеру телефона через СБП в вашем банковском приложении.
+2. <b>Отправьте скриншот чека прямо в этот чат бота!</b>
+3. Бот проверит чек и сразу выдаст вам персональную ссылку в закрытый канал потока.
 
-<i>Нужна ссылка для онлайн-оплаты картой через ЮKassa? Напишите куратору @ilyan_vas — Илья моментально отправит счёт из личного кабинета.</i>`, tierTitle, int(price), int(price), strings.ToUpper(tier))
+<i>При любых вопросах вы всегда можете написать так называемому Илю (@ilyan_vas).</i>`, tierTitle, price, discountText, strings.ToUpper(tier))
 
-	fallbackKb := tu.InlineKeyboard(
+	kb := tu.InlineKeyboard(
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("💬 Написать Илье за счётом ЮKassa").WithURL("https://t.me/ilyan_vas"),
+			tu.InlineKeyboardButton("💬 Написать так называемому Илю").WithURL("https://t.me/ilyan_vas"),
 		),
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton("⬅️ Назад к тарифам").WithCallbackData("action_payment"),
 		),
 	)
 
-	m := tu.Message(chatID, fallbackText).WithParseMode(telego.ModeHTML).WithReplyMarkup(fallbackKb)
+	m := tu.Message(chatID, sbpText).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
 	if _, sendErr := s.bot.SendMessage(m); sendErr != nil {
-		cleanMsg := tu.Message(chatID, StripTgEmoji(fallbackText)).WithParseMode(telego.ModeHTML).WithReplyMarkup(fallbackKb)
+		cleanMsg := tu.Message(chatID, StripTgEmoji(sbpText)).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
 		_, _ = s.bot.SendMessage(cleanMsg)
 	}
+}
+
+func (s *BotService) handleYooKassaPayment(chatID telego.ChatID, from *telego.User, tier string) {
+	s.handleSbpPayment(chatID, from, tier)
 }
 
 func (s *BotService) processPromoInput(chatID telego.ChatID, from *telego.User, rawCode string) {
@@ -856,60 +792,21 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 		return true
 
 	case "pay_yk_menu":
-		hasPromo := session.DiscountPct > 0 || session.PromoCode != ""
-		ykText := `🇷🇺 <b>Официальная оплата через ЮKassa (ShopID: 1491540)</b>
-
-Платёжный шлюз с официальным чеком ФНС (54-ФЗ):
-• СБП (Система быстрых платежей 0%)
-• Любые банковские карты РФ (МИР, Visa, Mastercard)
-• SberPay / T-Pay / Mir Pay
-
-<b>Выберите тариф для выставления счёта:</b>`
-		kb := YooKassaSelectTierKeyboard(hasPromo)
-		m := tu.Message(chatID, ykText).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
-		if _, err := s.bot.SendMessage(m); err != nil {
-			cleanMsg := tu.Message(chatID, StripTgEmoji(ykText)).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
-			_, _ = s.bot.SendMessage(cleanMsg)
-		}
+		session.State = StateWaitingReceipt
+		s.sendPaymentDetails(chatID, &query.From, false)
 		return true
 
-	case "pay_yk_accelerator":
-		s.handleYooKassaPayment(chatID, &query.From, "accelerator")
+	case "pay_yk_accelerator", "pay_sbp_accelerator":
+		s.handleSbpPayment(chatID, &query.From, "accelerator")
 		return true
 
-	case "pay_yk_vip":
-		s.handleYooKassaPayment(chatID, &query.From, "vip")
+	case "pay_yk_vip", "pay_sbp_vip":
+		s.handleSbpPayment(chatID, &query.From, "vip")
 		return true
 
 	case "pay_sbp_info":
 		session.State = StateWaitingReceipt
-		sbpText := `🏛 <b>Оплата по СБП (Система быстрых платежей) без комиссии:</b>
-
-• Банк: <b>Т-Банк (Тинькофф)</b>
-• Номер телефона: <code>+7 981 163-36-91</code>
-• Получатель: <b>Васюнин Илья Олегович</b>
-
-💰 <b>Сумма к оплате:</b>
-• Акселератор: <b>6 900 ₽</b> (по промокоду: <b>6 555 ₽</b>)
-• VIP: <b>14 900 ₽</b> (по промокоду: <b>14 155 ₽</b>)
-
-📎 <b>Как получить доступ:</b>
-1. Совершите перевод через мобильный банк по номеру телефона через СБП.
-2. Отправьте скриншот чека прямо в этот чат бота.
-3. Бот передаст чек Илье (@ilyan_vas), и вам мгновенно откроется доступ в закрытый канал!`
-		kb := tu.InlineKeyboard(
-			tu.InlineKeyboardRow(
-				tu.InlineKeyboardButton("💬 Написать Илье (@ilyan_vas)").WithURL("https://t.me/ilyan_vas"),
-			),
-			tu.InlineKeyboardRow(
-				tu.InlineKeyboardButton("⬅️ Назад к тарифам").WithCallbackData("action_payment"),
-			),
-		)
-		m := tu.Message(chatID, sbpText).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
-		if _, err := s.bot.SendMessage(m); err != nil {
-			cleanMsg := tu.Message(chatID, StripTgEmoji(sbpText)).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
-			_, _ = s.bot.SendMessage(cleanMsg)
-		}
+		s.handleSbpPayment(chatID, &query.From, "accelerator")
 		return true
 
 	case "promo_enter":
