@@ -125,18 +125,20 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 			grossVolume += u.PaidAmount
 		} else {
 			// Fallback based on tier
+			discountFactor := 1.0
+			if u.PromoCode != "" {
+				var promo models.PromoCode
+				pct := 5
+				if err := h.db.Where("UPPER(code) = ?", strings.ToUpper(u.PromoCode)).First(&promo).Error; err == nil && promo.DiscountPercent > 0 {
+					pct = promo.DiscountPercent
+				}
+				discountFactor = 1.0 - float64(pct)/100.0
+			}
+
 			if strings.ToLower(u.Tier) == "vip" {
-				if u.PromoCode != "" {
-					grossVolume += 14155.0
-				} else {
-					grossVolume += 14900.0
-				}
+				grossVolume += 14900.0 * discountFactor
 			} else {
-				if u.PromoCode != "" {
-					grossVolume += 6555.0
-				} else {
-					grossVolume += 6900.0
-				}
+				grossVolume += 6900.0 * discountFactor
 			}
 		}
 	}

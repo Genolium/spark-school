@@ -463,11 +463,20 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 	paperclip := TgEmoji(EmojiPaperclip, "📎")
 
 	if withPromo || session.DiscountPct > 0 {
-		text = fmt.Sprintf(`%s <b>Промокод успешно активирован! Скидка 5%%</b>
+		pct := session.DiscountPct
+		if pct <= 0 {
+			pct = 5
+		}
+		accDiscount := (6900 * pct) / 100
+		accPrice := 6900 - accDiscount
+		vipDiscount := (14900 * pct) / 100
+		vipPrice := 14900 - vipDiscount
 
-<b>Стоимость с учётом скидки 5%%:</b>
-%s Акселератор: <b>6 555 ₽</b> (скидка 345 ₽)
-%s VIP: <b>14 155 ₽</b> (скидка 745 ₽)
+		text = fmt.Sprintf(`%s <b>Промокод успешно активирован! Скидка %d%%</b>
+
+<b>Стоимость с учётом скидки %d%%:</b>
+%s Акселератор: <b>%d ₽</b> (скидка %d ₽)
+%s VIP: <b>%d ₽</b> (скидка %d ₽)
 
 %s <b>Реквизиты для оплаты со скидкой (СБП 0%%):</b>
 • Банк: <b>Т-Банк (Тинькофф)</b>
@@ -476,7 +485,7 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 • Назначение платежа: <code>SPARK ПРОМО [Тариф]</code>
 
 %s <b>После перевода прикрепи скриншот чека прямо в этот чат!</b>
-Бот передаст его так называемому Илю и сразу выдаст персональную ссылку в закрытый канал потока.`, sparkle, bullet, bullet, checkV, clipGreen)
+Бот передаст его так называемому Илю и сразу выдаст персональную ссылку в закрытый канал потока.`, sparkle, pct, pct, bullet, accPrice, accDiscount, bullet, vipPrice, vipDiscount, checkV, clipGreen)
 		keyboard = PromoAppliedKeyboard()
 	} else {
 		text = fmt.Sprintf(`%s <b>Бронирование места в проекте «так называемый SPARK»</b>
@@ -1181,52 +1190,91 @@ func (s *BotService) CreateOneTimeInviteLink(ctx context.Context, channelID int6
 	return link.InviteLink, nil
 }
 
+// syncTelegramUser ensures every user interacting with the bot is persisted in Postgres,
+// enabling full CRM visibility for leads and unpaid students in the web admin panel.
+func (s *BotService) syncTelegramUser(from *telego.User) *models.User {
+	if s.db == nil || from == nil || from.ID <= 0 {
+		return nil
+	}
+
+	tgID := from.ID
+	cleanUsername := strings.TrimPrefix(strings.TrimSpace(from.Username), "@")
+	firstName := strings.TrimSpace(from.FirstName)
+	if firstName == "" {
+		firstName = "Студент"
+	}
+	lastName := strings.TrimSpace(from.LastName)
+
+	var user models.User
+	err := s.db.Where("telegram_id = ?", tgID).First(&user).Error
+	if err != nil {
+		role := "student"
+		hasAccess := false
+		if s.cfg != nil && s.cfg.AdminTelegramID != 0 && tgID == s.cfg.AdminTelegramID {
+			role = "admin"
+			hasAccess = true
+		}
+
+		user = models.User{
+			TelegramID: tgID,
+			Username:   cleanUsername,
+			FirstName:  firstName,
+			LastName:   lastName,
+			Role:       role,
+			HasAccess:  hasAccess,
+			Tier:       "accelerator",
+			PaidAmount: 0,
+			CreatedAt:  time.Now(),
+		}
+		if err := s.db.Create(&user).Error; err != nil {
+			log.Printf("[Bot User Sync] Failed creating user %d: %v", tgID, err)
+			return nil
+		}
+
+		refCode := strings.ToLower(cleanUsername)
+		if refCode == "" {
+			refCode = fmt.Sprintf("id%d", tgID)
+		}
+		affProfile := models.AffiliateProfile{
+			UserID:       user.ID,
+			ReferralCode: refCode,
+			CreatedAt:    time.Now(),
+		}
+		_ = s.db.Create(&affProfile).Error
+
+		log.Printf("[Bot User Sync] New lead registered in DB: @%s (ID: %d)", cleanUsername, tgID)
+		return &user
+	}
+
+	// Keep names up to date
+	changed := false
+	if cleanUsername != "" && user.Username != cleanUsername {
+		user.Username = cleanUsername
+		changed = true
+	}
+	if firstName != "" && user.FirstName != firstName {
+		user.FirstName = firstName
+		changed = true
+	}
+	if lastName != "" && user.LastName != lastName {
+		user.LastName = lastName
+		changed = true
+	}
+	if changed {
+		s.db.Save(&user)
+	}
+
+	return &user
+}
+
 func (s *BotService) associateBotReferral(from *telego.User, inputUsername, refCode string) {
 	if s.db == nil || from == nil {
 		return
 	}
 
-	tgID := from.ID
-	uname := from.Username
-	if uname == "" {
-		uname = inputUsername
-	}
-	uname = strings.TrimPrefix(uname, "@")
-
-	var user models.User
-	err := s.db.Where("telegram_id = ?", tgID).First(&user).Error
-	if err != nil {
-		firstName := from.FirstName
-		if firstName == "" {
-			firstName = "Student"
-		}
-		role := "student"
-		if s.cfg.AdminTelegramID != 0 && tgID == s.cfg.AdminTelegramID {
-			role = "admin"
-		}
-
-		user = models.User{
-			TelegramID: tgID,
-			Username:   uname,
-			FirstName:  firstName,
-			LastName:   from.LastName,
-			Role:       role,
-			CreatedAt:  time.Now(),
-		}
-		if err := s.db.Create(&user).Error; err != nil {
-			return
-		}
-
-		cleanUname := strings.ToLower(uname)
-		if cleanUname == "" {
-			cleanUname = fmt.Sprintf("id%d", tgID)
-		}
-		affProfile := models.AffiliateProfile{
-			UserID:       user.ID,
-			ReferralCode: cleanUname,
-			CreatedAt:    time.Now(),
-		}
-		_ = s.db.Create(&affProfile).Error
+	user := s.syncTelegramUser(from)
+	if user == nil {
+		return
 	}
 
 	if refCode != "" {

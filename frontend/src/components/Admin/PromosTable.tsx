@@ -45,8 +45,9 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
     if (typeof p.total_revenue === "number" && p.total_revenue > 0) {
       return sum + p.total_revenue;
     }
-    // Fallback: estimate revenue based on standard discounted accelerator price 6555 ₽
-    return sum + (p.uses_count || 0) * 6555;
+    const pct = p.discount_percent || 5;
+    const price = Math.round(6900 * (1 - pct / 100));
+    return sum + (p.uses_count || 0) * price;
   }, 0);
   const totalRewards = promos.reduce(
     (sum, p) => sum + (p.uses_count || 0) * (p.reward_amount || 0),
@@ -290,10 +291,14 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
               </tr>
             ) : (
               filtered.map((promo) => {
+                const discountPct = promo.discount_percent || 5;
+                const discountRub = Math.round(6900 * (discountPct / 100));
+                const discountedPrice = 6900 - discountRub;
+
                 const promoRevenue =
                   typeof promo.total_revenue === "number" && promo.total_revenue > 0
                     ? promo.total_revenue
-                    : (promo.uses_count || 0) * 6555;
+                    : (promo.uses_count || 0) * discountedPrice;
                 const partnerEarnings = (promo.uses_count || 0) * (promo.reward_amount || 0);
                 const studentsCount = promo.students?.length || 0;
 
@@ -321,7 +326,8 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
 
                     {/* Discount */}
                     <td className="py-3.5 px-4 font-bold text-emerald-600 dark:text-emerald-400">
-                      -{promo.discount_percent || 5}% (345 ₽)
+                      <div>-{discountPct}% ({discountRub.toLocaleString("ru-RU")} ₽)</div>
+                      <div className="text-[10px] text-slate-400 font-normal">курс: {discountedPrice.toLocaleString("ru-RU")} ₽</div>
                     </td>
 
                     {/* Owner */}

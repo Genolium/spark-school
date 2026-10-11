@@ -211,10 +211,15 @@ func (h *PromoHandler) List(c *gin.Context) {
 				if s.PaidAmount > 0 {
 					result[i].TotalRevenue += s.PaidAmount
 				} else if s.HasAccess {
+					pct := promo.DiscountPercent
+					if pct <= 0 {
+						pct = 5
+					}
+					factor := 1.0 - float64(pct)/100.0
 					if strings.ToLower(s.Tier) == "vip" {
-						result[i].TotalRevenue += 14155.0
+						result[i].TotalRevenue += 14900.0 * factor
 					} else {
-						result[i].TotalRevenue += 6555.0
+						result[i].TotalRevenue += 6900.0 * factor
 					}
 				}
 			}
