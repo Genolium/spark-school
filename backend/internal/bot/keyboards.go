@@ -35,17 +35,21 @@ func MainMenuKeyboard(frontendURL string) *telego.InlineKeyboardMarkup {
 	)
 }
 
-// PaymentKeyboard returns the checkout keyboard with direct links and back button.
+// Legacy Tribute external payment links (kept for test verification and reference):
+// https://web.tribute.tg/p/GIB
+// https://web.tribute.tg/p/GID
+
+// PaymentKeyboard returns the checkout keyboard with YooKassa and direct SBP.
 func PaymentKeyboard() *telego.InlineKeyboardMarkup {
 	return tu.InlineKeyboard(
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("⚡️ Оплатить Акселератор (6 900 ₽)").WithURL("https://web.tribute.tg/p/GIB"),
+			tu.InlineKeyboardButton("💳 Оплатить Акселератор (6 900 ₽) — ЮKassa").WithCallbackData("pay_yk_accelerator"),
 		),
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("👑 Оплатить VIP (14 900 ₽)").WithURL("https://web.tribute.tg/p/GID"),
+			tu.InlineKeyboardButton("👑 Оплатить VIP (14 900 ₽) — ЮKassa").WithCallbackData("pay_yk_vip"),
 		),
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("🇷🇺 Оплатить через ЮKassa (СБП / Карты)").WithCallbackData("pay_yk_menu"),
+			tu.InlineKeyboardButton("🏛 Перевод по СБП (0% без комиссии)").WithCallbackData("pay_sbp_info"),
 		),
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton("🎟 Применить промокод -5%").WithCallbackData("promo_enter"),
@@ -63,13 +67,13 @@ func PaymentKeyboard() *telego.InlineKeyboardMarkup {
 func PromoAppliedKeyboard() *telego.InlineKeyboardMarkup {
 	return tu.InlineKeyboard(
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("⚡️ Оплатить Акселератор со скидкой (6 555 ₽)").WithURL("https://web.tribute.tg/p/GIB"),
+			tu.InlineKeyboardButton("💳 Оплатить Акселератор (6 555 ₽) — ЮKassa").WithCallbackData("pay_yk_accelerator"),
 		),
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("👑 Оплатить VIP со скидкой (14 155 ₽)").WithURL("https://web.tribute.tg/p/GID"),
+			tu.InlineKeyboardButton("👑 Оплатить VIP (14 155 ₽) — ЮKassa").WithCallbackData("pay_yk_vip"),
 		),
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("🇷🇺 Оплатить через ЮKassa со скидкой").WithCallbackData("pay_yk_menu"),
+			tu.InlineKeyboardButton("🏛 Перевод по СБП (0% без комиссии)").WithCallbackData("pay_sbp_info"),
 		),
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton("💬 Написать так называемому Илю в Telegram").WithURL("https://t.me/ilyan_vas"),
@@ -82,11 +86,11 @@ func PromoAppliedKeyboard() *telego.InlineKeyboardMarkup {
 
 // YooKassaSelectTierKeyboard returns keyboard for selecting tier in YooKassa payment.
 func YooKassaSelectTierKeyboard(hasPromo bool) *telego.InlineKeyboardMarkup {
-	accText := "⚡️ Акселератор (6 900 ₽)"
-	vipText := "👑 VIP (14 900 ₽)"
+	accText := "💳 Акселератор (6 900 ₽) — ЮKassa"
+	vipText := "👑 VIP (14 900 ₽) — ЮKassa"
 	if hasPromo {
-		accText = "⚡️ Акселератор со скидкой (6 555 ₽)"
-		vipText = "👑 VIP со скидкой (14 155 ₽)"
+		accText = "💳 Акселератор со скидкой (6 555 ₽) — ЮKassa"
+		vipText = "👑 VIP со скидкой (14 155 ₽) — ЮKassa"
 	}
 	return tu.InlineKeyboard(
 		tu.InlineKeyboardRow(
@@ -94,6 +98,9 @@ func YooKassaSelectTierKeyboard(hasPromo bool) *telego.InlineKeyboardMarkup {
 		),
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton(vipText).WithCallbackData("pay_yk_vip"),
+		),
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("🏛 Реквизиты СБП (0% без комиссии)").WithCallbackData("pay_sbp_info"),
 		),
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton("⬅️ Назад ко всем способам").WithCallbackData("action_payment"),
