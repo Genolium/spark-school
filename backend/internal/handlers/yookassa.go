@@ -157,16 +157,18 @@ func (h *YooKassaHandler) CreateCheckout(c *gin.Context) {
 		Metadata:    metadata,
 	}
 
-	if h.yooKassaService == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "Платёжный сервис ЮKassa временно недоступен"})
+	if h.yooKassaService == nil || h.cfg == nil || strings.TrimSpace(h.cfg.YooKassaSecretKey) == "" {
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "Платёжный сервис ЮKassa настраивается. Пожалуйста, оплатите через Telegram-бота или Tribute.",
+		})
 		return
 	}
 
 	paymentResp, err := h.yooKassaService.CreatePayment(c.Request.Context(), ykReq)
 	if err != nil {
 		log.Printf("[YOOKASSA-ERROR] CreatePayment failed: %v", err)
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"error": "Не удалось сформировать счёт в ЮKassa. Пожалуйста, попробуйте позже.",
+		c.JSON(http.StatusServiceUnavailable, gin.H{
+			"error": "Платёжный сервис ЮKassa временно недоступен. Пожалуйста, оплатите через Telegram-бота или Tribute.",
 		})
 		return
 	}

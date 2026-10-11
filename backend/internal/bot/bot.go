@@ -509,9 +509,9 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 %s Акселератор: <b>%d ₽</b> (скидка %d ₽)
 %s VIP: <b>%d ₽</b> (скидка %d ₽)
 
-💳 <b>Онлайн-оплата (ЮKassa / Tribute / СБП):</b>
-• ЮKassa на сайте: https://so-called-spark.ru/#pricing (ShopID: 1491540)
-• Tribute в Telegram: https://web.tribute.tg/p/GIB (VIP: https://web.tribute.tg/p/GID)
+💳 <b>Быстрая онлайн-оплата в 1 клик (Tribute):</b>
+• Нажмите кнопку «Оплатить Акселератор со скидкой (Tribute)» ниже
+• Для VIP: «Оплатить VIP со скидкой (Tribute)» ниже
 
 %s <b>Или перевод по СБП (0%%):</b>
 • Банк: <b>Т-Банк (Тинькофф)</b>
@@ -528,9 +528,9 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 %s <b>Акселератор [Хит]:</b> 6 900 ₽ (по промокоду: <b>6 555 ₽</b>)
 %s <b>VIP:</b> 14 900 ₽ (по промокоду: <b>14 155 ₽</b>) <i>[Строго 3 места]</i>
 
-💳 <b>Быстрая онлайн-оплата (ЮKassa / Tribute / СБП):</b>
-• ЮKassa на сайте: https://so-called-spark.ru/#pricing (ShopID: 1491540)
-• Tribute в Telegram: https://web.tribute.tg/p/GIB (VIP: https://web.tribute.tg/p/GID)
+💳 <b>Быстрая онлайн-оплата в 1 клик (Tribute):</b>
+• Нажмите кнопку «Оплатить Акселератор (Tribute)» ниже
+• Для VIP: нажмите кнопку «Оплатить VIP (Tribute)» ниже
 
 %s <b>Или прямой перевод по реквизитам СБП (0%%):</b>
 • Банк: <b>Т-Банк (Тинькофф)</b>
@@ -538,7 +538,7 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 • Получатель: <b>Васюнин Илья Олегович</b>
 • Назначение: <code>SPARK [Тариф]</code>
 
-%s <b>После оплаты через ЮKassa/Tribute доступ выдаётся сразу</b>, а при переводе по СБП просто отправь скриншот чека в этот чат!`, lightning, num1, num2, calendar, paperclip)
+%s <b>После онлайн-оплаты доступ выдаётся сразу</b>, а при переводе по СБП просто отправь скриншот чека в этот чат!`, lightning, num1, num2, calendar, paperclip)
 		keyboard = PaymentKeyboard()
 	}
 

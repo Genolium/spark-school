@@ -92,37 +92,22 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
     return "";
   };
 
-  const [loadingYooKassa, setLoadingYooKassa] = useState(false);
-
   const handlePayWithYooKassa = async () => {
-    if (!tgUsername.trim()) {
-      alert("Пожалуйста, укажите ваш Telegram Username для автоматической выдачи доступа");
-      return;
-    }
-    setLoadingYooKassa(true);
     try {
-      const res = await api.createYooKassaPayment({
+      await api.createYooKassaPayment({
         tier,
         telegram_username: tgUsername.trim(),
         promo_code: promoResult?.valid ? promoResult.code : undefined,
-        email: email.trim() || undefined,
       });
-      if (res.success && res.confirmation_url) {
-        window.location.href = res.confirmation_url;
-        return;
-      }
-      setSubmitted(true);
     } catch {
-      setSubmitted(true);
-    } finally {
-      setLoadingYooKassa(false);
+      // Safe fallback
     }
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!tgUsername) return;
     handlePayWithYooKassa();
+    window.open(botPayUrl, "_blank");
   };
 
   const activeTierConfig = TIERS[tier];
@@ -192,7 +177,7 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                   Оформление участия
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-1 font-doc">
-                  Проект «так называемый SPARK» • Куратор: Васюнин Илья
+                  Проект «так называемый SPARK» • ЮKassa ShopID: 1491540
                 </p>
               </div>
 
@@ -373,19 +358,18 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                 </div>
 
                 <div className="pt-2 space-y-2.5">
-                  <button
-                    type="submit"
-                    disabled={loadingYooKassa}
-                    className="btn-primary-mono w-full py-4 text-base font-bold flex items-center justify-center gap-2 shadow-xl active:scale-95 cursor-pointer disabled:opacity-50"
+                  <a
+                    href={botPayUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-primary-mono w-full py-4 text-base font-bold flex items-center justify-center gap-2 shadow-xl active:scale-95 cursor-pointer text-center"
                   >
-                    <CreditCard className="w-5 h-5" />
+                    <Send className="w-5 h-5" />
                     <span>
-                      {loadingYooKassa
-                        ? "Формирование счёта в ЮKassa..."
-                        : `Оплатить через ЮKassa (${finalPrice.toLocaleString("ru-RU")} ₽)`}
+                      Оплатить в Telegram-боте ({finalPrice.toLocaleString("ru-RU")} ₽)
                     </span>
                     <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
-                  </button>
+                  </a>
 
                   <div className="grid grid-cols-2 gap-2">
                     <a
@@ -394,7 +378,7 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                       rel="noopener noreferrer"
                       className="py-2.5 px-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-xs font-mono font-bold text-emerald-800 dark:text-emerald-300 flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm text-center"
                     >
-                      <span>Tribute (@tribute)</span>
+                      <span>{tier === "vip" ? "Оплатить VIP (Tribute)" : "Оплатить Акселератор (Tribute)"}</span>
                       <ArrowUpRight className="w-3.5 h-3.5" />
                     </a>
 
@@ -441,22 +425,18 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                 Сумма к оплате: <span className="text-emerald-600 dark:text-emerald-400 font-bold">{finalPrice.toLocaleString("ru-RU")} ₽</span>
               </p>
 
-              {/* YooKassa Official Checkout Button */}
+              {/* Telegram Bot & Tribute Checkout Buttons */}
               <div className="max-w-sm mx-auto mb-4 space-y-2">
-                <button
-                  type="button"
-                  onClick={handlePayWithYooKassa}
-                  disabled={loadingYooKassa}
-                  className="btn-primary-mono w-full py-3.5 text-sm font-bold flex items-center justify-center gap-2 shadow-xl cursor-pointer"
+                <a
+                  href={botPayUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn-primary-mono w-full py-3.5 text-sm font-bold flex items-center justify-center gap-2 shadow-xl cursor-pointer text-center"
                 >
-                  <CreditCard className="w-4 h-4" />
-                  <span>
-                    {loadingYooKassa
-                      ? "Формирование счёта в ЮKassa..."
-                      : `Оплатить онлайн через ЮKassa (${finalPrice.toLocaleString("ru-RU")} ₽)`}
-                  </span>
+                  <Send className="w-4 h-4" />
+                  <span>Оплатить в Telegram-боте ({finalPrice.toLocaleString("ru-RU")} ₽)</span>
                   <ArrowUpRight className="w-4 h-4" />
-                </button>
+                </a>
 
                 <a
                   href={tier === "vip" ? "https://web.tribute.tg/p/GID" : "https://web.tribute.tg/p/GIB"}
@@ -465,7 +445,7 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                   className="w-full py-3 px-4 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-xs font-mono font-bold text-emerald-800 dark:text-emerald-300 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm text-center"
                 >
                   <CreditCard className="w-4 h-4" />
-                  <span>Или оплатить через Tribute (Зарубежные/РФ карты)</span>
+                  <span>{tier === "vip" ? "Оплатить VIP (Tribute)" : "Оплатить Акселератор (Tribute)"}</span>
                   <ArrowUpRight className="w-3.5 h-3.5" />
                 </a>
               </div>
