@@ -388,14 +388,15 @@ func (h *PaymentWebhookHandler) HandleTributeWebhook(c *gin.Context) {
 
 	// 9. Deliver Channel Invite Link to Student
 	if h.notifyFunc != nil && telegramID > 0 {
+		sparkle := "<tg-emoji emoji-id=\"5884407720131436294\">✨</tg-emoji>"
+		sun := "<tg-emoji emoji-id=\"5883980366590517942\">🔆</tg-emoji>"
+		arrow := "<tg-emoji emoji-id=\"5884424573583106260\">➡️</tg-emoji>"
+
 		studentMsg := fmt.Sprintf(
-			"🎉 <b>Оплата подтверждена через Tribute!</b>\n\n"+
-				"Добро пожаловать в проект «так называемый SPARK» 2027!\n\n"+
-				"📦 <b>Твой тариф:</b> %s\n"+
-				"💳 <b>Оплачено:</b> %.2f ₽\n\n"+
-				"🔒 <b>Твоя персональная ссылка в закрытый канал и комьюнити:</b>\n%s\n\n"+
-				"<i>Ссылка одноразовая и действует 24 часа. Сохрани её.</i>",
-			tierNameRU, amount, inviteLink,
+			"%s Спасибо за покупку! <b>Добро пожаловать на моё обучение!</b>\n\n"+
+				"%s Твоя ссылка для входа в закрытый канал потока:\n%s\n\n"+
+				"%s <i>Ссылка является персональной и одноразовой.</i>",
+			sparkle, sun, inviteLink, arrow,
 		)
 		_ = h.notifyFunc(telegramID, studentMsg)
 	}

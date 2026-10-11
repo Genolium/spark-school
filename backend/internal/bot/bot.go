@@ -77,6 +77,16 @@ func (s *BotService) getSession(chatID int64) *UserSession {
 	return s.sessions.Get(chatID)
 }
 
+func extractTelegramLink(text string) string {
+	for _, line := range strings.Split(text, "\n") {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "https://t.me/") || strings.HasPrefix(trimmed, "http://t.me/") {
+			return trimmed
+		}
+	}
+	return ""
+}
+
 // startQueueWorker drains outbound queue with 35ms rate limiting
 func (s *BotService) startQueueWorker() {
 	ticker := time.NewTicker(35 * time.Millisecond)
@@ -94,9 +104,15 @@ func (s *BotService) startQueueWorker() {
 
 			var err error
 			if s.bot != nil && item.telegramID != 0 {
-				chatID := tu.ID(item.telegramID)
-				m := tu.Message(chatID, item.message).WithParseMode(telego.ModeHTML)
-				_, err = s.bot.SendMessage(m)
+				if strings.Contains(item.message, "Добро пожаловать на моё обучение") ||
+					strings.Contains(item.message, "Твоя ссылка для входа в закрытый канал потока:") {
+					link := extractTelegramLink(item.message)
+					err = s.sendAccessNotificationToStudent(item.telegramID, item.message, link)
+				} else {
+					chatID := tu.ID(item.telegramID)
+					m := tu.Message(chatID, item.message).WithParseMode(telego.ModeHTML)
+					_, err = s.bot.SendMessage(m)
+				}
 			} else if item.telegramID != 0 {
 				log.Printf("[Bot Notification Mock] to %d: %s", item.telegramID, item.message)
 			}
@@ -974,17 +990,7 @@ func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr s
 		inviteLink = "https://t.me/+so_called_spark_private"
 	}
 
-	heart := TgEmoji(EmojiHeartSolidGreen, "💚")
-	sun := TgEmoji(EmojiSunGreen, "☀️")
-	arrow := TgEmoji(EmojiArrowRightGreen, "➡️")
-
-	studentMsg := fmt.Sprintf(`%s <b>Поздравляем! Оплата подтверждена.</b>
-
-%s Добро пожаловать в проект <b>«так называемый SPARK»</b>!
-Твоя ссылка для входа в закрытый канал потока:
-%s
-
-%s <i>Ссылка является персональной и одноразовой.</i>`, heart, sun, inviteLink, arrow)
+	studentMsg := FormatPaymentSuccessMessage(inviteLink)
 
 	// If receipt was ALREADY approved, re-send invite link to student without duplicating DB actions
 	if receipt.Status == "approved" {
@@ -1180,6 +1186,12 @@ func (s *BotService) SendNotification(telegramID int64, message string) error {
 	if s.bot == nil {
 		log.Printf("[Bot Notification Mock] to %d: %s", telegramID, message)
 		return nil
+	}
+
+	if strings.Contains(message, "Добро пожаловать на моё обучение") ||
+		strings.Contains(message, "Твоя ссылка для входа в закрытый канал потока:") {
+		link := extractTelegramLink(message)
+		return s.sendAccessNotificationToStudent(telegramID, message, link)
 	}
 
 	chatID := tu.ID(telegramID)
