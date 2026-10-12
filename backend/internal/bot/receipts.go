@@ -58,6 +58,15 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) bool {
 	}
 
 	chosenTier := strings.ToLower(strings.TrimSpace(session.SelectedTier))
+	if chosenTier == "" || chosenTier == "accelerator" {
+		// Check if user previously selected or was marked as VIP in database
+		var dbUser models.User
+		if err := s.db.Where("telegram_id = ?", msg.Chat.ID).First(&dbUser).Error; err == nil {
+			if strings.ToLower(strings.TrimSpace(dbUser.Tier)) == "vip" {
+				chosenTier = "vip"
+			}
+		}
+	}
 	if chosenTier == "" {
 		chosenTier = "accelerator"
 	}
@@ -175,8 +184,17 @@ func (s *BotService) SendAdminReceiptCard(adminID int64, receipt *models.Payment
 	btnApprove := tu.InlineKeyboardButton("✅ Одобрить и выдать доступ").WithCallbackData(fmt.Sprintf("receipt_approve_%d", receipt.ID))
 	btnReject := tu.InlineKeyboardButton("❌ Отклонить").WithCallbackData(fmt.Sprintf("receipt_reject_%d", receipt.ID))
 
+	// Button to toggle tier if wrong tier was detected
+	var btnSwitchTier telego.InlineKeyboardButton
+	if strings.ToLower(receipt.Tier) == "vip" {
+		btnSwitchTier = tu.InlineKeyboardButton("🔄 Сменить тариф на Акселератор").WithCallbackData(fmt.Sprintf("receipt_tier_accelerator_%d", receipt.ID))
+	} else {
+		btnSwitchTier = tu.InlineKeyboardButton("👑 Сменить тариф на VIP").WithCallbackData(fmt.Sprintf("receipt_tier_vip_%d", receipt.ID))
+	}
+
 	rows := [][]telego.InlineKeyboardButton{
 		{btnApprove, btnReject},
+		{btnSwitchTier},
 	}
 	if receipt.Username != "" {
 		cleanUser := strings.TrimPrefix(receipt.Username, "@")

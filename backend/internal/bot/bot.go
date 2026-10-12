@@ -580,6 +580,7 @@ func (s *BotService) handleSbpPayment(chatID telego.ChatID, from *telego.User, t
 
 	session := s.getSession(chatID.ID)
 	session.State = StateWaitingReceipt
+	session.SelectedTier = tier
 	hasPromo := session.DiscountPct > 0 || session.PromoCode != ""
 
 	tierTitle := "Акселератор"
@@ -759,6 +760,16 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 	if strings.HasPrefix(data, "receipt_reject_") {
 		idStr := strings.TrimPrefix(data, "receipt_reject_")
 		s.processReceiptRejection(query, idStr)
+		return true
+	}
+	if strings.HasPrefix(data, "receipt_tier_vip_") {
+		idStr := strings.TrimPrefix(data, "receipt_tier_vip_")
+		s.processReceiptTierToggle(query, idStr, "vip")
+		return true
+	}
+	if strings.HasPrefix(data, "receipt_tier_accelerator_") {
+		idStr := strings.TrimPrefix(data, "receipt_tier_accelerator_")
+		s.processReceiptTierToggle(query, idStr, "accelerator")
 		return true
 	}
 
@@ -1113,6 +1124,10 @@ func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr s
 		student.HasAccess = true
 		now := time.Now()
 		student.AccessGrantedAt = &now
+		if receipt.Tier != "" {
+			student.Tier = receipt.Tier
+		}
+		student.PaidAmount = receipt.Amount
 		s.db.Save(&student)
 		_ = s.affiliateService.ProcessCoursePurchase(student.ID, receipt.Amount)
 	}
@@ -1220,6 +1235,125 @@ func (s *BotService) processReceiptRejection(query *telego.CallbackQuery, idStr 
 			ReplyMarkup: rejectedKb,
 		}
 		_, _ = s.bot.EditMessageReplyMarkup(editMarkup)
+	}
+}
+
+func (s *BotService) processReceiptTierToggle(query *telego.CallbackQuery, idStr string, newTier string) {
+	adminID := query.From.ID
+	if s.cfg != nil && s.cfg.AdminTelegramID != 0 && adminID != s.cfg.AdminTelegramID {
+		if s.bot != nil {
+			_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+				CallbackQueryID: query.ID,
+				Text:            "⛔️ У вас нет прав администратора.",
+				ShowAlert:       true,
+			})
+		}
+		return
+	}
+
+	if s.db == nil {
+		return
+	}
+
+	var receipt models.PaymentReceipt
+	if err := s.db.First(&receipt, "id = ?", idStr).Error; err != nil {
+		return
+	}
+
+	receipt.Tier = newTier
+	if newTier == "vip" {
+		receipt.Amount = 14900.0
+	} else {
+		receipt.Amount = 6900.0
+	}
+	s.db.Save(&receipt)
+
+	// Update user record tier if exists
+	var student models.User
+	if err := s.db.Where("telegram_id = ?", receipt.TelegramID).First(&student).Error; err == nil {
+		student.Tier = newTier
+		s.db.Save(&student)
+	}
+
+	_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+		CallbackQueryID: query.ID,
+		Text:            fmt.Sprintf("✅ Тариф чека #%d переключён на %s!", receipt.ID, strings.ToUpper(newTier)),
+	})
+
+	if query.Message != nil {
+		curatorChatID := tu.ID(query.Message.GetChat().ID)
+		msgID := query.Message.GetMessageID()
+
+		studentDisplay := receipt.Username
+		if studentDisplay == "" {
+			studentDisplay = fmt.Sprintf("ID %d", receipt.TelegramID)
+		} else if !strings.HasPrefix(studentDisplay, "@") {
+			studentDisplay = "@" + studentDisplay
+		}
+
+		dateStr := ""
+		if !receipt.CreatedAt.IsZero() {
+			dateStr = receipt.CreatedAt.Format("15:04 02.01.2006")
+		} else {
+			dateStr = time.Now().Format("15:04 02.01.2006")
+		}
+
+		newCaption := fmt.Sprintf(`🧾 <b>Чек об оплате #%d</b>
+
+👤 Студент: <b>%s</b>
+🆔 ID: <code>%d</code>
+🎓 Тариф: <b>%s</b>
+💰 Сумма: <b>%.0f ₽</b>
+📅 Дата: <i>%s</i>
+
+Подтвердите поступление средств и выдачу доступа:`,
+			receipt.ID,
+			studentDisplay,
+			receipt.TelegramID,
+			strings.ToUpper(receipt.Tier),
+			receipt.Amount,
+			dateStr,
+		)
+
+		btnApprove := tu.InlineKeyboardButton("✅ Одобрить и выдать доступ").WithCallbackData(fmt.Sprintf("receipt_approve_%d", receipt.ID))
+		btnReject := tu.InlineKeyboardButton("❌ Отклонить").WithCallbackData(fmt.Sprintf("receipt_reject_%d", receipt.ID))
+
+		var btnSwitchTier telego.InlineKeyboardButton
+		if strings.ToLower(receipt.Tier) == "vip" {
+			btnSwitchTier = tu.InlineKeyboardButton("🔄 Сменить тариф на Акселератор").WithCallbackData(fmt.Sprintf("receipt_tier_accelerator_%d", receipt.ID))
+		} else {
+			btnSwitchTier = tu.InlineKeyboardButton("👑 Сменить тариф на VIP").WithCallbackData(fmt.Sprintf("receipt_tier_vip_%d", receipt.ID))
+		}
+
+		rows := [][]telego.InlineKeyboardButton{
+			{btnApprove, btnReject},
+			{btnSwitchTier},
+		}
+		if receipt.Username != "" {
+			cleanUser := strings.TrimPrefix(receipt.Username, "@")
+			rows = append(rows, []telego.InlineKeyboardButton{
+				tu.InlineKeyboardButton(fmt.Sprintf("💬 Написать @%s", cleanUser)).WithURL("https://t.me/" + cleanUser),
+			})
+		}
+		newKb := tu.InlineKeyboard(rows...)
+
+		editCap := &telego.EditMessageCaptionParams{
+			ChatID:      curatorChatID,
+			MessageID:   msgID,
+			Caption:     newCaption,
+			ParseMode:   telego.ModeHTML,
+			ReplyMarkup: newKb,
+		}
+		if _, err := s.bot.EditMessageCaption(editCap); err != nil {
+			editTxt := &telego.EditMessageTextParams{
+				ChatID:      curatorChatID,
+				MessageID:   msgID,
+				Text:        newCaption,
+				ParseMode:   telego.ModeHTML,
+				ReplyMarkup: newKb,
+			}
+			_, _ = s.bot.EditMessageText(editTxt)
+		}
 	}
 }
 
