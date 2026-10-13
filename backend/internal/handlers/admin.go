@@ -157,8 +157,9 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 	h.db.Model(&models.User{}).Where("has_access = true AND role != ?", "admin").Find(&activeUsers)
 	pricing := models.GetCoursePricing(h.db)
 
-	now := time.Now()
-	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	msk := time.FixedZone("MSK", 3*3600)
+	now := time.Now().In(msk)
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, msk)
 	weekStart := todayStart.AddDate(0, 0, -6)
 	monthStart := todayStart.AddDate(0, 0, -29)
 
@@ -236,10 +237,10 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 			}
 		}
 
-		// Date grouping
-		payTime := u.CreatedAt
+		// Date grouping in MSK
+		payTime := u.CreatedAt.In(msk)
 		if u.AccessGrantedAt != nil {
-			payTime = *u.AccessGrantedAt
+			payTime = u.AccessGrantedAt.In(msk)
 		}
 
 		if payTime.After(todayStart) || payTime.Equal(todayStart) {

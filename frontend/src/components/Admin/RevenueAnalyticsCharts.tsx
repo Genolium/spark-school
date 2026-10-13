@@ -24,7 +24,7 @@ type PeriodType = "7d" | "14d" | "30d" | "all";
 type ChartViewType = "both" | "cumulative" | "daily";
 
 export function RevenueAnalyticsCharts({ stats }: RevenueAnalyticsChartsProps) {
-  const [period, setPeriod] = useState<PeriodType>("30d");
+  const [period, setPeriod] = useState<PeriodType>("14d");
   const [viewMode, setChartView] = useState<ChartViewType>("both");
   const [hoveredDailyIndex, setHoveredDailyIndex] = useState<number | null>(null);
   const [hoveredCumulIndex, setHoveredCumulIndex] = useState<number | null>(null);
@@ -460,7 +460,7 @@ export function RevenueAnalyticsCharts({ stats }: RevenueAnalyticsChartsProps) {
         </div>
       )}
 
-      {/* 4. CHART 2: Daily Sales & Revenue Bar Chart */}
+      {/* 4. CHART 2: Daily Sales & Revenue Bar Chart (Pixel-Perfect SVG) */}
       {(viewMode === "both" || viewMode === "daily") && (
         <div className="bento-card-dark p-6 rounded-3xl border border-white/15 shadow-xl">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
@@ -472,13 +472,13 @@ export function RevenueAnalyticsCharts({ stats }: RevenueAnalyticsChartsProps) {
                 </h4>
               </div>
               <p className="text-xs text-slate-400 font-mono mt-0.5">
-                Сколько оплат и сколько денег приносил каждый день
+                Точная высота столбиков пропорциональна сумме оплат в рублях за каждый день
               </p>
             </div>
 
             {/* Live Hover Daily Tooltip */}
             {activeDailyPoint && (
-              <div className="px-3 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 font-mono text-xs flex items-center gap-2">
+              <div className="px-3.5 py-1.5 rounded-xl bg-amber-500/20 border border-amber-500/40 text-amber-300 font-mono text-xs flex items-center gap-2 shadow-lg">
                 <span className="font-bold">{activeDailyPoint.date_label}:</span>
                 <span className="text-white font-bold">{activeDailyPoint.revenue.toLocaleString("ru-RU")} ₽</span>
                 <span className="text-amber-400">
@@ -493,81 +493,224 @@ export function RevenueAnalyticsCharts({ stats }: RevenueAnalyticsChartsProps) {
             )}
           </div>
 
-          {/* Bar Chart Container */}
+          {/* SVG Bar Chart Container */}
           <div className="w-full overflow-x-auto pb-2">
-            <div className="min-w-[650px] h-48 flex items-end gap-1.5 sm:gap-2 px-2 pt-6 pb-6 border-b border-white/10 relative">
-              {filteredDailyStats.map((item, idx) => {
-                const heightPct = Math.max((item.revenue / maxDailyRevenue) * 100, item.revenue > 0 ? 8 : 2);
-                const isHovered = hoveredDailyIndex === idx;
-                const hasVip = (item.vip_count || 0) > 0;
+            <div className="min-w-[680px] relative">
+              {(() => {
+                const width = 800;
+                const height = 240;
+                const paddingLeft = 65;
+                const paddingRight = 25;
+                const paddingTop = 32;
+                const paddingBottom = 38;
+                const plotWidth = width - paddingLeft - paddingRight;
+                const plotHeight = height - paddingTop - paddingBottom; // 170px
+                const baselineY = height - paddingBottom; // 202px
+
+                const rawMax = Math.max(...filteredDailyStats.map((d) => d.revenue), 10000);
+                // Clean ceiling for grid lines
+                let step = 20000;
+                if (rawMax <= 30000) step = 5000;
+                else if (rawMax <= 60000) step = 10000;
+                else if (rawMax <= 120000) step = 20000;
+                else step = 25000;
+
+                const maxY = Math.ceil(rawMax / step) * step;
+                const gridSteps = [0.25, 0.5, 0.75, 1.0];
+
+                const len = filteredDailyStats.length;
+                const slotWidth = len > 0 ? plotWidth / len : plotWidth;
+                const barWidth = Math.max(Math.min(slotWidth * 0.62, 34), 6);
 
                 return (
-                  <div
-                    key={idx}
-                    className="flex-1 flex flex-col items-center justify-end h-full group relative cursor-pointer"
-                    onMouseEnter={() => setHoveredDailyIndex(idx)}
+                  <svg
+                    viewBox={`0 0 ${width} ${height}`}
+                    className="w-full h-60 overflow-visible select-none"
                     onMouseLeave={() => setHoveredDailyIndex(null)}
                   >
-                    {/* Tooltip on bar hover */}
-                    {isHovered && (
-                      <div className="absolute -top-12 z-20 px-2.5 py-1 rounded-lg bg-black/90 border border-amber-500/50 text-[11px] font-mono text-white whitespace-nowrap shadow-xl pointer-events-none">
-                        <div className="font-bold text-amber-400">{item.revenue.toLocaleString("ru-RU")} ₽</div>
-                        <div className="text-[10px] text-slate-300">
-                          {item.purchases} опл. {hasVip ? `(из них VIP: ${item.vip_count})` : ""}
-                        </div>
-                      </div>
-                    )}
+                    <defs>
+                      {/* Gradient for regular Accelerator bars */}
+                      <linearGradient id="barAccGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#F59E0B" />
+                        <stop offset="100%" stopColor="#10B981" />
+                      </linearGradient>
 
-                    {/* Order count badge on top of active bar */}
-                    {item.purchases > 0 && (
-                      <span
-                        className={`text-[9px] font-mono font-bold mb-1 transition-all ${
-                          isHovered ? "text-amber-300 scale-110" : "text-slate-400"
-                        }`}
-                      >
-                        +{item.purchases}
-                      </span>
-                    )}
+                      {/* Gradient for VIP bars */}
+                      <linearGradient id="barVipGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#38BDF8" />
+                        <stop offset="100%" stopColor="#2563EB" />
+                      </linearGradient>
 
-                    {/* Bar Column */}
-                    <div
-                      style={{ height: `${heightPct}%` }}
-                      className={`w-full rounded-t-lg transition-all duration-200 ${
-                        item.revenue === 0
-                          ? "bg-white/[0.05]"
-                          : hasVip
-                          ? isHovered
-                            ? "bg-gradient-to-t from-emerald-400 to-sky-400 shadow-lg shadow-sky-500/30"
-                            : "bg-gradient-to-t from-emerald-500 to-sky-500"
-                          : isHovered
-                          ? "bg-gradient-to-t from-emerald-400 to-amber-400 shadow-lg shadow-amber-500/30"
-                          : "bg-gradient-to-t from-emerald-600 to-amber-500"
-                      }`}
+                      {/* Hover glow */}
+                      <filter id="barGlowFilter" x="-20%" y="-20%" width="140%" height="140%">
+                        <feDropShadow dx="0" dy="0" stdDeviation="4" floodColor="#F59E0B" floodOpacity="0.6" />
+                      </filter>
+                    </defs>
+
+                    {/* Horizontal Reference Grid Lines */}
+                    {gridSteps.map((frac, i) => {
+                      const y = baselineY - frac * plotHeight;
+                      const val = Math.round(maxY * frac);
+                      return (
+                        <g key={i}>
+                          <line
+                            x1={paddingLeft}
+                            y1={y}
+                            x2={width - paddingRight}
+                            y2={y}
+                            stroke="currentColor"
+                            strokeDasharray="4 4"
+                            className="text-white/[0.08]"
+                          />
+                          <text
+                            x={paddingLeft - 8}
+                            y={y + 4}
+                            textAnchor="end"
+                            className="text-[10px] font-mono fill-slate-500 select-none"
+                          >
+                            {val >= 1000 ? `${Math.round(val / 1000)}k ₽` : `${val} ₽`}
+                          </text>
+                        </g>
+                      );
+                    })}
+
+                    {/* Baseline Axis Line */}
+                    <line
+                      x1={paddingLeft}
+                      y1={baselineY}
+                      x2={width - paddingRight}
+                      y2={baselineY}
+                      stroke="currentColor"
+                      className="text-white/20"
+                      strokeWidth="1.5"
                     />
+                    <text
+                      x={paddingLeft - 8}
+                      y={baselineY + 4}
+                      textAnchor="end"
+                      className="text-[10px] font-mono fill-slate-500 select-none"
+                    >
+                      0 ₽
+                    </text>
 
-                    {/* Date label at bottom */}
-                    <span className="text-[9px] font-mono text-slate-500 mt-2 truncate w-full text-center">
-                      {item.date_label.split(" ")[0]}
-                    </span>
-                  </div>
+                    {/* Render Each Day's Bar and Badges */}
+                    {filteredDailyStats.map((item, idx) => {
+                      const centerX = paddingLeft + (idx + 0.5) * slotWidth;
+                      const barX = centerX - barWidth / 2;
+                      const isHovered = hoveredDailyIndex === idx;
+
+                      // Exact mathematical bar height
+                      const barHeight = maxY > 0 ? (item.revenue / maxY) * plotHeight : 0;
+                      const barY = baselineY - barHeight;
+                      const hasVip = (item.vip_count || 0) > 0;
+
+                      return (
+                        <g
+                          key={idx}
+                          className="cursor-pointer"
+                          onMouseEnter={() => setHoveredDailyIndex(idx)}
+                        >
+                          {/* Invisible hover capture rect spanning entire column */}
+                          <rect
+                            x={centerX - slotWidth / 2}
+                            y={0}
+                            width={slotWidth}
+                            height={height}
+                            fill="transparent"
+                          />
+
+                          {/* Hover Guide Column Highlight */}
+                          {isHovered && (
+                            <rect
+                              x={centerX - slotWidth / 2 + 1}
+                              y={paddingTop - 10}
+                              width={slotWidth - 2}
+                              height={plotHeight + 10}
+                              fill="white"
+                              fillOpacity="0.04"
+                              rx="6"
+                            />
+                          )}
+
+                          {item.revenue === 0 ? (
+                            /* Zero revenue subtle tick mark */
+                            <circle
+                              cx={centerX}
+                              cy={baselineY}
+                              r="2"
+                              fill="currentColor"
+                              className={isHovered ? "text-amber-400" : "text-white/20"}
+                            />
+                          ) : (
+                            /* Exact Scaled Bar Column */
+                            <g>
+                              <rect
+                                x={barX}
+                                y={barY}
+                                width={barWidth}
+                                height={barHeight}
+                                rx="4"
+                                fill={hasVip ? "url(#barVipGrad)" : "url(#barAccGrad)"}
+                                filter={isHovered ? "url(#barGlowFilter)" : undefined}
+                                stroke={isHovered ? "#FFFFFF" : "none"}
+                                strokeWidth={isHovered ? "1.5" : "0"}
+                                className="transition-all duration-150"
+                              />
+
+                              {/* Order count badge floating safely above bar */}
+                              <text
+                                x={centerX}
+                                y={barY - 7}
+                                textAnchor="middle"
+                                className={`text-[10px] font-mono font-bold select-none transition-all ${
+                                  isHovered
+                                    ? "fill-white text-xs scale-110"
+                                    : hasVip
+                                    ? "fill-sky-300"
+                                    : "fill-amber-300"
+                                }`}
+                              >
+                                +{item.purchases}
+                              </text>
+                            </g>
+                          )}
+
+                          {/* X-axis Day Label */}
+                          <text
+                            x={centerX}
+                            y={baselineY + 18}
+                            textAnchor="middle"
+                            className={`text-[10px] font-mono select-none transition-all ${
+                              isHovered ? "fill-white font-bold" : "fill-slate-400"
+                            }`}
+                          >
+                            {item.date_label.split(" ")[0]}
+                          </text>
+                        </g>
+                      );
+                    })}
+                  </svg>
                 );
-              })}
+              })()}
             </div>
 
-            {/* Daily Legend */}
-            <div className="flex flex-wrap items-center justify-between text-xs font-mono text-slate-400 mt-3 px-2">
-              <div className="flex items-center gap-4">
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded bg-emerald-500" />
+            {/* Daily Legend and Meta Info */}
+            <div className="flex flex-wrap items-center justify-between text-xs font-mono text-slate-400 mt-4 px-3 pt-3 border-t border-white/10">
+              <div className="flex items-center gap-5">
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded bg-gradient-to-t from-emerald-500 to-amber-500 shadow-sm" />
                   <span>Акселератор (6 555 – 6 900 ₽)</span>
                 </div>
-                <div className="flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded bg-sky-500" />
+                <div className="flex items-center gap-2">
+                  <span className="w-3 h-3 rounded bg-gradient-to-t from-blue-600 to-sky-400 shadow-sm" />
                   <span>VIP (14 155 – 14 900 ₽)</span>
                 </div>
               </div>
-              <div className="text-slate-500 text-[11px]">
-                Пик периода: {maxDailyRevenue.toLocaleString("ru-RU")} ₽ в день
+              <div className="text-slate-400 text-xs flex items-center gap-2">
+                <span>Пик на графике:</span>
+                <span className="text-white font-bold">
+                  {Math.max(...filteredDailyStats.map((d) => d.revenue), 0).toLocaleString("ru-RU")} ₽
+                </span>
               </div>
             </div>
           </div>
