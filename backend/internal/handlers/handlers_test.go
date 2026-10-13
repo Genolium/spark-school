@@ -931,5 +931,38 @@ func TestPricingHandler_GetAndUpdatePricing(t *testing.T) {
 	}
 }
 
+func TestAdminHandler_GetStats_DetailedRevenueAndBreakdown(t *testing.T) {
+	// Test nil DB graceful response
+	handler := NewAdminHandler(nil, nil, nil, nil)
+	r := gin.New()
+	r.GET("/api/v1/admin/stats", handler.GetStats)
+
+	req := httptest.NewRequest("GET", "/api/v1/admin/stats", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for nil DB stats, got %d", w.Code)
+	}
+
+	var res map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatalf("failed to decode stats: %v", err)
+	}
+
+	if _, ok := res["daily_stats"]; !ok {
+		t.Error("expected daily_stats field in GetStats response")
+	}
+	if _, ok := res["tier_breakdown"]; !ok {
+		t.Error("expected tier_breakdown field in GetStats response")
+	}
+	if _, ok := res["today_revenue"]; !ok {
+		t.Error("expected today_revenue field in GetStats response")
+	}
+	if _, ok := res["average_order_value"]; !ok {
+		t.Error("expected average_order_value field in GetStats response")
+	}
+}
+
 
 

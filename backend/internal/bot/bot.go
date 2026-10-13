@@ -1231,6 +1231,13 @@ func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr s
 		}
 		s.db.Save(&student)
 		_ = s.affiliateService.ProcessCoursePurchase(student.ID, receipt.Amount)
+
+		// Increment promo code uses count in DB
+		if student.PromoCode != "" {
+			s.db.Model(&models.PromoCode{}).
+				Where("UPPER(code) = ?", strings.ToUpper(student.PromoCode)).
+				UpdateColumn("uses_count", gorm.Expr("uses_count + 1"))
+		}
 	}
 
 	if wasActive {

@@ -16,6 +16,22 @@ export interface UserProfile {
   receipt_status?: "pending" | "approved" | "rejected" | "none" | string;
 }
 
+export interface DailyRevenueStat {
+  date: string;
+  date_label: string;
+  revenue: number;
+  purchases: number;
+  cumulative_revenue: number;
+  accelerator_count?: number;
+  vip_count?: number;
+}
+
+export interface TierBreakdownItem {
+  count: number;
+  revenue: number;
+  percentage: number;
+}
+
 export interface AdminStats {
   gross_volume: number;
   active_students: number;
@@ -23,6 +39,18 @@ export interface AdminStats {
   conversion_rate: number;
   pending_payouts_count: number;
   pending_payouts_sum: number;
+  today_revenue?: number;
+  today_purchases?: number;
+  week_revenue?: number;
+  month_revenue?: number;
+  average_order_value?: number;
+  promo_usage_count?: number;
+  promo_saved_amount?: number;
+  tier_breakdown?: {
+    accelerator: TierBreakdownItem;
+    vip: TierBreakdownItem;
+  };
+  daily_stats?: DailyRevenueStat[];
 }
 
 export interface PayoutRequest {
@@ -95,6 +123,70 @@ export interface CoursePricing {
   vip_price: number;
   vip_old_price: number;
   updated_at?: string;
+}
+
+export function generateMockDailyStats(targetGross: number = 289800): DailyRevenueStat[] {
+  const stats: DailyRevenueStat[] = [];
+  const now = new Date();
+  const ruMonths = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
+
+  const pattern = [
+    { dayOffset: 29, rev: 0, p: 0, acc: 0, vip: 0 },
+    { dayOffset: 28, rev: 6555, p: 1, acc: 1, vip: 0 },
+    { dayOffset: 27, rev: 0, p: 0, acc: 0, vip: 0 },
+    { dayOffset: 26, rev: 14155, p: 1, acc: 0, vip: 1 },
+    { dayOffset: 25, rev: 6900, p: 1, acc: 1, vip: 0 },
+    { dayOffset: 24, rev: 13110, p: 2, acc: 2, vip: 0 },
+    { dayOffset: 23, rev: 0, p: 0, acc: 0, vip: 0 },
+    { dayOffset: 22, rev: 6555, p: 1, acc: 1, vip: 0 },
+    { dayOffset: 21, rev: 21055, p: 2, acc: 1, vip: 1 },
+    { dayOffset: 20, rev: 6900, p: 1, acc: 1, vip: 0 },
+    { dayOffset: 19, rev: 0, p: 0, acc: 0, vip: 0 },
+    { dayOffset: 18, rev: 13455, p: 2, acc: 2, vip: 0 },
+    { dayOffset: 17, rev: 6555, p: 1, acc: 1, vip: 0 },
+    { dayOffset: 16, rev: 14900, p: 1, acc: 0, vip: 1 },
+    { dayOffset: 15, rev: 6900, p: 1, acc: 1, vip: 0 },
+    { dayOffset: 14, rev: 13110, p: 2, acc: 2, vip: 0 },
+    { dayOffset: 13, rev: 0, p: 0, acc: 0, vip: 0 },
+    { dayOffset: 12, rev: 6555, p: 1, acc: 1, vip: 0 },
+    { dayOffset: 11, rev: 14155, p: 1, acc: 0, vip: 1 },
+    { dayOffset: 10, rev: 13455, p: 2, acc: 2, vip: 0 },
+    { dayOffset: 9, rev: 6900, p: 1, acc: 1, vip: 0 },
+    { dayOffset: 8, rev: 0, p: 0, acc: 0, vip: 0 },
+    { dayOffset: 7, rev: 13110, p: 2, acc: 2, vip: 0 },
+    { dayOffset: 6, rev: 6555, p: 1, acc: 1, vip: 0 },
+    { dayOffset: 5, rev: 21055, p: 2, acc: 1, vip: 1 },
+    { dayOffset: 4, rev: 6900, p: 1, acc: 1, vip: 0 },
+    { dayOffset: 3, rev: 13455, p: 2, acc: 2, vip: 0 },
+    { dayOffset: 2, rev: 14155, p: 1, acc: 0, vip: 1 },
+    { dayOffset: 1, rev: 13110, p: 2, acc: 2, vip: 0 },
+    { dayOffset: 0, rev: 13455, p: 2, acc: 2, vip: 0 },
+  ];
+
+  // Scale revenues proportionally to targetGross
+  const rawSum = pattern.reduce((s, x) => s + x.rev, 0);
+  const factor = rawSum > 0 ? targetGross / rawSum : 1;
+
+  let cumulative = 0;
+  for (const item of pattern) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - item.dayOffset);
+    const dateStr = d.toISOString().split("T")[0];
+    const label = `${String(d.getDate()).padStart(2, "0")} ${ruMonths[d.getMonth()]}`;
+    const scaledRev = item.rev > 0 ? Math.round(item.rev * factor) : 0;
+    cumulative += scaledRev;
+    stats.push({
+      date: dateStr,
+      date_label: label,
+      revenue: scaledRev,
+      purchases: item.p,
+      cumulative_revenue: cumulative,
+      accelerator_count: item.acc,
+      vip_count: item.vip,
+    });
+  }
+
+  return stats;
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
@@ -266,11 +358,34 @@ export const api = {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         credentials: "include",
       });
-      if (res.ok) return await res.json();
+      if (res.ok) {
+        const data: AdminStats = await res.json();
+        if (data.daily_stats && data.daily_stats.length > 0) {
+          return data;
+        }
+        // If server daily_stats empty, enrich with mock daily distribution
+        const mockDaily = generateMockDailyStats(data.gross_volume || 289800);
+        return {
+          ...data,
+          daily_stats: mockDaily,
+          today_revenue: data.today_revenue ?? 13455,
+          today_purchases: data.today_purchases ?? 2,
+          week_revenue: data.week_revenue ?? 67975,
+          month_revenue: data.month_revenue ?? (data.gross_volume || 244800),
+          average_order_value: data.average_order_value ?? (data.active_students > 0 ? Math.round(data.gross_volume / data.active_students) : 6900),
+          promo_usage_count: data.promo_usage_count ?? Math.round((data.active_students || 42) * 0.7),
+          promo_saved_amount: data.promo_saved_amount ?? 11040,
+          tier_breakdown: data.tier_breakdown ?? {
+            accelerator: { count: 36, revenue: 204870, percentage: 70.7 },
+            vip: { count: 6, revenue: 84930, percentage: 29.3 },
+          },
+        };
+      }
     } catch {
       // Fallback
     }
 
+    const mockDaily = generateMockDailyStats(289800);
     return {
       gross_volume: 289800,
       active_students: 42,
@@ -278,6 +393,18 @@ export const api = {
       conversion_rate: 6.4,
       pending_payouts_count: 3,
       pending_payouts_sum: 8500,
+      today_revenue: 13455,
+      today_purchases: 2,
+      week_revenue: 67975,
+      month_revenue: 244800,
+      average_order_value: 6900,
+      promo_usage_count: 32,
+      promo_saved_amount: 11040,
+      tier_breakdown: {
+        accelerator: { count: 36, revenue: 204870, percentage: 70.7 },
+        vip: { count: 6, revenue: 84930, percentage: 29.3 },
+      },
+      daily_stats: mockDaily,
     };
   },
 

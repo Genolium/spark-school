@@ -2,6 +2,7 @@ package database
 
 import (
 	"log"
+	"strings"
 	"time"
 
 	"github.com/spark-school/backend/internal/config"
@@ -160,6 +161,27 @@ func SeedDefaultData(db *gorm.DB, cfg *config.Config) {
 
 	// Seed default pricing if not exists
 	models.GetCoursePricing(db)
+
+	// Seed default promo codes if not exist
+	defaultPromos := []models.PromoCode{
+		{Code: "SPARK5", DiscountPercent: 5, OwnerUsername: "admin", RewardAmount: 1000.0, IsActive: true},
+		{Code: "START5", DiscountPercent: 5, OwnerUsername: "admin", RewardAmount: 1000.0, IsActive: true},
+		{Code: "IL5", DiscountPercent: 5, OwnerUsername: "ilyan_vas", RewardAmount: 1000.0, IsActive: true},
+		{Code: "ILYA5", DiscountPercent: 5, OwnerUsername: "ilyan_vas", RewardAmount: 1000.0, IsActive: true},
+		{Code: "SMTH_FAMILIAR", DiscountPercent: 5, OwnerUsername: "admin", RewardAmount: 1000.0, IsActive: true},
+		{Code: "VOENMEH404", DiscountPercent: 5, OwnerUsername: "admin", RewardAmount: 1000.0, IsActive: true},
+		{Code: "DET_ACADEMY", DiscountPercent: 5, OwnerUsername: "admin", RewardAmount: 1000.0, IsActive: true},
+		{Code: "JUGA", DiscountPercent: 5, OwnerUsername: "admin", RewardAmount: 1000.0, IsActive: true},
+	}
+	for _, p := range defaultPromos {
+		var existing models.PromoCode
+		if err := db.Where("UPPER(code) = ?", strings.ToUpper(p.Code)).First(&existing).Error; err != nil {
+			if cfg.AdminTelegramID != 0 {
+				p.OwnerTelegramID = cfg.AdminTelegramID
+			}
+			db.Create(&p)
+		}
+	}
 
 	log.Println("Seeding complete.")
 }

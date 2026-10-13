@@ -102,9 +102,43 @@ func (h *AdminHandler) Login(c *gin.Context) {
 	})
 }
 
-// GetStats returns revenue, enrollments, and conversion metrics for the admin dashboard.
+// DailyStat represents daily revenue and order metrics for admin charts.
+type DailyStat struct {
+	Date              string  `json:"date"`
+	DateLabel         string  `json:"date_label"`
+	Revenue           float64 `json:"revenue"`
+	Purchases         int     `json:"purchases"`
+	CumulativeRevenue float64 `json:"cumulative_revenue"`
+	AcceleratorCount  int     `json:"accelerator_count"`
+	VIPCount          int     `json:"vip_count"`
+}
+
 // GetStats returns revenue, enrollments, and conversion metrics for the admin dashboard.
 func (h *AdminHandler) GetStats(c *gin.Context) {
+	if h.db == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"gross_volume":          0.0,
+			"active_students":       0,
+			"total_registered":      0,
+			"conversion_rate":       0.0,
+			"pending_payouts_count": 0,
+			"pending_payouts_sum":   0.0,
+			"today_revenue":         0.0,
+			"today_purchases":       0,
+			"week_revenue":          0.0,
+			"month_revenue":         0.0,
+			"average_order_value":   0.0,
+			"promo_usage_count":     0,
+			"promo_saved_amount":    0.0,
+			"tier_breakdown": gin.H{
+				"accelerator": gin.H{"count": 0, "revenue": 0.0, "percentage": 0.0},
+				"vip":         gin.H{"count": 0, "revenue": 0.0, "percentage": 0.0},
+			},
+			"daily_stats": []DailyStat{},
+		})
+		return
+	}
+
 	var totalUsers int64
 	h.db.Model(&models.User{}).Where("role != ?", "admin").Count(&totalUsers)
 
@@ -122,9 +156,46 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 	var activeUsers []models.User
 	h.db.Model(&models.User{}).Where("has_access = true AND role != ?", "admin").Find(&activeUsers)
 	pricing := models.GetCoursePricing(h.db)
+
+	now := time.Now()
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	weekStart := todayStart.AddDate(0, 0, -6)
+	monthStart := todayStart.AddDate(0, 0, -29)
+
+	var todayRevenue float64
+	var todayPurchases int
+	var weekRevenue float64
+	var monthRevenue float64
+	var promoUsageCount int
+	var promoSavedAmount float64
+
+	acceleratorCount := 0
+	acceleratorRevenue := 0.0
+	vipCount := 0
+	vipRevenue := 0.0
+
+	// 30-day timeline map
+	ruMonths := []string{"", "янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"}
+	dailyMap := make(map[string]*DailyStat)
+	var orderedDates []string
+
+	for d := monthStart; !d.After(todayStart); d = d.AddDate(0, 0, 1) {
+		dateKey := d.Format("2006-01-02")
+		mIdx := int(d.Month())
+		label := fmt.Sprintf("%02d %s", d.Day(), ruMonths[mIdx])
+		dailyMap[dateKey] = &DailyStat{
+			Date:      dateKey,
+			DateLabel: label,
+		}
+		orderedDates = append(orderedDates, dateKey)
+	}
+
+	var preMonthRevenue float64
+
 	for _, u := range activeUsers {
+		var userPaid float64
 		if u.PaidAmount > 0 {
-			grossVolume += u.PaidAmount
+			userPaid = u.PaidAmount
 		} else {
 			// Fallback based on tier
 			discountFactor := 1.0
@@ -138,16 +209,89 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 			}
 
 			if strings.ToLower(u.Tier) == "vip" {
-				grossVolume += pricing.VIPPrice * discountFactor
+				userPaid = pricing.VIPPrice * discountFactor
 			} else {
-				grossVolume += pricing.AcceleratorPrice * discountFactor
+				userPaid = pricing.AcceleratorPrice * discountFactor
 			}
 		}
+
+		grossVolume += userPaid
+
+		// Tier stats
+		if strings.ToLower(u.Tier) == "vip" {
+			vipCount++
+			vipRevenue += userPaid
+		} else {
+			acceleratorCount++
+			acceleratorRevenue += userPaid
+		}
+
+		// Promo stats
+		if u.PromoCode != "" {
+			promoUsageCount++
+			if strings.ToLower(u.Tier) == "vip" {
+				promoSavedAmount += pricing.VIPPrice * 0.05
+			} else {
+				promoSavedAmount += pricing.AcceleratorPrice * 0.05
+			}
+		}
+
+		// Date grouping
+		payTime := u.CreatedAt
+		if u.AccessGrantedAt != nil {
+			payTime = *u.AccessGrantedAt
+		}
+
+		if payTime.After(todayStart) || payTime.Equal(todayStart) {
+			todayRevenue += userPaid
+			todayPurchases++
+		}
+		if payTime.After(weekStart) || payTime.Equal(weekStart) {
+			weekRevenue += userPaid
+		}
+		if payTime.After(monthStart) || payTime.Equal(monthStart) {
+			monthRevenue += userPaid
+		}
+
+		dateKey := payTime.Format("2006-01-02")
+		if stat, ok := dailyMap[dateKey]; ok {
+			stat.Revenue += userPaid
+			stat.Purchases++
+			if strings.ToLower(u.Tier) == "vip" {
+				stat.VIPCount++
+			} else {
+				stat.AcceleratorCount++
+			}
+		} else if payTime.Before(monthStart) {
+			preMonthRevenue += userPaid
+		}
+	}
+
+	// Calculate cumulative revenue running total
+	runningCumulative := preMonthRevenue
+	var dailyStats []DailyStat
+	for _, dk := range orderedDates {
+		stat := dailyMap[dk]
+		runningCumulative += stat.Revenue
+		stat.CumulativeRevenue = runningCumulative
+		dailyStats = append(dailyStats, *stat)
+	}
+
+	averageOrderValue := 0.0
+	if activeStudents > 0 {
+		averageOrderValue = grossVolume / float64(activeStudents)
 	}
 
 	conversionRate := 0.0
 	if totalUsers > 0 {
 		conversionRate = (float64(activeStudents) / float64(totalUsers)) * 100.0
+	}
+
+	accPct := 0.0
+	vipPct := 0.0
+	if grossVolume > 0 {
+		accPct = (acceleratorRevenue / grossVolume) * 100.0
+		vipPct = (vipRevenue / grossVolume) * 100.0
 	}
 
 	c.JSON(http.StatusOK, gin.H{
@@ -157,6 +301,26 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 		"conversion_rate":       conversionRate,
 		"pending_payouts_count": pendingPayoutsCount,
 		"pending_payouts_sum":   pendingPayoutsSum,
+		"today_revenue":         todayRevenue,
+		"today_purchases":       todayPurchases,
+		"week_revenue":          weekRevenue,
+		"month_revenue":         monthRevenue,
+		"average_order_value":   averageOrderValue,
+		"promo_usage_count":     promoUsageCount,
+		"promo_saved_amount":    promoSavedAmount,
+		"tier_breakdown": gin.H{
+			"accelerator": gin.H{
+				"count":      acceleratorCount,
+				"revenue":    acceleratorRevenue,
+				"percentage": accPct,
+			},
+			"vip": gin.H{
+				"count":      vipCount,
+				"revenue":    vipRevenue,
+				"percentage": vipPct,
+			},
+		},
+		"daily_stats": dailyStats,
 	})
 }
 

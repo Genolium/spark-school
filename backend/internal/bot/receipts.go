@@ -145,6 +145,8 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) bool {
 		}
 		if session.PromoCode != "" {
 			u.PromoCode = session.PromoCode
+		} else if u.PromoCode == "" && (amount == 6555.0 || amount == 14155.0) {
+			u.PromoCode = "SPARK5"
 		}
 		s.db.Save(u)
 	}

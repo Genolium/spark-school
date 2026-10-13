@@ -9,6 +9,7 @@ import { StudentsTable } from "@/components/Admin/StudentsTable";
 import { PayoutsTable } from "@/components/Admin/PayoutsTable";
 import { PromosTable } from "@/components/Admin/PromosTable";
 import { PricingSettingsTable } from "@/components/Admin/PricingSettingsTable";
+import { RevenueAnalyticsCharts } from "@/components/Admin/RevenueAnalyticsCharts";
 import { api, AdminStats, UserProfile, PayoutRequest, PromoCode } from "@/lib/api";
 import {
   ShieldCheck,
@@ -18,9 +19,11 @@ import {
   DollarSign,
   Tag,
   Send,
+  TrendingUp,
+  BarChart3,
 } from "lucide-react";
 
-type AdminTab = "students" | "promos" | "pricing" | "payouts";
+type AdminTab = "students" | "analytics" | "promos" | "pricing" | "payouts";
 
 export default function AdminPage() {
   const [unlocked, setUnlocked] = useState(false);
@@ -213,6 +216,19 @@ export default function AdminPage() {
               </button>
 
               <button
+                onClick={() => setActiveTab("analytics")}
+                className={`px-5 py-2.5 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                  activeTab === "analytics"
+                    ? "bg-emerald-500 text-black shadow-lg"
+                    : "text-slate-700 dark:text-slate-300 hover:text-black dark:hover:text-white hover:bg-slate-300/70 dark:hover:bg-white/10"
+                }`}
+              >
+                <TrendingUp className="w-4 h-4" />
+                <span>Графика и выручка</span>
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+              </button>
+
+              <button
                 onClick={() => setActiveTab("promos")}
                 className={`px-5 py-2.5 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
                   activeTab === "promos"
@@ -238,25 +254,6 @@ export default function AdminPage() {
                 <DollarSign className="w-4 h-4" />
                 <span>Тарифы и цены</span>
               </button>
-
-              {/* Временно закомментировано: вкладка выплат партнёрам
-              <button
-                onClick={() => setActiveTab("payouts")}
-                className={`px-5 py-2.5 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
-                  activeTab === "payouts"
-                    ? "bg-amber-500 text-black shadow-lg"
-                    : "text-slate-400 hover:text-white hover:bg-white/5"
-                }`}
-              >
-                <DollarSign className="w-4 h-4" />
-                <span>Выплаты партнёрам</span>
-                {stats.pending_payouts_count > 0 && (
-                  <span className="px-1.5 py-0.2 rounded bg-rose-500 text-white text-[10px]">
-                    {stats.pending_payouts_count}
-                  </span>
-                )}
-              </button>
-              */}
             </div>
 
             {/* TAB CONTENT */}
@@ -265,11 +262,20 @@ export default function AdminPage() {
             {activeTab === "students" && (
               <div>
                 <FinancialStats stats={stats} />
+                <RevenueAnalyticsCharts stats={stats} />
                 <StudentsTable
                   students={students}
                   onToggleAccess={handleToggleAccess}
                   onRefresh={loadAdminData}
                 />
+              </div>
+            )}
+
+            {/* Tab 2: Full Revenue Analytics */}
+            {activeTab === "analytics" && (
+              <div>
+                <FinancialStats stats={stats} />
+                <RevenueAnalyticsCharts stats={stats} />
               </div>
             )}
 
