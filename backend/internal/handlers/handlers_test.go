@@ -836,3 +836,100 @@ func TestYooKassaHandler_CreateCheckout_InputSanitization(t *testing.T) {
 	}
 }
 
+func TestAdminHandler_ListUsers_FiltersAndPagination(t *testing.T) {
+	handler := NewAdminHandler(nil, &config.Config{}, nil, nil)
+	r := gin.New()
+	r.GET("/admin/users", handler.ListUsers)
+
+	// 1. Request with filters returns 200 OK and proper JSON structure
+	req := httptest.NewRequest("GET", "/admin/users?tier=accelerator&access=active&receipt_status=pending&q=test", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", w.Code)
+	}
+
+	var res map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatalf("failed to parse json response: %v", err)
+	}
+	if res["users"] == nil {
+		t.Fatal("expected users field in response")
+	}
+	if res["total"] == nil {
+		t.Fatal("expected total field in response")
+	}
+}
+
+func TestAdminHandler_TriggerDigest(t *testing.T) {
+	called := false
+	handler := NewAdminHandler(nil, &config.Config{}, nil, nil)
+	handler.SetDigestSender(func() error {
+		called = true
+		return nil
+	})
+
+	r := gin.New()
+	r.POST("/admin/digest", handler.TriggerDigest)
+
+	req := httptest.NewRequest("POST", "/admin/digest", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", w.Code)
+	}
+	if !called {
+		t.Fatal("expected digest function to be triggered")
+	}
+}
+
+func TestPricingHandler_GetAndUpdatePricing(t *testing.T) {
+	handler := NewPricingHandler(nil)
+	r := gin.New()
+	r.GET("/api/v1/pricing", handler.GetPricing)
+	r.PUT("/api/v1/admin/pricing", handler.UpdatePricing)
+
+	// 1. GET default pricing
+	req := httptest.NewRequest("GET", "/api/v1/pricing", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d", w.Code)
+	}
+
+	var p models.CoursePricing
+	if err := json.Unmarshal(w.Body.Bytes(), &p); err != nil {
+		t.Fatalf("failed to decode pricing response: %v", err)
+	}
+	if p.AcceleratorPrice != 6900.0 || p.VIPPrice != 14900.0 {
+		t.Fatalf("expected default prices 6900 and 14900, got %f and %f", p.AcceleratorPrice, p.VIPPrice)
+	}
+
+	// 2. PUT invalid pricing (VIP < Accelerator)
+	invalidBody := []byte(`{"accelerator_price": 10000, "vip_price": 8000}`)
+	putReq := httptest.NewRequest("PUT", "/api/v1/admin/pricing", bytes.NewReader(invalidBody))
+	putReq.Header.Set("Content-Type", "application/json")
+	wPut := httptest.NewRecorder()
+	r.ServeHTTP(wPut, putReq)
+
+	if wPut.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request when VIP < Accelerator, got %d", wPut.Code)
+	}
+
+	// 3. PUT valid pricing
+	validBody := []byte(`{"accelerator_price": 7900, "accelerator_old_price": 10900, "vip_price": 16900, "vip_old_price": 21900}`)
+	putReq2 := httptest.NewRequest("PUT", "/api/v1/admin/pricing", bytes.NewReader(validBody))
+	putReq2.Header.Set("Content-Type", "application/json")
+	wPut2 := httptest.NewRecorder()
+	r.ServeHTTP(wPut2, putReq2)
+
+	if wPut2.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK on valid update, got %d: %s", wPut2.Code, wPut2.Body.String())
+	}
+}
+
+
+

@@ -1,9 +1,22 @@
 package bot
 
 import (
-	tu "github.com/mymmrac/telego/telegoutil"
+	"fmt"
+	"strconv"
+	"strings"
+
 	"github.com/mymmrac/telego"
+	tu "github.com/mymmrac/telego/telegoutil"
+	"github.com/spark-school/backend/internal/models"
 )
+
+func formatPriceRub(amount int) string {
+	s := strconv.Itoa(amount)
+	if len(s) > 3 {
+		return s[:len(s)-3] + " " + s[len(s)-3:]
+	}
+	return s
+}
 
 // Verified Permanent Telegram File IDs
 const (
@@ -14,25 +27,37 @@ const (
 )
 
 // MainMenuKeyboard returns the primary navigation keyboard with blog link.
-func MainMenuKeyboard(frontendURL string) *telego.InlineKeyboardMarkup {
-	return tu.InlineKeyboard(
-		tu.InlineKeyboardRow(
+func MainMenuKeyboard(frontendURL string, canUpgrade ...bool) *telego.InlineKeyboardMarkup {
+	rows := [][]telego.InlineKeyboardButton{
+		{
 			tu.InlineKeyboardButton("🎯 Рассчитать шансы на грант $20,000").WithCallbackData("calc_start"),
-		),
-		tu.InlineKeyboardRow(
+		},
+	}
+
+	if len(canUpgrade) > 0 && canUpgrade[0] {
+		rows = append(rows, []telego.InlineKeyboardButton{
+			tu.InlineKeyboardButton("🚀 Апгрейд тарифа").WithCallbackData("action_upgrade"),
+			tu.InlineKeyboardButton("🎓 Мой статус").WithCallbackData("action_status"),
+		})
+	}
+
+	rows = append(rows,
+		[]telego.InlineKeyboardButton{
 			tu.InlineKeyboardButton("💳 Купить курс (от 6 900 ₽)").WithCallbackData("action_payment"),
 			tu.InlineKeyboardButton("🎟 Промокод -5%").WithCallbackData("promo_enter"),
-		),
-		tu.InlineKeyboardRow(
+		},
+		[]telego.InlineKeyboardButton{
 			tu.InlineKeyboardButton("🇺🇸 Блог про мою поездку в США").WithURL("https://t.me/so_called_spark"),
-		),
-		tu.InlineKeyboardRow(
+		},
+		[]telego.InlineKeyboardButton{
 			tu.InlineKeyboardButton("🌐 О проекте").WithURL(frontendURL),
-		),
-		tu.InlineKeyboardRow(
+		},
+		[]telego.InlineKeyboardButton{
 			tu.InlineKeyboardButton("💬 Консультация с так называемым Илем").WithURL("https://t.me/ilyan_vas"),
-		),
+		},
 	)
+
+	return tu.InlineKeyboard(rows...)
 }
 
 // Legacy Tribute external payment links (kept for test verification and reference):
@@ -40,13 +65,26 @@ func MainMenuKeyboard(frontendURL string) *telego.InlineKeyboardMarkup {
 // https://web.tribute.tg/p/GID
 
 // PaymentKeyboard returns the checkout keyboard with direct SBP transfer.
-func PaymentKeyboard() *telego.InlineKeyboardMarkup {
+func PaymentKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboardMarkup {
+	accPrice := 6900
+	vipPrice := 14900
+	if len(pricing) > 0 {
+		if pricing[0].AcceleratorPrice > 0 {
+			accPrice = int(pricing[0].AcceleratorPrice)
+		}
+		if pricing[0].VIPPrice > 0 {
+			vipPrice = int(pricing[0].VIPPrice)
+		}
+	}
+	accText := fmt.Sprintf("🏛 Оплатить Акселератор (%s ₽) — СБП", formatPriceRub(accPrice))
+	vipText := fmt.Sprintf("👑 Оплатить VIP (%s ₽) — СБП", formatPriceRub(vipPrice))
+
 	return tu.InlineKeyboard(
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("🏛 Оплатить Акселератор (6 900 ₽) — СБП").WithCallbackData("pay_sbp_accelerator"),
+			tu.InlineKeyboardButton(accText).WithCallbackData("pay_sbp_accelerator"),
 		),
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("👑 Оплатить VIP (14 900 ₽) — СБП").WithCallbackData("pay_sbp_vip"),
+			tu.InlineKeyboardButton(vipText).WithCallbackData("pay_sbp_vip"),
 		),
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton("🎟 Применить промокод -5%").WithCallbackData("promo_enter"),
@@ -61,13 +99,28 @@ func PaymentKeyboard() *telego.InlineKeyboardMarkup {
 }
 
 // PromoAppliedKeyboard returns keyboard after successful promo code redemption.
-func PromoAppliedKeyboard() *telego.InlineKeyboardMarkup {
+func PromoAppliedKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboardMarkup {
+	accPrice := 6555
+	vipPrice := 14155
+	if len(pricing) > 0 {
+		if pricing[0].AcceleratorPrice > 0 {
+			base := int(pricing[0].AcceleratorPrice)
+			accPrice = base - (base*5)/100
+		}
+		if pricing[0].VIPPrice > 0 {
+			base := int(pricing[0].VIPPrice)
+			vipPrice = base - (base*5)/100
+		}
+	}
+	accText := fmt.Sprintf("🏛 Оплатить Акселератор (%s ₽) — СБП", formatPriceRub(accPrice))
+	vipText := fmt.Sprintf("👑 Оплатить VIP (%s ₽) — СБП", formatPriceRub(vipPrice))
+
 	return tu.InlineKeyboard(
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("🏛 Оплатить Акселератор (6 555 ₽) — СБП").WithCallbackData("pay_sbp_accelerator"),
+			tu.InlineKeyboardButton(accText).WithCallbackData("pay_sbp_accelerator"),
 		),
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("👑 Оплатить VIP (14 155 ₽) — СБП").WithCallbackData("pay_sbp_vip"),
+			tu.InlineKeyboardButton(vipText).WithCallbackData("pay_sbp_vip"),
 		),
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton("💬 Написать так называемому Илю в Telegram").WithURL("https://t.me/ilyan_vas"),
@@ -180,11 +233,40 @@ func CalcResultKeyboard() *telego.InlineKeyboardMarkup {
 	)
 }
 
+// UpgradeOptionsKeyboard returns upgrade choices based on student's current tier.
+func UpgradeOptionsKeyboard(currentTier string, diffAmount ...float64) *telego.InlineKeyboardMarkup {
+	currentTier = strings.ToLower(strings.TrimSpace(currentTier))
+	if currentTier == "vip" {
+		return tu.InlineKeyboard(
+			tu.InlineKeyboardRow(
+				tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu"),
+			),
+		)
+	}
+
+	diff := 8000
+	if len(diffAmount) > 0 && diffAmount[0] > 0 {
+		diff = int(diffAmount[0])
+	}
+	btnText := fmt.Sprintf("👑 До VIP (доплата %s ₽)", formatPriceRub(diff))
+
+	// For accelerator (or any active non-VIP student): upgrade to VIP
+	return tu.InlineKeyboard(
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton(btnText).WithCallbackData("upgrade_to_vip"),
+		),
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu"),
+		),
+	)
+}
+
 // AdminPanelKeyboard returns control buttons for curator in-line panel.
 func AdminPanelKeyboard() *telego.InlineKeyboardMarkup {
 	return tu.InlineKeyboard(
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton("📊 Статистика онлайн").WithCallbackData("admin_stats"),
+			tu.InlineKeyboardButton("📰 Дайджест за сегодня").WithCallbackData("admin_digest"),
 		),
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton("🧾 Чеки на модерации").WithCallbackData("admin_receipts"),

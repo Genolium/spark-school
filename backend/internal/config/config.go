@@ -28,6 +28,7 @@ type Config struct {
 	YooKassaShopID     string
 	YooKassaSecretKey  string
 	TelegramBotUsername string
+	DigestHour         int
 }
 
 func Load() *Config {
@@ -36,6 +37,10 @@ func Load() *Config {
 
 	adminTGID, _ := strconv.ParseInt(getEnv("ADMIN_TELEGRAM_ID", "123456789"), 10, 64)
 	tgChannelID, _ := strconv.ParseInt(getEnv("TELEGRAM_CHANNEL_ID", "0"), 10, 64)
+	digestHour, _ := strconv.Atoi(getEnv("DIGEST_HOUR", "21"))
+	if digestHour < 0 || digestHour > 23 {
+		digestHour = 21
+	}
 
 	return &Config{
 		Port:               getEnv("PORT", "8080"),
@@ -58,6 +63,7 @@ func Load() *Config {
 		EnotShopID:         getEnv("ENOT_SHOP_ID", ""),
 		YooKassaShopID:     getEnv("YOOKASSA_SHOP_ID", "1491540"),
 		YooKassaSecretKey:  getEnv("YOOKASSA_SECRET_KEY", ""),
+		DigestHour:         digestHour,
 	}
 }
 

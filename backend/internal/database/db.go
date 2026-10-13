@@ -101,6 +101,7 @@ func Init(cfg *config.Config) *gorm.DB {
 		&models.OutboxEvent{},
 		&models.PaymentTransaction{},
 		&models.DripLead{},
+		&models.CoursePricing{},
 	}
 	for _, m := range modelsToMigrate {
 		if mErr := db.AutoMigrate(m); mErr != nil {
@@ -156,6 +157,9 @@ func SeedDefaultData(db *gorm.DB, cfg *config.Config) {
 			})
 		}
 	}
+
+	// Seed default pricing if not exists
+	models.GetCoursePricing(db)
 
 	log.Println("Seeding complete.")
 }

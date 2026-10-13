@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -17,6 +18,7 @@ type ReceiptHandler struct {
 	checkDuplicateFunc   func(fileHash, fileUniqueID string) (*models.PaymentReceipt, bool)
 	saveReceiptFunc      func(receipt *models.PaymentReceipt) error
 	sendReceiptAlertFunc func(receipt *models.PaymentReceipt) error
+	mu                   sync.Mutex
 }
 
 func NewReceiptHandler(db *gorm.DB, alertFunc ...func(receipt *models.PaymentReceipt) error) *ReceiptHandler {
@@ -86,6 +88,11 @@ func (h *ReceiptHandler) VerifyOrSubmit(c *gin.Context) {
 	}
 
 	// 1. Custom store check (e.g. for unit testing without live db)
+	if h.checkDuplicateFunc != nil || h.saveReceiptFunc != nil {
+		h.mu.Lock()
+		defer h.mu.Unlock()
+	}
+
 	if h.checkDuplicateFunc != nil {
 		if existing, isDup := h.checkDuplicateFunc(cleanHash, cleanUniqueID); isDup {
 			c.JSON(http.StatusConflict, gin.H{

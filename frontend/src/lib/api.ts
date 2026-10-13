@@ -13,6 +13,7 @@ export interface UserProfile {
   tier?: "accelerator" | "vip";
   paid_amount?: number;
   promo_code?: string;
+  receipt_status?: "pending" | "approved" | "rejected" | "none" | string;
 }
 
 export interface AdminStats {
@@ -88,6 +89,14 @@ export interface PlacesStats {
   spots_left: number;
 }
 
+export interface CoursePricing {
+  accelerator_price: number;
+  accelerator_old_price: number;
+  vip_price: number;
+  vip_old_price: number;
+  updated_at?: string;
+}
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
 
 // Helper to get admin JWT token from local storage
@@ -122,6 +131,67 @@ export const api = {
       active_students: 16,
       spots_left: 9,
     };
+  },
+
+  // Public & Admin Course Pricing
+  async getCoursePricing(): Promise<CoursePricing> {
+    try {
+      const res = await fetch(`${API_BASE}/pricing`);
+      if (res.ok) {
+        const data = await res.json();
+        if (typeof window !== "undefined") {
+          localStorage.setItem("spark_pricing", JSON.stringify(data));
+        }
+        return data;
+      }
+    } catch {
+      // Offline fallback
+    }
+
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("spark_pricing");
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch {}
+      }
+    }
+
+    return {
+      accelerator_price: 6900,
+      accelerator_old_price: 9900,
+      vip_price: 14900,
+      vip_old_price: 19900,
+    };
+  },
+
+  async updateCoursePricing(pricing: CoursePricing): Promise<{ success: boolean; pricing?: CoursePricing; error?: string }> {
+    const token = getAdminToken();
+    try {
+      const res = await fetch(`${API_BASE}/admin/pricing`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(pricing),
+        credentials: "include",
+      });
+      const data = await res.json();
+      if (res.ok) {
+        if (typeof window !== "undefined") {
+          localStorage.setItem("spark_pricing", JSON.stringify(data));
+        }
+        return { success: true, pricing: data };
+      }
+      return { success: false, error: data.error || "Не удалось обновить цены" };
+    } catch (e: any) {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("spark_pricing", JSON.stringify(pricing));
+        return { success: true, pricing };
+      }
+      return { success: false, error: e?.message || "Сетевая ошибка при обновлении цен" };
+    }
   },
 
   // Admin Login with Username & Password and Rate Limit handling
@@ -211,38 +281,68 @@ export const api = {
     };
   },
 
-  // Admin students list
-  async getAdminStudents(query = ""): Promise<UserProfile[]> {
+  // Admin students list with search and filters
+  async getAdminStudents(params?: {
+    q?: string;
+    tier?: string;
+    access?: string;
+    receipt_status?: string;
+  } | string): Promise<UserProfile[]> {
+    const queryObj = typeof params === "string" ? { q: params } : (params || {});
+    const { q = "", tier = "", access = "", receipt_status = "" } = queryObj;
+
     const token = getAdminToken();
     try {
-      const res = await fetch(`${API_BASE}/admin/users?q=${encodeURIComponent(query)}`, {
+      const sp = new URLSearchParams();
+      if (q) sp.set("q", q);
+      if (tier && tier !== "all") sp.set("tier", tier);
+      if (access && access !== "all") sp.set("access", access);
+      if (receipt_status && receipt_status !== "all") sp.set("receipt_status", receipt_status);
+
+      const res = await fetch(`${API_BASE}/admin/users?${sp.toString()}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
         credentials: "include",
       });
       if (res.ok) {
         const data = await res.json();
-        return data.users;
+        return Array.isArray(data.users) ? data.users : [];
       }
     } catch {
       // Fallback mock students
     }
 
-    const mockStudents: UserProfile[] = [
-      { id: 1, telegram_id: 891230491, username: "ilyan_vas", first_name: "так называемый Иль", last_name: "", role: "admin", has_access: true, access_granted_at: "2026-09-01" },
-      { id: 2, telegram_id: 481920381, username: "arina_spark", first_name: "Арина", last_name: "Волкова", role: "student", has_access: true, access_granted_at: "2026-09-15" },
-      { id: 3, telegram_id: 719284910, username: "mikhail_tech", first_name: "Михаил", last_name: "Соколов", role: "student", has_access: true, access_granted_at: "2026-09-18" },
-      { id: 4, telegram_id: 619284910, username: "daria_bmstu", first_name: "Дарья", last_name: "Кузнецова", role: "student", has_access: false },
-      { id: 5, telegram_id: 519284910, username: "artem_spbgu", first_name: "Артём", last_name: "Смирнов", role: "student", has_access: true, access_granted_at: "2026-09-22" },
-      { id: 6, telegram_id: 319284910, username: "polina_voenmeh", first_name: "Полина", last_name: "Иванова", role: "student", has_access: false },
+    let list: UserProfile[] = [
+      { id: 1, telegram_id: 891230491, username: "ilyan_vas", first_name: "так называемый Иль", last_name: "", role: "admin", has_access: true, access_granted_at: "2026-09-01", tier: "vip", paid_amount: 14900, receipt_status: "approved" },
+      { id: 2, telegram_id: 481920381, username: "arina_spark", first_name: "Арина", last_name: "Волкова", role: "student", has_access: true, access_granted_at: "2026-09-15", tier: "accelerator", paid_amount: 6555, promo_code: "SPARK5", receipt_status: "approved" },
+      { id: 3, telegram_id: 719284910, username: "mikhail_tech", first_name: "Михаил", last_name: "Соколов", role: "student", has_access: true, access_granted_at: "2026-09-18", tier: "accelerator", paid_amount: 6900, receipt_status: "approved" },
+      { id: 4, telegram_id: 619284910, username: "daria_bmstu", first_name: "Дарья", last_name: "Кузнецова", role: "student", has_access: false, tier: "accelerator", receipt_status: "pending" },
+      { id: 5, telegram_id: 519284910, username: "artem_spbgu", first_name: "Артём", last_name: "Смирнов", role: "student", has_access: true, access_granted_at: "2026-09-22", tier: "vip", paid_amount: 14900, receipt_status: "approved" },
+      { id: 6, telegram_id: 319284910, username: "polina_voenmeh", first_name: "Полина", last_name: "Иванова", role: "student", has_access: false, tier: "accelerator", receipt_status: "none" },
     ];
 
-    if (query) {
-      const q = query.toLowerCase();
-      return mockStudents.filter(
-        (s) => s.username?.toLowerCase().includes(q) || s.first_name?.toLowerCase().includes(q) || s.last_name?.toLowerCase().includes(q)
+    if (q) {
+      const lower = q.toLowerCase();
+      list = list.filter(
+        (s) =>
+          s.username?.toLowerCase().includes(lower) ||
+          s.first_name?.toLowerCase().includes(lower) ||
+          s.last_name?.toLowerCase().includes(lower) ||
+          String(s.telegram_id).includes(lower) ||
+          s.promo_code?.toLowerCase().includes(lower)
       );
     }
-    return mockStudents;
+    if (tier && tier !== "all") {
+      list = list.filter((s) => s.tier?.toLowerCase() === tier.toLowerCase());
+    }
+    if (access === "active") {
+      list = list.filter((s) => s.has_access);
+    } else if (access === "pending" || access === "inactive") {
+      list = list.filter((s) => !s.has_access);
+    }
+    if (receipt_status && receipt_status !== "all") {
+      list = list.filter((s) => s.receipt_status?.toLowerCase() === receipt_status.toLowerCase());
+    }
+    return list;
   },
 
   // Toggle user access in Admin
@@ -322,6 +422,26 @@ export const api = {
       // Mock fallback
     }
     return true;
+  },
+
+  // Admin trigger daily curator digest
+  async triggerAdminDigest(): Promise<{ success: boolean; message?: string; error?: string }> {
+    const token = getAdminToken();
+    try {
+      const res = await fetch(`${API_BASE}/admin/digest`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: "include",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return { success: true, message: data.message || "Дайджест отправлен" };
+      }
+      const data = await res.json().catch(() => ({}));
+      return { success: false, error: data.error || "Ошибка отправки дайджеста" };
+    } catch (e: any) {
+      return { success: false, error: e.message || "Сетевая ошибка" };
+    }
   },
 
   // Affiliate Stats
@@ -408,8 +528,7 @@ export const api = {
         basePrice = price;
       } else if (tier) {
         const t = tier.toLowerCase();
-        if (t === "basic" || t.includes("баз")) basePrice = 2900;
-        else if (t === "vip") basePrice = 14900;
+        if (t === "vip") basePrice = 14900;
         else basePrice = 6900;
       }
 

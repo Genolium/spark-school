@@ -18,6 +18,7 @@ type User struct {
 	Tier            string     `gorm:"size:32;default:'accelerator'" json:"tier"` // 'accelerator', 'vip'
 	PaidAmount      float64    `gorm:"type:numeric(10,2);default:0.00" json:"paid_amount"`
 	PromoCode       string     `gorm:"size:32" json:"promo_code"`
+	ReceiptStatus   string     `gorm:"-" json:"receipt_status,omitempty"`
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
 
@@ -89,7 +90,7 @@ type PaymentReceipt struct {
 	TelegramID   int64     `gorm:"index" json:"telegram_id"`
 	Username     string    `gorm:"size:64" json:"username"`
 	FileID       string    `gorm:"size:255" json:"file_id"`
-	Tier         string    `gorm:"size:32;default:'accelerator'" json:"tier"` // 'basic', 'accelerator', 'vip'
+	Tier         string    `gorm:"size:32;default:'accelerator'" json:"tier"` // 'accelerator', 'vip'
 	Amount       float64   `gorm:"type:numeric(10,2)" json:"amount"`
 	Status       string    `gorm:"size:20;default:'pending'" json:"status"` // 'pending', 'approved', 'rejected'
 	CreatedAt    time.Time `json:"created_at"`

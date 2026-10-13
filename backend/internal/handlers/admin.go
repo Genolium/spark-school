@@ -26,6 +26,7 @@ type AdminHandler struct {
 	affiliateService *services.AffiliateService
 	notifyFunc       func(telegramID int64, message string) error
 	inviteLinkFunc   func(ctx context.Context, channelID int64) (string, error)
+	digestFunc       func() error
 }
 
 func NewAdminHandler(db *gorm.DB, cfg *config.Config, aff *services.AffiliateService, notify func(telegramID int64, message string) error, inviteLinkGen ...func(ctx context.Context, channelID int64) (string, error)) *AdminHandler {
@@ -120,6 +121,7 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 	var grossVolume float64
 	var activeUsers []models.User
 	h.db.Model(&models.User{}).Where("has_access = true AND role != ?", "admin").Find(&activeUsers)
+	pricing := models.GetCoursePricing(h.db)
 	for _, u := range activeUsers {
 		if u.PaidAmount > 0 {
 			grossVolume += u.PaidAmount
@@ -136,9 +138,9 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 			}
 
 			if strings.ToLower(u.Tier) == "vip" {
-				grossVolume += 14900.0 * discountFactor
+				grossVolume += pricing.VIPPrice * discountFactor
 			} else {
-				grossVolume += 6900.0 * discountFactor
+				grossVolume += pricing.AcceleratorPrice * discountFactor
 			}
 		}
 	}
@@ -158,24 +160,90 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 	})
 }
 
-// ListUsers returns paginated/searchable list of students and access states.
+// ListUsers returns paginated/searchable list of students and access states with filtering by Tier, Access, and Receipt Status.
 func (h *AdminHandler) ListUsers(c *gin.Context) {
-	query := c.Query("q")
+	query := strings.TrimSpace(c.Query("q"))
+	tier := strings.ToLower(strings.TrimSpace(c.Query("tier")))
+	access := strings.ToLower(strings.TrimSpace(c.Query("access")))
+	receiptStatus := strings.ToLower(strings.TrimSpace(c.Query("receipt_status")))
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "50"))
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 200 {
+		pageSize = 50
+	}
 	offset := (page - 1) * pageSize
 
+	if h.db == nil {
+		c.JSON(http.StatusOK, gin.H{
+			"users":    []models.User{},
+			"total":    0,
+			"page":     page,
+			"pageSize": pageSize,
+		})
+		return
+	}
+
 	dbQuery := h.db.Model(&models.User{}).Preload("AffiliateProfile")
+
+	// 1. Search Query: username, first_name, last_name, telegram_id, promo_code
 	if query != "" {
 		search := "%" + query + "%"
-		dbQuery = dbQuery.Where("username ILIKE ? OR first_name ILIKE ? OR last_name ILIKE ? OR CAST(telegram_id AS TEXT) LIKE ?", search, search, search, search)
+		dbQuery = dbQuery.Where(
+			"LOWER(username) LIKE LOWER(?) OR LOWER(first_name) LIKE LOWER(?) OR LOWER(last_name) LIKE LOWER(?) OR CAST(telegram_id AS TEXT) LIKE ? OR LOWER(promo_code) LIKE LOWER(?)",
+			search, search, search, search, search,
+		)
+	}
+
+	// 2. Filter by Tier: accelerator, vip
+	if tier != "" && tier != "all" {
+		dbQuery = dbQuery.Where("LOWER(tier) = ?", tier)
+	}
+
+	// 3. Filter by Access Status: active, pending/inactive
+	if access == "active" {
+		dbQuery = dbQuery.Where("has_access = true")
+	} else if access == "pending" || access == "inactive" {
+		dbQuery = dbQuery.Where("has_access = false")
+	}
+
+	// 4. Filter by Payment Receipt Status: pending, approved, rejected, none
+	if receiptStatus != "" && receiptStatus != "all" {
+		if receiptStatus == "none" || receiptStatus == "no_receipt" {
+			dbQuery = dbQuery.Where("telegram_id NOT IN (SELECT telegram_id FROM payment_receipts WHERE telegram_id IS NOT NULL AND telegram_id != 0)")
+		} else {
+			dbQuery = dbQuery.Where("telegram_id IN (SELECT pr1.telegram_id FROM payment_receipts pr1 WHERE pr1.id = (SELECT MAX(pr2.id) FROM payment_receipts pr2 WHERE pr2.telegram_id = pr1.telegram_id) AND pr1.status = ?)", receiptStatus)
+		}
 	}
 
 	var total int64
 	dbQuery.Count(&total)
 
-	var users []models.User
+	users := make([]models.User, 0)
 	dbQuery.Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&users)
+
+	// Populate receipt_status for returned users
+	if len(users) > 0 {
+		tgIDs := make([]int64, len(users))
+		for i, u := range users {
+			tgIDs[i] = u.TelegramID
+		}
+		var receipts []models.PaymentReceipt
+		h.db.Where("telegram_id IN ?", tgIDs).Order("id ASC").Find(&receipts)
+		latestStatus := make(map[int64]string)
+		for _, r := range receipts {
+			latestStatus[r.TelegramID] = r.Status
+		}
+		for i := range users {
+			if st, ok := latestStatus[users[i].TelegramID]; ok {
+				users[i].ReceiptStatus = st
+			} else {
+				users[i].ReceiptStatus = "none"
+			}
+		}
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"users": users,
@@ -220,17 +288,18 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 	if req.PaidAmount != nil {
 		paidAmount = *req.PaidAmount
 	} else if req.HasAccess {
+		pricing := models.GetCoursePricing(h.db)
 		if tier == "vip" {
 			if cleanPromo != "" {
-				paidAmount = 14155.0
+				paidAmount = pricing.VIPPrice * 0.95
 			} else {
-				paidAmount = 14900.0
+				paidAmount = pricing.VIPPrice
 			}
 		} else {
 			if cleanPromo != "" {
-				paidAmount = 6555.0
+				paidAmount = pricing.AcceleratorPrice * 0.95
 			} else {
-				paidAmount = 6900.0
+				paidAmount = pricing.AcceleratorPrice
 			}
 		}
 	}
@@ -319,17 +388,18 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 			now := time.Now()
 			user.AccessGrantedAt = &now
 			if user.PaidAmount == 0 {
+				pricing := models.GetCoursePricing(h.db)
 				if user.Tier == "vip" {
 					if user.PromoCode != "" {
-						user.PaidAmount = 14155.0
+						user.PaidAmount = pricing.VIPPrice * 0.95
 					} else {
-						user.PaidAmount = 14900.0
+						user.PaidAmount = pricing.VIPPrice
 					}
 				} else {
 					if user.PromoCode != "" {
-						user.PaidAmount = 6555.0
+						user.PaidAmount = pricing.AcceleratorPrice * 0.95
 					} else {
-						user.PaidAmount = 6900.0
+						user.PaidAmount = pricing.AcceleratorPrice
 					}
 				}
 			}
@@ -435,17 +505,18 @@ func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 			now := time.Now()
 			user.AccessGrantedAt = &now
 			if user.PaidAmount == 0 {
+				pricing := models.GetCoursePricing(h.db)
 				if user.Tier == "vip" {
 					if user.PromoCode != "" {
-						user.PaidAmount = 14155.0
+						user.PaidAmount = pricing.VIPPrice * 0.95
 					} else {
-						user.PaidAmount = 14900.0
+						user.PaidAmount = pricing.VIPPrice
 					}
 				} else {
 					if user.PromoCode != "" {
-						user.PaidAmount = 6555.0
+						user.PaidAmount = pricing.AcceleratorPrice * 0.95
 					} else {
-						user.PaidAmount = 6900.0
+						user.PaidAmount = pricing.AcceleratorPrice
 					}
 				}
 			}
@@ -469,7 +540,8 @@ func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 			if h.affiliateService != nil {
 				purchasePrice := user.PaidAmount
 				if purchasePrice <= 0 {
-					purchasePrice = 6900.0
+					pricing := models.GetCoursePricing(h.db)
+					purchasePrice = pricing.AcceleratorPrice
 				}
 				var userReceipt models.PaymentReceipt
 				if err := tx.Where("telegram_id = ?", user.TelegramID).Order("id DESC").First(&userReceipt).Error; err == nil && userReceipt.Amount > 0 {
@@ -579,4 +651,23 @@ func (h *AdminHandler) RejectPayout(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Выплата отклонена, средства возвращены на баланс партнёра"})
+}
+
+// SetDigestSender sets the trigger for daily curator digest.
+func (h *AdminHandler) SetDigestSender(fn func() error) *AdminHandler {
+	h.digestFunc = fn
+	return h
+}
+
+// TriggerDigest triggers the daily curator digest manually.
+func (h *AdminHandler) TriggerDigest(c *gin.Context) {
+	if h.digestFunc == nil {
+		c.JSON(http.StatusOK, gin.H{"ok": true, "message": "Дайджест сформирован"})
+		return
+	}
+	if err := h.digestFunc(); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "message": "Дайджест успешно отправлен куратору в Telegram"})
 }

@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { Check, ArrowUpRight, ShieldCheck, CreditCard, Sparkles, Crown } from "lucide-react";
-import { api, PlacesStats } from "@/lib/api";
+import { api, PlacesStats, CoursePricing } from "@/lib/api";
 import { DeadlineCountdown } from "./DeadlineCountdown";
 
 interface PricingSectionProps {
@@ -17,9 +17,21 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
     spots_left: 9,
   });
 
+  const [pricing, setPricing] = useState<CoursePricing>({
+    accelerator_price: 6900,
+    accelerator_old_price: 9900,
+    vip_price: 14900,
+    vip_old_price: 19900,
+  });
+
   useEffect(() => {
     api.getPlacesStats().then(setPlaces).catch(() => {});
+    api.getCoursePricing().then(setPricing).catch(() => {});
   }, []);
+
+  const formatRub = (num: number) => {
+    return (num || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  };
 
   return (
     <section id="pricing" className="relative w-full max-w-[1520px] mx-auto px-3 sm:px-6 py-16 sm:py-24 scroll-mt-20 sm:scroll-mt-24">
@@ -91,10 +103,10 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
 
             <div className="mb-6 pb-6 border-b border-emerald-500/20 dark:border-white/10">
               <div className="text-slate-500 dark:text-slate-400 line-through text-sm font-mono">
-                9 900 ₽
+                {pricing.accelerator_old_price === 9900 ? "9 900 ₽" : `${formatRub(pricing.accelerator_old_price)} ₽`}
               </div>
               <div className="text-3xl sm:text-4xl font-black font-mono text-emerald-600 dark:text-emerald-400 tracking-tight">
-                6 900 ₽
+                {pricing.accelerator_price === 6900 ? "6 900 ₽" : `${formatRub(pricing.accelerator_price)} ₽`}
               </div>
             </div>
 
@@ -132,7 +144,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
             onClick={() => onOpenPayment?.("accelerator")}
             className="btn-primary-mono w-full py-4 text-sm font-bold flex items-center justify-center gap-2 group shadow-xl active:scale-95"
           >
-            <span>Занять место за 6 900 ₽</span>
+            <span>Занять место за {pricing.accelerator_price === 6900 ? "6 900 ₽" : `${formatRub(pricing.accelerator_price)} ₽`}</span>
             <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
           </button>
         </motion.div>
@@ -164,10 +176,10 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
 
             <div className="mb-6 pb-6 border-b border-emerald-500/15 dark:border-white/10">
               <div className="text-slate-500 dark:text-slate-400 line-through text-sm font-mono">
-                19 900 ₽
+                {pricing.vip_old_price === 19900 ? "19 900 ₽" : `${formatRub(pricing.vip_old_price)} ₽`}
               </div>
               <div className="text-3xl sm:text-4xl font-black font-mono text-amber-600 dark:text-amber-400 tracking-tight">
-                14 900 ₽
+                {pricing.vip_price === 14900 ? "14 900 ₽" : `${formatRub(pricing.vip_price)} ₽`}
               </div>
             </div>
 
@@ -201,7 +213,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
             onClick={() => onOpenPayment?.("vip")}
             className="w-full py-3.5 px-4 rounded-2xl bento-pill hover:bg-amber-500/15 border border-amber-500/30 text-xs sm:text-sm font-mono font-bold text-amber-700 dark:text-amber-300 flex items-center justify-center gap-2 transition-all active:scale-95"
           >
-            <span>Выбрать VIP (14 900 ₽)</span>
+            <span>Выбрать VIP ({pricing.vip_price === 14900 ? "14 900 ₽" : `${formatRub(pricing.vip_price)} ₽`})</span>
             <ArrowUpRight className="w-4 h-4" />
           </button>
         </motion.div>

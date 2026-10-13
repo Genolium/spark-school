@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { BlurImage } from "./BlurImage";
 import { motion } from "framer-motion";
 import { ArrowUpRight, CheckCircle2, Video, FileText } from "lucide-react";
-import { api, PlacesStats } from "@/lib/api";
+import { api, PlacesStats, CoursePricing } from "@/lib/api";
 
 interface HeroProps {
   onOpenPayment?: () => void;
@@ -18,10 +18,21 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroPro
     active_students: 16,
     spots_left: 9,
   });
+  const [pricing, setPricing] = useState<CoursePricing>({
+    accelerator_price: 6900,
+    accelerator_old_price: 9900,
+    vip_price: 14900,
+    vip_old_price: 19900,
+  });
 
   useEffect(() => {
     api.getPlacesStats().then(setPlaces).catch(() => {});
+    api.getCoursePricing().then(setPricing).catch(() => {});
   }, []);
+
+  const formatRub = (num: number) => {
+    return (num || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
+  };
 
   return (
     <section id="hero-canvas" className="relative w-full max-w-[1520px] mx-auto px-3 sm:px-6 pt-24 sm:pt-28 pb-8">
@@ -111,7 +122,7 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroPro
                   href="/#pricing"
                   className="btn-primary-mono px-8 py-4 text-sm sm:text-base flex items-center justify-center gap-2.5 active:scale-95 group shadow-2xl font-bold"
                 >
-                  <span>Выбрать тариф от 6 900 ₽</span>
+                  <span>Выбрать тариф от {pricing.accelerator_price === 6900 ? "6 900 ₽" : `${formatRub(pricing.accelerator_price)} ₽`}</span>
                   <ArrowUpRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 stroke-[2.5]" />
                 </a>
 

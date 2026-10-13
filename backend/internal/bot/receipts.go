@@ -57,32 +57,61 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) bool {
 		return true
 	}
 
-	chosenTier := strings.ToLower(strings.TrimSpace(session.SelectedTier))
-	if chosenTier == "" || chosenTier == "accelerator" {
-		// Check if user previously selected or was marked as VIP in database
-		var dbUser models.User
+	var dbUser models.User
+	userFound := false
+	if s.db != nil {
 		if err := s.db.Where("telegram_id = ?", msg.Chat.ID).First(&dbUser).Error; err == nil {
-			if strings.ToLower(strings.TrimSpace(dbUser.Tier)) == "vip" {
+			userFound = true
+		}
+	}
+
+	chosenTier := strings.ToLower(strings.TrimSpace(session.SelectedTier))
+	isUpgrade := false
+	var upgradeCurrentTier string
+	var amount float64
+
+	if session.IsUpgrade && session.UpgradeAmount > 0 {
+		isUpgrade = true
+		amount = session.UpgradeAmount
+		chosenTier = strings.ToLower(strings.TrimSpace(session.UpgradeToTier))
+		upgradeCurrentTier = strings.ToLower(strings.TrimSpace(session.UpgradeFromTier))
+	} else if userFound && dbUser.HasAccess {
+		dbTier := strings.ToLower(strings.TrimSpace(dbUser.Tier))
+		if dbTier == "accelerator" {
+			isUpgrade = true
+			upgradeCurrentTier = "accelerator"
+			chosenTier = "vip"
+			amount = 8000.0
+		}
+	}
+
+	if !isUpgrade {
+		if chosenTier == "" || chosenTier == "accelerator" {
+			if userFound && strings.ToLower(strings.TrimSpace(dbUser.Tier)) == "vip" {
 				chosenTier = "vip"
 			}
 		}
-	}
-	if chosenTier == "" {
-		chosenTier = "accelerator"
-	}
+		if chosenTier == "" {
+			chosenTier = "accelerator"
+		}
 
-	amount := 6900.0
-	switch chosenTier {
-	case "vip":
-		amount = 14900.0
-		chosenTier = "vip"
-	default:
-		amount = 6900.0
-		chosenTier = "accelerator"
-	}
+		pricing := s.getPricing()
+		switch chosenTier {
+		case "vip":
+			amount = pricing.VIPPrice
+			chosenTier = "vip"
+		default:
+			amount = pricing.AcceleratorPrice
+			chosenTier = "accelerator"
+		}
 
-	if session.DiscountPct > 0 {
-		amount = amount * (1.0 - float64(session.DiscountPct)/100.0)
+		if session.DiscountPct > 0 || session.PromoCode == "SPARK5" {
+			pct := session.DiscountPct
+			if pct <= 0 {
+				pct = 5
+			}
+			amount = amount * (1.0 - float64(pct)/100.0)
+		}
 	}
 
 	username := msg.From.Username
@@ -111,7 +140,9 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) bool {
 	}
 
 	if u := s.syncTelegramUser(msg.From); u != nil {
-		u.Tier = chosenTier
+		if !isUpgrade {
+			u.Tier = chosenTier
+		}
 		if session.PromoCode != "" {
 			u.PromoCode = session.PromoCode
 		}
@@ -119,14 +150,26 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) bool {
 	}
 
 	session.State = StateDefault
+	session.IsUpgrade = false
+	session.UpgradeAmount = 0
 
 	// Send confirmation to student
-	reply := fmt.Sprintf(`🧾 <b>Чек об оплате успешно принят!</b>
+	var reply string
+	if isUpgrade {
+		reply = fmt.Sprintf(`🧾 <b>Чек на апгрейд тарифа успешно принят!</b>
+
+Новый тариф: <b>%s</b>
+Сумма доплаты: <b>%.0f ₽</b>
+
+Так называемый Иль проверит поступление средств и сразу повысит ваш тариф в закрытом канале потока.`, strings.ToUpper(chosenTier), amount)
+	} else {
+		reply = fmt.Sprintf(`🧾 <b>Чек об оплате успешно принят!</b>
 
 Тариф: <b>%s</b>
 Сумма: <b>%.0f ₽</b>
 
 Так называемый Иль проверит поступление средств и сразу пришлёт персональную ссылку-приглашение в закрытый канал потока.`, strings.ToUpper(chosenTier), amount)
+	}
 
 	btnBlog := tu.InlineKeyboardButton("🇺🇸 Пока можно почитать блог").WithURL("https://t.me/so_called_spark")
 	keyboard := tu.InlineKeyboard(tu.InlineKeyboardRow(btnBlog))
@@ -138,6 +181,7 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) bool {
 		_ = s.SendAdminReceiptCard(s.cfg.AdminTelegramID, &receipt)
 	}
 
+	_ = upgradeCurrentTier
 	return true
 }
 
@@ -164,7 +208,40 @@ func (s *BotService) SendAdminReceiptCard(adminID int64, receipt *models.Payment
 		dateStr = time.Now().Format("15:04 02.01.2006")
 	}
 
-	caption := fmt.Sprintf(`🧾 <b>Чек об оплате #%d</b>
+	isUpgradeCard := false
+	var prevTier string
+	if s.db != nil {
+		var student models.User
+		if err := s.db.Where("telegram_id = ?", receipt.TelegramID).First(&student).Error; err == nil {
+			if student.HasAccess && (receipt.Amount == 4000 || receipt.Amount == 8000 || receipt.Amount == 12000) {
+				isUpgradeCard = true
+				prevTier = student.Tier
+			}
+		}
+	}
+
+	var caption string
+	var btnApprove telego.InlineKeyboardButton
+	if isUpgradeCard {
+		caption = fmt.Sprintf(`🚀 <b>Чек на АПГРЕЙД тарифа #%d</b>
+
+👤 Студент: <b>%s</b>
+🆔 ID: <code>%d</code>
+🎓 Апгрейд: <b>%s ➔ %s</b>
+💰 Сумма доплаты: <b>%.0f ₽</b>
+📅 Дата: <i>%s</i>
+
+Подтвердите поступление средств и повышение тарифа:`,
+			receipt.ID,
+			studentDisplay,
+			receipt.TelegramID,
+			strings.ToUpper(prevTier), strings.ToUpper(receipt.Tier),
+			receipt.Amount,
+			dateStr,
+		)
+		btnApprove = tu.InlineKeyboardButton("✅ Одобрить апгрейд").WithCallbackData(fmt.Sprintf("receipt_approve_%d", receipt.ID))
+	} else {
+		caption = fmt.Sprintf(`🧾 <b>Чек об оплате #%d</b>
 
 👤 Студент: <b>%s</b>
 🆔 ID: <code>%d</code>
@@ -173,28 +250,33 @@ func (s *BotService) SendAdminReceiptCard(adminID int64, receipt *models.Payment
 📅 Дата: <i>%s</i>
 
 Подтвердите поступление средств и выдачу доступа:`,
-		receipt.ID,
-		studentDisplay,
-		receipt.TelegramID,
-		strings.ToUpper(receipt.Tier),
-		receipt.Amount,
-		dateStr,
-	)
+			receipt.ID,
+			studentDisplay,
+			receipt.TelegramID,
+			strings.ToUpper(receipt.Tier),
+			receipt.Amount,
+			dateStr,
+		)
+		btnApprove = tu.InlineKeyboardButton("✅ Одобрить и выдать доступ").WithCallbackData(fmt.Sprintf("receipt_approve_%d", receipt.ID))
+	}
 
-	btnApprove := tu.InlineKeyboardButton("✅ Одобрить и выдать доступ").WithCallbackData(fmt.Sprintf("receipt_approve_%d", receipt.ID))
 	btnReject := tu.InlineKeyboardButton("❌ Отклонить").WithCallbackData(fmt.Sprintf("receipt_reject_%d", receipt.ID))
 
 	// Button to toggle tier if wrong tier was detected
 	var btnSwitchTier telego.InlineKeyboardButton
-	if strings.ToLower(receipt.Tier) == "vip" {
-		btnSwitchTier = tu.InlineKeyboardButton("🔄 Сменить тариф на Акселератор").WithCallbackData(fmt.Sprintf("receipt_tier_accelerator_%d", receipt.ID))
-	} else {
-		btnSwitchTier = tu.InlineKeyboardButton("👑 Сменить тариф на VIP").WithCallbackData(fmt.Sprintf("receipt_tier_vip_%d", receipt.ID))
+	if !isUpgradeCard {
+		if strings.ToLower(receipt.Tier) == "vip" {
+			btnSwitchTier = tu.InlineKeyboardButton("🔄 Сменить тариф на Акселератор").WithCallbackData(fmt.Sprintf("receipt_tier_accelerator_%d", receipt.ID))
+		} else {
+			btnSwitchTier = tu.InlineKeyboardButton("👑 Сменить тариф на VIP").WithCallbackData(fmt.Sprintf("receipt_tier_vip_%d", receipt.ID))
+		}
 	}
 
 	rows := [][]telego.InlineKeyboardButton{
 		{btnApprove, btnReject},
-		{btnSwitchTier},
+	}
+	if btnSwitchTier.Text != "" {
+		rows = append(rows, []telego.InlineKeyboardButton{btnSwitchTier})
 	}
 	if receipt.Username != "" {
 		cleanUser := strings.TrimPrefix(receipt.Username, "@")

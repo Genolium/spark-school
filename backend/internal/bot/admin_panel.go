@@ -270,3 +270,116 @@ func (s *BotService) ExecuteBroadcast(adminChatID telego.ChatID, broadcastText s
 		_, _ = s.bot.SendMessage(report)
 	}(users, broadcastText)
 }
+
+// DailyDigestData encapsulates key metrics summarized in daily digest.
+type DailyDigestData struct {
+	Date                  string
+	NewLeadsToday         int64
+	ApprovedPaymentsToday int64
+	RevenueToday          float64
+	PendingReceipts       int64
+	ActiveStudents        int64
+	TotalCapacity         int64
+	SpotsLeft             int64
+	TotalUsers            int64
+}
+
+// SendCuratorDailyDigest computes today's summary metrics and sends a formatted digest to curator.
+func (s *BotService) SendCuratorDailyDigest(targetChatID ...int64) (*DailyDigestData, error) {
+	var adminID int64
+	if len(targetChatID) > 0 && targetChatID[0] != 0 {
+		adminID = targetChatID[0]
+	} else if s.cfg != nil {
+		adminID = s.cfg.AdminTelegramID
+	}
+
+	if adminID == 0 {
+		log.Println("[Daily Digest] No AdminTelegramID configured.")
+		return nil, nil
+	}
+
+	now := time.Now()
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+
+	data := &DailyDigestData{
+		Date: now.Format("02.01.2006"),
+	}
+
+	if s.db != nil {
+		// 1. New leads registered today
+		s.db.Model(&models.User{}).Where("created_at >= ? AND role != ?", todayStart, "admin").Count(&data.NewLeadsToday)
+
+		// 2. Approved payments today (Receipts + Online Transactions)
+		var receiptCount int64
+		var receiptRevenue float64
+		s.db.Model(&models.PaymentReceipt{}).Where("status = 'approved' AND (updated_at >= ? OR created_at >= ?)", todayStart, todayStart).Count(&receiptCount)
+		s.db.Model(&models.PaymentReceipt{}).Where("status = 'approved' AND (updated_at >= ? OR created_at >= ?)", todayStart, todayStart).Select("COALESCE(SUM(amount), 0)").Scan(&receiptRevenue)
+
+		var onlineCount int64
+		var onlineRevenue float64
+		s.db.Model(&models.PaymentTransaction{}).Where("status = 'SUCCESS' AND created_at >= ?", todayStart).Count(&onlineCount)
+		s.db.Model(&models.PaymentTransaction{}).Where("status = 'SUCCESS' AND created_at >= ?", todayStart).Select("COALESCE(SUM(amount), 0)").Scan(&onlineRevenue)
+
+		data.ApprovedPaymentsToday = receiptCount + onlineCount
+		data.RevenueToday = receiptRevenue + onlineRevenue
+
+		// 4. Pending receipts waiting for review
+		s.db.Model(&models.PaymentReceipt{}).Where("status = 'pending'").Count(&data.PendingReceipts)
+
+		// 5. Active students and remaining spots
+		s.db.Model(&models.User{}).Where("has_access = true AND role != ?", "admin").Count(&data.ActiveStudents)
+		s.db.Model(&models.User{}).Count(&data.TotalUsers)
+
+		cap, left := handlers.CalculateCapacityAndSpots(data.ActiveStudents)
+		data.TotalCapacity = int64(cap)
+		data.SpotsLeft = int64(left)
+	}
+
+	msgText := fmt.Sprintf(`📰 <b>Ежедневный дайджест куратора SPARK</b>
+📅 <i>Дата: %s (%s)</i>
+
+👤 <b>Новых лидов сегодня:</b> +%d
+💳 <b>Одобренных оплат сегодня:</b> %d
+💰 <b>Выручка за сегодня:</b> %.0f ₽
+
+⏳ <b>Чеков на модерации:</b> %d
+🔥 <b>Свободных мест на потоке:</b> %d из %d (студентов: %d)
+
+👥 <b>Всего пользователей в CRM:</b> %d
+
+<i>Используйте /admin для быстрого управления проектом.</i>`,
+		data.Date, now.Format("15:04"),
+		data.NewLeadsToday,
+		data.ApprovedPaymentsToday,
+		data.RevenueToday,
+		data.PendingReceipts,
+		data.SpotsLeft, data.TotalCapacity, data.ActiveStudents,
+		data.TotalUsers,
+	)
+
+	chatID := tu.ID(adminID)
+	kb := tu.InlineKeyboard(
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("🧾 Проверить чеки").WithCallbackData("admin_receipts"),
+			tu.InlineKeyboardButton("📊 Живая статистика").WithCallbackData("admin_stats"),
+		),
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("🎛 Панель управления").WithCallbackData("admin_menu"),
+		),
+	)
+
+	if s.bot == nil {
+		log.Printf("[Daily Digest Mock] Successfully computed digest for curator %d", adminID)
+		return data, nil
+	}
+
+	m := tu.Message(chatID, msgText).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
+	_, err := s.bot.SendMessage(m)
+	if err != nil {
+		log.Printf("[Daily Digest Error] SendMessage failed to %d: %v", adminID, err)
+	} else {
+		log.Printf("[Daily Digest] Successfully dispatched to curator %d", adminID)
+	}
+	return data, err
+}
+

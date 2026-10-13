@@ -72,6 +72,9 @@ func NewBotService(cfg *config.Config, db *gorm.DB) *BotService {
 	// Start 72-hour drip lead nurture worker
 	go s.startDripWorker()
 
+	// Start daily curator digest cron worker
+	go s.startDigestWorker()
+
 	return s
 }
 
@@ -225,11 +228,7 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 
 			// 1. Extract tier
 			tier := "accelerator"
-			if strings.HasPrefix(payload, "basic") || strings.HasPrefix(payload, "base") {
-				tier = "basic"
-				payload = strings.TrimPrefix(strings.TrimPrefix(payload, "basic"), "base")
-				payload = strings.TrimPrefix(payload, "_")
-			} else if strings.HasPrefix(payload, "vip") {
+			if strings.HasPrefix(payload, "vip") {
 				tier = "vip"
 				payload = strings.TrimPrefix(payload, "vip")
 				payload = strings.TrimPrefix(payload, "_")
@@ -330,6 +329,17 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 		return true
 	}
 
+	// Curator In-line Command: /digest
+	if strings.HasPrefix(text, "/digest") {
+		if msg.From != nil && s.IsAdmin(msg.From.ID) {
+			_, _ = s.SendCuratorDailyDigest(chatID.ID)
+		} else {
+			m := tu.Message(chatID, "⛔️ Доступ ограничен. Команда доступна только куратору проекта.")
+			_, _ = s.bot.SendMessage(m)
+		}
+		return true
+	}
+
 	// Diagnostic tool for Telegram Premium Custom Emojis
 	if strings.HasPrefix(text, "/emoji") {
 		type detectedEmoji struct {
@@ -398,6 +408,11 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 		return true
 	}
 
+	if strings.HasPrefix(text, "/upgrade") {
+		s.sendUpgradeOptions(chatID, msg.From)
+		return true
+	}
+
 	// State-dependent handling:
 	// Only parse promo code if user actually requested to enter a promo code
 	if session.State == StateWaitingPromo && text != "" && !strings.HasPrefix(text, "/") {
@@ -443,12 +458,24 @@ func (s *BotService) sendWelcomeMenu(chatID telego.ChatID, from *telego.User) {
 
 %s <b>Выберите интересующий раздел:</b>`, star, spark, spiral, firstName, heart, sun, arrowDown)
 
+	canUpgrade := false
+	if from != nil && s.db != nil {
+		var u models.User
+		if err := s.db.Where("telegram_id = ?", from.ID).First(&u).Error; err == nil {
+			if u.HasAccess && strings.ToLower(strings.TrimSpace(u.Tier)) != "vip" {
+				canUpgrade = true
+			}
+		}
+	}
+
+	mainKb := MainMenuKeyboard(s.cfg.FrontendURL, canUpgrade)
+
 	// Send rich photo card using cached or local file
 	photoFile := s.ResolvePhotoFile(MediaMainBanner)
 	photoMsg := tu.Photo(chatID, photoFile).
 		WithCaption(caption).
 		WithParseMode(telego.ModeHTML).
-		WithReplyMarkup(MainMenuKeyboard(s.cfg.FrontendURL))
+		WithReplyMarkup(mainKb)
 
 	sentMsg, err := s.bot.SendPhoto(photoMsg)
 	if err == nil && sentMsg != nil {
@@ -459,22 +486,29 @@ func (s *BotService) sendWelcomeMenu(chatID telego.ChatID, from *telego.User) {
 		fallbackPhoto := tu.Photo(chatID, tu.FileFromID(PhotoGoldenGate)).
 			WithCaption(caption).
 			WithParseMode(telego.ModeHTML).
-			WithReplyMarkup(MainMenuKeyboard(s.cfg.FrontendURL))
+			WithReplyMarkup(mainKb)
 		if _, fbErr := s.bot.SendPhoto(fallbackPhoto); fbErr != nil {
 			log.Printf("[Bot Error] Fallback SendPhoto also failed: %v. Sending message...", fbErr)
 			textMsg := tu.Message(chatID, caption).
 				WithParseMode(telego.ModeHTML).
-				WithReplyMarkup(MainMenuKeyboard(s.cfg.FrontendURL))
+				WithReplyMarkup(mainKb)
 			if _, textErr := s.bot.SendMessage(textMsg); textErr != nil {
 				log.Printf("[Bot Error] SendMessage with custom emoji failed: %v. Cleaning tags...", textErr)
 				cleanCaption := StripTgEmoji(caption)
 				cleanMsg := tu.Message(chatID, cleanCaption).
 					WithParseMode(telego.ModeHTML).
-					WithReplyMarkup(MainMenuKeyboard(s.cfg.FrontendURL))
+					WithReplyMarkup(mainKb)
 				_, _ = s.bot.SendMessage(cleanMsg)
 			}
 		}
 	}
+}
+
+func (s *BotService) getPricing() models.CoursePricing {
+	if s.db != nil {
+		return models.GetCoursePricing(s.db)
+	}
+	return models.DefaultCoursePricing
 }
 
 func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User, withPromo bool) {
@@ -501,21 +535,25 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 	num2 := TgEmoji(EmojiNum2, "2️⃣")
 	paperclip := TgEmoji(EmojiPaperclip, "📎")
 
+	pricing := s.getPricing()
+	accBase := int(pricing.AcceleratorPrice)
+	vipBase := int(pricing.VIPPrice)
+
 	if withPromo || session.DiscountPct > 0 {
 		pct := session.DiscountPct
 		if pct <= 0 {
 			pct = 5
 		}
-		accDiscount := (6900 * pct) / 100
-		accPrice := 6900 - accDiscount
-		vipDiscount := (14900 * pct) / 100
-		vipPrice := 14900 - vipDiscount
+		accDiscount := (accBase * pct) / 100
+		accPrice := accBase - accDiscount
+		vipDiscount := (vipBase * pct) / 100
+		vipPrice := vipBase - vipDiscount
 
 		text = fmt.Sprintf(`%s <b>Промокод успешно активирован! Скидка %d%%</b>
 
 <b>Стоимость со скидкой %d%%:</b>
-%s Акселератор: <b>%d ₽</b> (скидка %d ₽)
-%s VIP: <b>%d ₽</b> (скидка %d ₽)
+%s Акселератор: <b>%s ₽</b> (скидка %s ₽)
+%s VIP: <b>%s ₽</b> (скидка %s ₽)
 
 🏛 <b>Прямой перевод по СБП (0%% без комиссии):</b>
 • Банк: <b>Озон Банк (Ozon)</b>
@@ -526,14 +564,17 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 %s <b>Как получить доступ:</b>
 1. Выберите тариф кнопкой ниже или переведите нужную сумму по СБП.
 2. <b>Отправьте скриншот чека прямо сюда в чат!</b>
-3. Бот проверит чек и сразу выдаст вам одноразовую ссылку в закрытый канал потока.`, sparkle, pct, pct, bullet, accPrice, accDiscount, bullet, vipPrice, vipDiscount, clipGreen)
-		keyboard = PromoAppliedKeyboard()
+3. Бот проверит чек и сразу выдаст вам одноразовую ссылку в закрытый канал потока.`, sparkle, pct, pct, bullet, formatPriceRub(accPrice), formatPriceRub(accDiscount), bullet, formatPriceRub(vipPrice), formatPriceRub(vipDiscount), clipGreen)
+		keyboard = PromoAppliedKeyboard(pricing)
 	} else {
+		accPromoPrice := accBase - (accBase*5)/100
+		vipPromoPrice := vipBase - (vipBase*5)/100
+
 		text = fmt.Sprintf(`%s <b>Бронирование места в проекте «так называемый SPARK»</b>
 
 <b>Тарифы участия:</b>
-%s <b>Акселератор [Хит]:</b> 6 900 ₽ (по промокоду: <b>6 555 ₽</b>)
-%s <b>VIP:</b> 14 900 ₽ (по промокоду: <b>14 155 ₽</b>) <i>[Строго ограниченное количество мест]</i>
+%s <b>Акселератор [Хит]:</b> %s ₽ (по промокоду: <b>%s ₽</b>)
+%s <b>VIP:</b> %s ₽ (по промокоду: <b>%s ₽</b>) <i>[Строго ограниченное количество мест]</i>
 
 🏛 <b>Оплата через СБП (0%% без комиссии):</b>
 • Банк: <b>Озон Банк (Ozon)</b>
@@ -544,8 +585,8 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 %s <b>Как получить доступ:</b>
 1. Выберите тариф кнопкой ниже или сделайте перевод по номеру телефона через СБП.
 2. <b>Отправьте скриншот чека прямо сюда в чат бота!</b>
-3. Бот зафиксирует платёж и сразу выдаст вам персональную ссылку в закрытый канал потока.`, lightning, num1, num2, paperclip)
-		keyboard = PaymentKeyboard()
+3. Бот зафиксирует платёж и сразу выдаст вам персональную ссылку в закрытый канал потока.`, lightning, num1, formatPriceRub(accBase), formatPriceRub(accPromoPrice), num2, formatPriceRub(vipBase), formatPriceRub(vipPromoPrice), paperclip)
+		keyboard = PaymentKeyboard(pricing)
 	}
 
 	targetMedia := MediaBuyCourse
@@ -574,20 +615,22 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 }
 
 func (s *BotService) handleSbpPayment(chatID telego.ChatID, from *telego.User, tier string) {
+	session := s.getSession(chatID.ID)
+	session.State = StateWaitingReceipt
+	session.SelectedTier = tier
+
 	if s.bot == nil {
 		return
 	}
 
-	session := s.getSession(chatID.ID)
-	session.State = StateWaitingReceipt
-	session.SelectedTier = tier
 	hasPromo := session.DiscountPct > 0 || session.PromoCode != ""
 
+	pricing := s.getPricing()
 	tierTitle := "Акселератор"
-	basePrice := 6900
+	basePrice := int(pricing.AcceleratorPrice)
 	if tier == "vip" {
 		tierTitle = "VIP"
-		basePrice = 14900
+		basePrice = int(pricing.VIPPrice)
 	}
 
 	price := basePrice
@@ -604,7 +647,7 @@ func (s *BotService) handleSbpPayment(chatID telego.ChatID, from *telego.User, t
 
 	sbpText := fmt.Sprintf(`🏛 <b>Оплата тарифа «%s» через СБП (0%% без комиссии)</b>
 
-💰 <b>Сумма к переводу: %d ₽</b>%s
+💰 <b>Сумма к переводу: %s ₽</b>%s
 
 <b>Реквизиты для перевода:</b>
 • Банк: <b>Озон Банк (Ozon)</b>
@@ -617,7 +660,7 @@ func (s *BotService) handleSbpPayment(chatID telego.ChatID, from *telego.User, t
 2. <b>Отправьте скриншот чека прямо в этот чат бота!</b>
 3. Бот проверит чек и сразу выдаст вам персональную ссылку в закрытый канал потока.
 
-<i>При любых вопросах вы всегда можете написать так называемому Илю (@ilyan_vas).</i>`, tierTitle, price, discountText, strings.ToUpper(tier))
+<i>При любых вопросах вы всегда можете написать так называемому Илю (@ilyan_vas).</i>`, tierTitle, formatPriceRub(price), discountText, strings.ToUpper(tier))
 
 	kb := tu.InlineKeyboard(
 		tu.InlineKeyboardRow(
@@ -704,13 +747,30 @@ func (s *BotService) sendStatusMessage(chatID telego.ChatID, from *telego.User) 
 		inviteLink := s.cfg.TelegramInviteLink
 		heart := TgEmoji(EmojiHeartSolidGreen, "💚")
 		sun := TgEmoji(EmojiSunGreen, "☀️")
+
+		tierTitle := "Акселератор"
+		if strings.ToLower(strings.TrimSpace(user.Tier)) == "vip" {
+			tierTitle = "VIP"
+		}
+
 		reply := fmt.Sprintf(`%s <b>Ваш доступ активен!</b>
+
+🎓 Тариф: <b>%s</b>
 
 %s Добро пожаловать в проект <b>«так называемый SPARK»</b>.
 Ваша ссылка в закрытый канал потока:
-%s`, heart, sun, inviteLink)
+%s`, heart, tierTitle, sun, inviteLink)
+
 		btnChannel := tu.InlineKeyboardButton("Открыть закрытый канал 🚀").WithURL(inviteLink)
-		kb := tu.InlineKeyboard(tu.InlineKeyboardRow(btnChannel))
+		rows := [][]telego.InlineKeyboardButton{
+			{btnChannel},
+		}
+		if strings.ToLower(strings.TrimSpace(user.Tier)) != "vip" {
+			rows = append(rows, []telego.InlineKeyboardButton{
+				tu.InlineKeyboardButton("🚀 Апгрейд тарифа").WithCallbackData("action_upgrade"),
+			})
+		}
+		kb := tu.InlineKeyboard(rows...)
 
 		photoFile := s.ResolvePhotoFile(MediaStatusGranted)
 		photoMsg := tu.Photo(chatID, photoFile).
@@ -772,7 +832,6 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 		s.processReceiptTierToggle(query, idStr, "accelerator")
 		return true
 	}
-
 	if query.Message == nil {
 		return false
 	}
@@ -797,6 +856,10 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 		s.sendWelcomeMenu(chatID, &query.From)
 		return true
 
+	case "action_status":
+		s.sendStatusMessage(chatID, &query.From)
+		return true
+
 	case "action_payment":
 		session.State = StateWaitingReceipt
 		s.sendPaymentDetails(chatID, &query.From, false)
@@ -813,6 +876,19 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 
 	case "pay_yk_vip", "pay_sbp_vip":
 		s.handleSbpPayment(chatID, &query.From, "vip")
+		return true
+
+	case "action_upgrade":
+		s.sendUpgradeOptions(chatID, &query.From)
+		return true
+
+	case "upgrade_to_vip":
+		pricing := s.getPricing()
+		diff := pricing.VIPPrice - pricing.AcceleratorPrice
+		if diff <= 0 {
+			diff = 8000.0
+		}
+		s.handleUpgradePayment(chatID, &query.From, "vip", diff)
 		return true
 
 	case "pay_sbp_info":
@@ -899,6 +975,12 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 	case "admin_stats":
 		if s.IsAdmin(query.From.ID) {
 			s.SendAdminLiveStats(chatID)
+			return true
+		}
+
+	case "admin_digest":
+		if s.IsAdmin(query.From.ID) {
+			_, _ = s.SendCuratorDailyDigest(chatID.ID)
 			return true
 		}
 
@@ -1120,31 +1202,55 @@ func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr s
 	s.db.Save(&receipt)
 
 	var student models.User
+	wasActive := false
 	if err := s.db.Where("telegram_id = ?", receipt.TelegramID).First(&student).Error; err == nil {
+		wasActive = student.HasAccess
 		student.HasAccess = true
-		now := time.Now()
-		student.AccessGrantedAt = &now
+		if student.AccessGrantedAt == nil {
+			now := time.Now()
+			student.AccessGrantedAt = &now
+		}
 		if receipt.Tier != "" {
 			student.Tier = receipt.Tier
 		}
-		student.PaidAmount = receipt.Amount
+		if wasActive {
+			student.PaidAmount += receipt.Amount
+		} else {
+			student.PaidAmount = receipt.Amount
+		}
 		s.db.Save(&student)
 		_ = s.affiliateService.ProcessCoursePurchase(student.ID, receipt.Amount)
 	}
 
-	sendErr := s.sendAccessNotificationToStudent(receipt.TelegramID, studentMsg, inviteLink)
-	if sendErr != nil {
-		log.Printf("[Bot Approval] Failed delivering invite link to student %d: %v", receipt.TelegramID, sendErr)
+	if wasActive {
+		tierTitle := "Акселератор"
+		if strings.ToLower(receipt.Tier) == "vip" {
+			tierTitle = "VIP"
+		}
+		upgradeMsg := fmt.Sprintf(`🎉 <b>Поздравляем! Ваш тариф успешно повышен до %s!</b>
+
+Вам открыты все расширенные материалы и привилегии потока проекта «так называемый SPARK».
+По всем вопросам вы всегда можете написать так называемому Илю лично: @ilyan_vas`, tierTitle)
+		_ = s.SendNotification(receipt.TelegramID, upgradeMsg)
 		_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
 			CallbackQueryID: query.ID,
-			Text:            fmt.Sprintf("⚠️ Чек одобрен, но ошибка отправки сообщения: %v", sendErr),
-			ShowAlert:       true,
+			Text:            "✅ Апгрейд тарифа успешно подтверждён!",
 		})
 	} else {
-		_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
-			CallbackQueryID: query.ID,
-			Text:            "✅ Доступ успешно выдан, ссылка отправлена студенту!",
-		})
+		sendErr := s.sendAccessNotificationToStudent(receipt.TelegramID, studentMsg, inviteLink)
+		if sendErr != nil {
+			log.Printf("[Bot Approval] Failed delivering invite link to student %d: %v", receipt.TelegramID, sendErr)
+			_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+				CallbackQueryID: query.ID,
+				Text:            fmt.Sprintf("⚠️ Чек одобрен, но ошибка отправки сообщения: %v", sendErr),
+				ShowAlert:       true,
+			})
+		} else {
+			_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+				CallbackQueryID: query.ID,
+				Text:            "✅ Доступ успешно выдан, ссылка отправлена студенту!",
+			})
+		}
 	}
 
 	// Update Curator's Inline Buttons
@@ -1260,24 +1366,48 @@ func (s *BotService) processReceiptTierToggle(query *telego.CallbackQuery, idStr
 		return
 	}
 
+	var student models.User
+	userFound := false
+	isUpgrade := false
+	prevTier := ""
+	if err := s.db.Where("telegram_id = ?", receipt.TelegramID).First(&student).Error; err == nil {
+		userFound = true
+		if student.HasAccess {
+			isUpgrade = true
+			prevTier = strings.ToLower(strings.TrimSpace(student.Tier))
+		}
+	}
+
 	receipt.Tier = newTier
-	if newTier == "vip" {
-		receipt.Amount = 14900.0
+	pricing := s.getPricing()
+	if isUpgrade {
+		if prevTier == "accelerator" {
+			diff := pricing.VIPPrice - pricing.AcceleratorPrice
+			if diff <= 0 {
+				diff = 8000.0
+			}
+			receipt.Amount = diff
+			receipt.Tier = "vip"
+		}
 	} else {
-		receipt.Amount = 6900.0
+		switch newTier {
+		case "vip":
+			receipt.Amount = pricing.VIPPrice
+		default:
+			receipt.Amount = pricing.AcceleratorPrice
+			receipt.Tier = "accelerator"
+		}
 	}
 	s.db.Save(&receipt)
 
-	// Update user record tier if exists
-	var student models.User
-	if err := s.db.Where("telegram_id = ?", receipt.TelegramID).First(&student).Error; err == nil {
-		student.Tier = newTier
+	if userFound && !isUpgrade {
+		student.Tier = receipt.Tier
 		s.db.Save(&student)
 	}
 
 	_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
 		CallbackQueryID: query.ID,
-		Text:            fmt.Sprintf("✅ Тариф чека #%d переключён на %s!", receipt.ID, strings.ToUpper(newTier)),
+		Text:            fmt.Sprintf("✅ Тариф чека #%d переключён на %s!", receipt.ID, strings.ToUpper(receipt.Tier)),
 	})
 
 	if query.Message != nil {
@@ -1298,7 +1428,30 @@ func (s *BotService) processReceiptTierToggle(query *telego.CallbackQuery, idStr
 			dateStr = time.Now().Format("15:04 02.01.2006")
 		}
 
-		newCaption := fmt.Sprintf(`🧾 <b>Чек об оплате #%d</b>
+		var newCaption string
+		var btnApprove telego.InlineKeyboardButton
+		var btnSwitchTier telego.InlineKeyboardButton
+
+		if isUpgrade {
+			newCaption = fmt.Sprintf(`🚀 <b>Чек на АПГРЕЙД тарифа #%d</b>
+
+👤 Студент: <b>%s</b>
+🆔 ID: <code>%d</code>
+🎓 Апгрейд: <b>%s ➔ %s</b>
+💰 Сумма доплаты: <b>%.0f ₽</b>
+📅 Дата: <i>%s</i>
+
+Подтвердите поступление средств и повышение тарифа:`,
+				receipt.ID,
+				studentDisplay,
+				receipt.TelegramID,
+				strings.ToUpper(prevTier), strings.ToUpper(receipt.Tier),
+				receipt.Amount,
+				dateStr,
+			)
+			btnApprove = tu.InlineKeyboardButton("✅ Одобрить апгрейд").WithCallbackData(fmt.Sprintf("receipt_approve_%d", receipt.ID))
+		} else {
+			newCaption = fmt.Sprintf(`🧾 <b>Чек об оплате #%d</b>
 
 👤 Студент: <b>%s</b>
 🆔 ID: <code>%d</code>
@@ -1307,27 +1460,28 @@ func (s *BotService) processReceiptTierToggle(query *telego.CallbackQuery, idStr
 📅 Дата: <i>%s</i>
 
 Подтвердите поступление средств и выдачу доступа:`,
-			receipt.ID,
-			studentDisplay,
-			receipt.TelegramID,
-			strings.ToUpper(receipt.Tier),
-			receipt.Amount,
-			dateStr,
-		)
-
-		btnApprove := tu.InlineKeyboardButton("✅ Одобрить и выдать доступ").WithCallbackData(fmt.Sprintf("receipt_approve_%d", receipt.ID))
-		btnReject := tu.InlineKeyboardButton("❌ Отклонить").WithCallbackData(fmt.Sprintf("receipt_reject_%d", receipt.ID))
-
-		var btnSwitchTier telego.InlineKeyboardButton
-		if strings.ToLower(receipt.Tier) == "vip" {
-			btnSwitchTier = tu.InlineKeyboardButton("🔄 Сменить тариф на Акселератор").WithCallbackData(fmt.Sprintf("receipt_tier_accelerator_%d", receipt.ID))
-		} else {
-			btnSwitchTier = tu.InlineKeyboardButton("👑 Сменить тариф на VIP").WithCallbackData(fmt.Sprintf("receipt_tier_vip_%d", receipt.ID))
+				receipt.ID,
+				studentDisplay,
+				receipt.TelegramID,
+				strings.ToUpper(receipt.Tier),
+				receipt.Amount,
+				dateStr,
+			)
+			btnApprove = tu.InlineKeyboardButton("✅ Одобрить и выдать доступ").WithCallbackData(fmt.Sprintf("receipt_approve_%d", receipt.ID))
+			if strings.ToLower(receipt.Tier) == "vip" {
+				btnSwitchTier = tu.InlineKeyboardButton("🔄 Сменить тариф на Акселератор").WithCallbackData(fmt.Sprintf("receipt_tier_accelerator_%d", receipt.ID))
+			} else {
+				btnSwitchTier = tu.InlineKeyboardButton("👑 Сменить тариф на VIP").WithCallbackData(fmt.Sprintf("receipt_tier_vip_%d", receipt.ID))
+			}
 		}
+
+		btnReject := tu.InlineKeyboardButton("❌ Отклонить").WithCallbackData(fmt.Sprintf("receipt_reject_%d", receipt.ID))
 
 		rows := [][]telego.InlineKeyboardButton{
 			{btnApprove, btnReject},
-			{btnSwitchTier},
+		}
+		if btnSwitchTier.Text != "" {
+			rows = append(rows, []telego.InlineKeyboardButton{btnSwitchTier})
 		}
 		if receipt.Username != "" {
 			cleanUser := strings.TrimPrefix(receipt.Username, "@")
@@ -1550,3 +1704,147 @@ func (s *BotService) associateBotReferral(from *telego.User, inputUsername, refC
 		_ = s.affiliateService.TrackReferral(user.ID, refCode)
 	}
 }
+
+// sendUpgradeOptions presents upgrade options based on student's current tier.
+func (s *BotService) sendUpgradeOptions(chatID telego.ChatID, from *telego.User) {
+	if s.bot == nil {
+		return
+	}
+
+	var user models.User
+	userFound := false
+	if from != nil && s.db != nil {
+		if err := s.db.Where("telegram_id = ?", from.ID).First(&user).Error; err == nil {
+			userFound = true
+		}
+	}
+
+	if !userFound || !user.HasAccess {
+		reply := `ℹ️ <b>Апгрейд тарифа</b>
+
+У вас пока нет активного тарифа. Выберите подходящий тариф для старта подготовки:`
+		m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML).WithReplyMarkup(PaymentKeyboard())
+		_, _ = s.bot.SendMessage(m)
+		return
+	}
+
+	currentTier := strings.ToLower(strings.TrimSpace(user.Tier))
+	if currentTier == "vip" {
+		reply := `👑 <b>У вас уже максимальный тариф VIP!</b>
+
+Вам доступны все материалы, индивидуальные Zoom-интервью 1-на-1 и персональное сопровождение так называемого Иля (@ilyan_vas).`
+		btnCurator := tu.InlineKeyboardButton("Написать так называемому Илю").WithURL("https://t.me/ilyan_vas")
+		btnMenu := tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu")
+		kb := tu.InlineKeyboard(tu.InlineKeyboardRow(btnCurator), tu.InlineKeyboardRow(btnMenu))
+		m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
+		_, _ = s.bot.SendMessage(m)
+		return
+	}
+
+	// Default: currentTier == accelerator
+	pricing := s.getPricing()
+	diff := pricing.VIPPrice - pricing.AcceleratorPrice
+	if diff <= 0 {
+		diff = 8000.0
+	}
+
+	reply := fmt.Sprintf(`👑 <b>Апгрейд тарифа «Акселератор» до VIP</b>
+
+Ваш текущий тариф: <b>Акселератор</b> (%s ₽).
+Вы можете перейти на максимальный уровень <b>VIP</b>, доплатив только разницу:
+
+• <b>VIP:</b> доплата <b>%s ₽</b> (вместо %s ₽)
+  <i>+ Персональное менторство так называемого Иля 24/7</i>
+  <i>+ Неограниченный аудит всех эссе и документов</i>
+  <i>+ Личное сопровождение визового этапа (J-1)</i>
+
+Нажмите кнопку ниже, чтобы перейти на VIP:`,
+		formatPriceRub(int(pricing.AcceleratorPrice)),
+		formatPriceRub(int(diff)),
+		formatPriceRub(int(pricing.VIPPrice)),
+	)
+	m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML).WithReplyMarkup(UpgradeOptionsKeyboard("accelerator", diff))
+	_, _ = s.bot.SendMessage(m)
+}
+
+// handleUpgradePayment sets upgrade state and sends payment instructions for exact price difference.
+func (s *BotService) handleUpgradePayment(chatID telego.ChatID, from *telego.User, targetTier string, amountDiff float64) {
+	session := s.getSession(chatID.ID)
+	session.State = StateWaitingReceipt
+	session.IsUpgrade = true
+	session.UpgradeToTier = targetTier
+	session.SelectedTier = targetTier
+	session.UpgradeAmount = amountDiff
+
+	if from != nil && s.db != nil {
+		var u models.User
+		if err := s.db.Where("telegram_id = ?", from.ID).First(&u).Error; err == nil {
+			session.UpgradeFromTier = u.Tier
+		}
+	}
+
+	if s.bot == nil {
+		return
+	}
+
+	targetName := "Акселератор"
+	if targetTier == "vip" {
+		targetName = "VIP"
+	}
+
+	text := fmt.Sprintf(`🚀 <b>Оплата апгрейда до тарифа «%s»</b>
+
+💰 <b>Сумма доплаты: %s ₽</b>
+
+🏛 <b>Оплата через СБП (0%% без комиссии):</b>
+• Банк: <b>Озон Банк (Ozon)</b>
+• Номер телефона: <code>+7 981 163-36-91</code>
+• Получатель: <b>Васюнин Илья Олегович</b>
+• Назначение платежа: <code>SPARK Апгрейд %s</code>
+
+📎 <b>Как завершить апгрейд:</b>
+1. Переведите точную сумму доплаты (<b>%s ₽</b>) через СБП.
+2. <b>Отправьте скриншот чека прямо сюда в чат бота!</b>
+3. Так называемый Иль подтвердит оплату и обновит ваш тариф.`, targetName, formatPriceRub(int(amountDiff)), strings.ToUpper(targetTier), formatPriceRub(int(amountDiff)))
+
+	kb := tu.InlineKeyboard(
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("💬 Написать так называемому Илю").WithURL("https://t.me/ilyan_vas"),
+		),
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu"),
+		),
+	)
+
+	m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
+	_, _ = s.bot.SendMessage(m)
+}
+
+// startDigestWorker runs background ticker and fires daily digest at configured hour (default 21:00).
+func (s *BotService) startDigestWorker() {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+
+	targetHour := 21
+	if s.cfg != nil && s.cfg.DigestHour >= 0 && s.cfg.DigestHour <= 23 {
+		targetHour = s.cfg.DigestHour
+	}
+
+	lastSentDate := ""
+
+	for {
+		select {
+		case <-s.quitChan:
+			return
+		case <-ticker.C:
+			now := time.Now()
+			today := now.Format("2006-01-02")
+			if now.Hour() == targetHour && now.Minute() == 0 && lastSentDate != today {
+				lastSentDate = today
+				log.Printf("[Daily Digest Cron] Automatically triggering curator daily digest for %s at %02d:%02d...", today, now.Hour(), now.Minute())
+				_, _ = s.SendCuratorDailyDigest()
+			}
+		}
+	}
+}
+

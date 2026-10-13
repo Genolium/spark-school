@@ -66,7 +66,12 @@ func main() {
 	authHandler := handlers.NewAuthHandler(db, cfg, affiliateService)
 	affiliateHandler := handlers.NewAffiliateHandler(db, cfg, affiliateService)
 	adminHandler := handlers.NewAdminHandler(db, cfg, affiliateService, botService.SendNotification, botService.CreateOneTimeInviteLink)
+	adminHandler.SetDigestSender(func() error {
+		_, err := botService.SendCuratorDailyDigest()
+		return err
+	})
 	promoHandler := handlers.NewPromoHandler(db)
+	pricingHandler := handlers.NewPricingHandler(db)
 	statsHandler := handlers.NewStatsHandler(db)
 	receiptHandler := handlers.NewReceiptHandler(db, func(receipt *models.PaymentReceipt) error {
 		if cfg.AdminTelegramID != 0 {
@@ -132,6 +137,9 @@ func main() {
 
 		// Public Stats: Live places counter with auto-doubling capacity
 		api.GET("/stats/places", statsHandler.GetPlacesStats)
+
+		// Public Pricing: Dynamic tier prices (Accelerator & VIP)
+		api.GET("/pricing", pricingHandler.GetPricing)
 
 		// Public Receipts: Anti-fraud receipt submission & deduplication check
 		receiptLimiter := security.RateLimitMiddleware(30, 1*time.Minute, "Слишком много запросов проверки чеков. Пожалуйста, подождите.")
@@ -201,6 +209,9 @@ func main() {
 			adminGroup.PUT("/promos/:id", promoHandler.Update)
 			adminGroup.DELETE("/promos/:id", promoHandler.Delete)
 			adminGroup.POST("/promos/:id/toggle", promoHandler.ToggleStatus)
+			adminGroup.POST("/digest", adminHandler.TriggerDigest)
+			adminGroup.GET("/pricing", pricingHandler.GetPricing)
+			adminGroup.PUT("/pricing", pricingHandler.UpdatePricing)
 		}
 	}
 

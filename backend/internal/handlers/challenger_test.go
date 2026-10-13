@@ -191,8 +191,8 @@ func TestChallenger_ReceiptDeduplication_Adversarial(t *testing.T) {
 			"file_hash":   hashVal,
 			"telegram_id": 333,
 			"username":    "bob",
-			"amount":      2900.0,
-			"tier":        "basic",
+			"amount":      6900.0,
+			"tier":        "accelerator",
 		})
 		req1 := httptest.NewRequest("POST", "/api/v1/receipts/verify", bytes.NewReader(body1))
 		req1.Header.Set("Content-Type", "application/json")
@@ -208,8 +208,8 @@ func TestChallenger_ReceiptDeduplication_Adversarial(t *testing.T) {
 			"file_hash":   hashVal,
 			"telegram_id": 444,
 			"username":    "fraudster",
-			"amount":      2900.0,
-			"tier":        "basic",
+			"amount":      6900.0,
+			"tier":        "accelerator",
 		})
 		req2 := httptest.NewRequest("POST", "/api/v1/receipts/verify", bytes.NewReader(body2))
 		req2.Header.Set("Content-Type", "application/json")

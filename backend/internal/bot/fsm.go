@@ -20,11 +20,17 @@ const (
 
 // UserSession holds state machine and temporary calculator or payment data.
 type UserSession struct {
-	State       BotState
+	State        BotState
 	SelectedTier string // "accelerator" or "vip"
 	PromoCode    string
 	DiscountPct  int
 	LastActivity time.Time
+
+	// Upgrade fields
+	IsUpgrade       bool
+	UpgradeFromTier string
+	UpgradeToTier   string
+	UpgradeAmount   float64
 
 	// Calculator answers
 	CalcAgeCitizenship bool

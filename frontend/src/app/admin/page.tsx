@@ -8,6 +8,7 @@ import { FinancialStats } from "@/components/Admin/FinancialStats";
 import { StudentsTable } from "@/components/Admin/StudentsTable";
 import { PayoutsTable } from "@/components/Admin/PayoutsTable";
 import { PromosTable } from "@/components/Admin/PromosTable";
+import { PricingSettingsTable } from "@/components/Admin/PricingSettingsTable";
 import { api, AdminStats, UserProfile, PayoutRequest, PromoCode } from "@/lib/api";
 import {
   ShieldCheck,
@@ -16,9 +17,10 @@ import {
   Users,
   DollarSign,
   Tag,
+  Send,
 } from "lucide-react";
 
-type AdminTab = "students" | "promos" | "payouts";
+type AdminTab = "students" | "promos" | "pricing" | "payouts";
 
 export default function AdminPage() {
   const [unlocked, setUnlocked] = useState(false);
@@ -75,6 +77,23 @@ export default function AdminPage() {
   const handleLogout = () => {
     api.adminLogout();
     setUnlocked(false);
+  };
+
+  const [digestSending, setDigestSending] = useState(false);
+  const [digestMsg, setDigestMsg] = useState<string | null>(null);
+
+  const handleTriggerDigest = async () => {
+    setDigestSending(true);
+    setDigestMsg(null);
+    const res = await api.triggerAdminDigest();
+    setDigestSending(false);
+    if (res.success) {
+      setDigestMsg(res.message || "Дайджест отправлен куратору в Telegram");
+      setTimeout(() => setDigestMsg(null), 4000);
+    } else {
+      setDigestMsg(res.error || "Ошибка отправки");
+      setTimeout(() => setDigestMsg(null), 4000);
+    }
   };
 
   const handleToggleAccess = async (
@@ -140,6 +159,16 @@ export default function AdminPage() {
 
               <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 <button
+                  onClick={handleTriggerDigest}
+                  disabled={digestSending}
+                  className="px-4 py-2.5 rounded-full bg-amber-500/15 hover:bg-amber-500/25 text-xs font-mono text-amber-300 flex items-center gap-1.5 transition-all border border-amber-500/30"
+                  title="Отправить ежедневный дайджест куратору в Telegram"
+                >
+                  <Send className={`w-3.5 h-3.5 ${digestSending ? "animate-pulse text-amber-400" : ""}`} />
+                  <span>{digestSending ? "Отправка..." : "Дайджест в TG"}</span>
+                </button>
+
+                <button
                   onClick={loadAdminData}
                   disabled={loading}
                   className="px-4 py-2.5 rounded-full bg-white/10 hover:bg-white/20 text-xs font-mono text-white flex items-center gap-2 transition-all border border-white/10"
@@ -158,6 +187,13 @@ export default function AdminPage() {
                 </button>
               </div>
             </div>
+
+            {digestMsg && (
+              <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-700 dark:text-amber-300 text-xs font-mono flex items-center justify-between">
+                <span>{digestMsg}</span>
+                <button onClick={() => setDigestMsg(null)} className="text-amber-500 hover:text-amber-600 font-bold ml-4">✕</button>
+              </div>
+            )}
 
             {/* Navigation Tabs */}
             <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-slate-200/80 dark:bg-white/[0.04] border border-slate-300 dark:border-white/10 mb-8 max-w-fit overflow-x-auto shadow-sm">
@@ -189,6 +225,18 @@ export default function AdminPage() {
                 <span className="px-1.5 py-0.2 rounded bg-black/10 dark:bg-black/20 text-[10px]">
                   {promos.length}
                 </span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab("pricing")}
+                className={`px-5 py-2.5 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                  activeTab === "pricing"
+                    ? "bg-amber-500 text-black shadow-lg"
+                    : "text-slate-700 dark:text-slate-300 hover:text-black dark:hover:text-white hover:bg-slate-300/70 dark:hover:bg-white/10"
+                }`}
+              >
+                <DollarSign className="w-4 h-4" />
+                <span>Тарифы и цены</span>
               </button>
 
               {/* Временно закомментировано: вкладка выплат партнёрам
@@ -233,6 +281,11 @@ export default function AdminPage() {
                   onRefresh={loadAdminData}
                 />
               </div>
+            )}
+
+            {/* Tab: Pricing & Course Tiers */}
+            {activeTab === "pricing" && (
+              <PricingSettingsTable />
             )}
 
             {/* Tab 2: Payouts (временно закомментировано)

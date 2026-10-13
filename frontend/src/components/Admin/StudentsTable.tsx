@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Search, UserCheck, Lock, Plus, Pencil, Trash2, Tag, CreditCard } from "lucide-react";
+import { Search, UserCheck, Lock, Plus, Pencil, Trash2, Tag, CreditCard, RotateCcw, Filter } from "lucide-react";
 import { UserProfile, api } from "@/lib/api";
 
 interface StudentsTableProps {
@@ -37,8 +37,15 @@ const emptyForm: FormState = {
 const inputCls =
   "w-full px-3 py-2 text-xs font-mono bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-amber-500";
 
+const selectCls =
+  "px-3 py-2 text-xs font-mono bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:border-amber-500 cursor-pointer";
+
 export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsTableProps) {
   const [query, setQuery] = useState("");
+  const [tierFilter, setTierFilter] = useState<string>("all");
+  const [accessFilter, setAccessFilter] = useState<string>("all");
+  const [receiptFilter, setReceiptFilter] = useState<string>("all");
+
   const [modal, setModal] = useState<"create" | "edit" | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -52,16 +59,72 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
   const [activatePromo, setActivatePromo] = useState("");
   const [activateAmount, setActivateAmount] = useState("6900");
 
-  const filtered = students.filter((s) => {
+  const isFiltered = query.trim() !== "" || tierFilter !== "all" || accessFilter !== "all" || receiptFilter !== "all";
+
+  const [serverStudents, setServerStudents] = useState<UserProfile[] | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
+
+  React.useEffect(() => {
+    if (!isFiltered) {
+      setServerStudents(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const fetched = await api.getAdminStudents({
+          q: query.trim(),
+          tier: tierFilter,
+          access: accessFilter,
+          receipt_status: receiptFilter,
+        });
+        setServerStudents(fetched);
+      } catch {
+        // Fallback to client-side filter
+      } finally {
+        setIsSearching(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [query, tierFilter, accessFilter, receiptFilter, isFiltered]);
+
+  const resetFilters = () => {
+    setQuery("");
+    setTierFilter("all");
+    setAccessFilter("all");
+    setReceiptFilter("all");
+    setServerStudents(null);
+  };
+
+  const filtered = (students || []).filter((s) => {
     const q = query.toLowerCase();
-    return (
+    const matchesQuery =
+      !q ||
       s.username?.toLowerCase().includes(q) ||
       s.first_name?.toLowerCase().includes(q) ||
       s.last_name?.toLowerCase().includes(q) ||
       String(s.telegram_id).includes(q) ||
-      s.promo_code?.toLowerCase().includes(q)
-    );
+      s.promo_code?.toLowerCase().includes(q);
+
+    const matchesTier =
+      tierFilter === "all" ||
+      (s.tier && s.tier.toLowerCase() === tierFilter.toLowerCase());
+
+    const matchesAccess =
+      accessFilter === "all" ||
+      (accessFilter === "active" ? s.has_access : !s.has_access);
+
+    const matchesReceipt =
+      receiptFilter === "all" ||
+      (s.receipt_status && s.receipt_status.toLowerCase() === receiptFilter.toLowerCase()) ||
+      (receiptFilter === "none" && (!s.receipt_status || s.receipt_status.toLowerCase() === "none"));
+
+    return matchesQuery && matchesTier && matchesAccess && matchesReceipt;
   });
+
+  const displayList = serverStudents !== null ? serverStudents : filtered;
 
   const calculateDefaultAmount = (tier: "accelerator" | "vip", promo: string): string => {
     const hasDiscount = promo.trim().length > 0;
@@ -89,7 +152,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
   };
 
   const openEdit = (s: UserProfile) => {
-    const currentTier = s.tier || "accelerator";
+    const currentTier: "accelerator" | "vip" = s.tier === "vip" ? "vip" : "accelerator";
     const currentPromo = s.promo_code || "";
     const currentAmount = s.paid_amount ? String(s.paid_amount) : calculateDefaultAmount(currentTier, currentPromo);
 
@@ -170,7 +233,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
   };
 
   const handleOpenActivate = (student: UserProfile) => {
-    const studentTier = student.tier || "accelerator";
+    const studentTier: "accelerator" | "vip" = student.tier === "vip" ? "vip" : "accelerator";
     const studentPromo = student.promo_code || "";
     setActivateTarget(student);
     setActivateTier(studentTier);
@@ -191,35 +254,89 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
 
   return (
     <div className="p-6 sm:p-8 rounded-[32px] border border-slate-200 dark:border-white/15 bg-white dark:bg-black/30 shadow-sm mb-8">
-      {/* Header and Search */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-        <div>
-          <h3 className="text-xl font-bold text-slate-900 dark:text-white">
-            Управление студентами и ручной эквайринг
-          </h3>
-          <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-1">
-            Выбирайте тариф, отслеживайте сумму оплаты, промокоды и активируйте доступ
-          </p>
+      {/* Header and Search & Filters */}
+      <div className="flex flex-col gap-4 mb-6">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h3 className="text-xl font-bold text-slate-900 dark:text-white">
+              Управление студентами и ручной эквайринг
+            </h3>
+            <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-1">
+              Фильтрация по тарифам, чекам и статусам • Поиск и моментальная активация
+            </p>
+          </div>
+
+          <button
+            onClick={openCreate}
+            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-mono font-bold flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 whitespace-nowrap self-start sm:self-auto"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Добавить студента</span>
+          </button>
         </div>
 
-        <div className="flex flex-col sm:flex-row gap-3">
-          <div className="relative w-full sm:w-72">
+        {/* Search & Filters Bar */}
+        <div className="flex flex-wrap items-center gap-3 pt-1">
+          <div className="relative flex-1 min-w-[220px]">
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Поиск по @username, имени, промокоду..."
+              placeholder="Поиск по @username, имени, TG ID, промокоду..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className={`${inputCls} pl-10 pr-4`}
             />
           </div>
-          <button
-            onClick={openCreate}
-            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-mono font-bold flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 whitespace-nowrap"
+
+          {/* Tier Filter */}
+          <select
+            value={tierFilter}
+            onChange={(e) => setTierFilter(e.target.value)}
+            className={selectCls}
+            title="Фильтр по тарифу"
           >
-            <Plus className="w-4 h-4" />
-            <span>Добавить студента</span>
-          </button>
+            <option value="all">Все тарифы</option>
+            <option value="accelerator">Акселератор (6 900 ₽)</option>
+            <option value="vip">★ VIP (14 900 ₽)</option>
+          </select>
+
+          {/* Access Filter */}
+          <select
+            value={accessFilter}
+            onChange={(e) => setAccessFilter(e.target.value)}
+            className={selectCls}
+            title="Фильтр по доступу"
+          >
+            <option value="all">Все доступы</option>
+            <option value="active">Доступ активен</option>
+            <option value="pending">Доступ закрыт</option>
+          </select>
+
+          {/* Receipt Status Filter */}
+          <select
+            value={receiptFilter}
+            onChange={(e) => setReceiptFilter(e.target.value)}
+            className={selectCls}
+            title="Фильтр по статусу чека"
+          >
+            <option value="all">Все чеки</option>
+            <option value="pending">⏳ На проверке</option>
+            <option value="approved">✅ Одобрен</option>
+            <option value="rejected">❌ Отклонён</option>
+            <option value="none">— Без чека</option>
+          </select>
+
+          {/* Reset Filters */}
+          {isFiltered && (
+            <button
+              onClick={resetFilters}
+              className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15 text-slate-700 dark:text-slate-300 text-xs font-mono flex items-center gap-1.5 transition-all"
+              title="Сбросить все фильтры"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span>Сбросить</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -238,20 +355,21 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
               <th className="pb-3 font-semibold">Telegram ID</th>
               <th className="pb-3 font-semibold">Тариф</th>
               <th className="pb-3 font-semibold">Оплачено</th>
+              <th className="pb-3 font-semibold">Чек</th>
               <th className="pb-3 font-semibold">Промокод</th>
               <th className="pb-3 font-semibold">Статус</th>
               <th className="pb-3 font-semibold text-right">Действия</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-            {filtered.length === 0 && (
+            {displayList.length === 0 && (
               <tr>
-                <td colSpan={7} className="py-8 text-center text-slate-500">
-                  Студенты не найдены
+                <td colSpan={8} className="py-8 text-center text-slate-500">
+                  {isFiltered ? "По заданным фильтрам студенты не найдены" : "Студенты не найдены"}
                 </td>
               </tr>
             )}
-            {filtered.map((s) => {
+            {displayList.map((s) => {
               const isVIP = s.tier === "vip";
               const displayAmount = s.paid_amount
                 ? s.paid_amount.toLocaleString("ru-RU") + " ₽"
@@ -295,6 +413,25 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
                   {/* Paid Amount */}
                   <td className="py-4 font-bold text-slate-900 dark:text-white">
                     {displayAmount}
+                  </td>
+
+                  {/* Receipt Status Badge */}
+                  <td className="py-4">
+                    {s.receipt_status === "approved" ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25">
+                        ✅ Одобрен
+                      </span>
+                    ) : s.receipt_status === "pending" ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/25 animate-pulse">
+                        ⏳ Проверка
+                      </span>
+                    ) : s.receipt_status === "rejected" ? (
+                      <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/25">
+                        ❌ Отклонён
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 text-xs">—</span>
+                    )}
                   </td>
 
                   {/* Promo Code */}

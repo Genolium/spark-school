@@ -38,8 +38,9 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
   const [promoCode, setPromoCode] = useState("");
   const [promoResult, setPromoResult] = useState<PromoValidationResult | null>(null);
   const [validatingPromo, setValidatingPromo] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
   const [places, setPlaces] = useState<PlacesStats>({ total_capacity: 25, active_students: 16, spots_left: 9 });
+  const [tiersConfig, setTiersConfig] = useState(TIERS);
+  const [submitted, setSubmitted] = useState(false);
 
   useEffect(() => {
     if (initialTier) {
@@ -51,7 +52,28 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
 
   useEffect(() => {
     if (isOpen) {
+      setSubmitted(false);
       api.getPlacesStats().then(setPlaces).catch(() => {});
+      api.getCoursePricing().then((p) => {
+        const accPrice = p.accelerator_price || 6900;
+        const vipPrice = p.vip_price || 14900;
+        setTiersConfig({
+          accelerator: {
+            name: "Акселератор",
+            price: accPrice,
+            discountPrice: Math.round(accPrice * 0.95),
+            discountAmount: accPrice - Math.round(accPrice * 0.95),
+            tag: "Хит продаж",
+          },
+          vip: {
+            name: "VIP",
+            price: vipPrice,
+            discountPrice: Math.round(vipPrice * 0.95),
+            discountAmount: vipPrice - Math.round(vipPrice * 0.95),
+            tag: "Строго 3 места",
+          },
+        });
+      }).catch(() => {});
     }
   }, [isOpen]);
 
@@ -72,7 +94,7 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
   const handleApplyPromo = async () => {
     if (!promoCode.trim()) return;
     setValidatingPromo(true);
-    const res = await api.validatePromoCode(promoCode.trim(), tier, TIERS[tier].price);
+    const res = await api.validatePromoCode(promoCode.trim(), tier, tiersConfig[tier].price);
     setPromoResult(res);
     setValidatingPromo(false);
   };
@@ -107,10 +129,11 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     handlePayWithYooKassa();
+    setSubmitted(true);
     window.open(botPayUrl, "_blank");
   };
 
-  const activeTierConfig = TIERS[tier];
+  const activeTierConfig = tiersConfig[tier];
   const finalPrice = promoResult?.valid
     ? Math.round(activeTierConfig.price * 0.95)
     : activeTierConfig.price;
@@ -188,7 +211,7 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   {(["accelerator", "vip"] as PricingTier[]).map((t) => {
-                    const cfg = TIERS[t];
+                    const cfg = tiersConfig[t];
                     const isSelected = tier === t;
                     return (
                       <button

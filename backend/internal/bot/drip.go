@@ -263,9 +263,14 @@ func (s *BotService) sendDripStep3(chatID telego.ChatID, lead models.DripLead) {
 }
 
 func (s *BotService) sendDripMessageWithFallback(chatID telego.ChatID, text string, kb *telego.InlineKeyboardMarkup) {
+	if s.bot == nil {
+		log.Printf("[Bot Mock] Drip message to %v: %s", chatID, StripTgEmoji(text))
+		return
+	}
 	m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
 	if _, err := s.bot.SendMessage(m); err != nil {
 		cleanMsg := tu.Message(chatID, StripTgEmoji(text)).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
 		_, _ = s.bot.SendMessage(cleanMsg)
 	}
 }
+

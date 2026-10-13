@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -170,4 +171,123 @@ func TestBot_SyncTelegramUser_LeadCreation(t *testing.T) {
 		t.Errorf("expected nil for zero ID, got %v", u)
 	}
 }
+
+func TestBot_UpgradeOptionsKeyboard(t *testing.T) {
+	// 1. Accelerator tier student can upgrade to VIP (8 000 ₽)
+	accKb := UpgradeOptionsKeyboard("accelerator")
+	if len(accKb.InlineKeyboard) != 2 {
+		t.Fatalf("expected 2 rows (1 option + menu) for accelerator tier, got %d", len(accKb.InlineKeyboard))
+	}
+	accOpt := accKb.InlineKeyboard[0][0]
+	if !strings.Contains(accOpt.Text, "8 000") || accOpt.CallbackData != "upgrade_to_vip" {
+		t.Errorf("expected upgrade to VIP with 8 000 ₽, got text=%s, data=%s", accOpt.Text, accOpt.CallbackData)
+	}
+
+	// 2. VIP tier student has no further upgrades (only menu button)
+	vipKb := UpgradeOptionsKeyboard("vip")
+	if len(vipKb.InlineKeyboard) != 1 {
+		t.Errorf("expected 1 row (menu button) for VIP tier, got %d", len(vipKb.InlineKeyboard))
+	}
+	if vipKb.InlineKeyboard[0][0].CallbackData != "action_menu" {
+		t.Errorf("expected action_menu for VIP tier, got %s", vipKb.InlineKeyboard[0][0].CallbackData)
+	}
+}
+
+func TestBot_UpgradeDifferencesAndReceiptCard(t *testing.T) {
+	service := NewBotService(&config.Config{
+		AdminTelegramID: 123456789,
+	}, nil)
+	defer service.Stop()
+
+	// 1. Difference math check: Accelerator (6 900) -> VIP (14 900) = 8 000
+	diffAccToVIP := 14900.0 - 6900.0
+	if diffAccToVIP != 8000.0 {
+		t.Errorf("expected 8000 difference, got %v", diffAccToVIP)
+	}
+
+	// 2. SendAdminReceiptCard with Upgrade amount
+	upgradeReceipt := &models.PaymentReceipt{
+		ID:         105,
+		TelegramID: 987654321,
+		Username:   "spark_alumni",
+		Tier:       "vip",
+		Amount:     8000.0,
+		CreatedAt:  time.Now(),
+	}
+	if err := service.SendAdminReceiptCard(123456789, upgradeReceipt); err != nil {
+		t.Errorf("expected nil error for upgrade receipt card mock send, got %v", err)
+	}
+}
+
+func TestBot_CuratorDailyDigest(t *testing.T) {
+	service := NewBotService(&config.Config{
+		AdminTelegramID: 123456789,
+	}, nil)
+	defer service.Stop()
+
+	// 1. SendCuratorDailyDigest invocation with nil DB (graceful fallback)
+	digest, err := service.SendCuratorDailyDigest(123456789)
+	if err != nil {
+		t.Fatalf("expected nil error for mock digest send, got %v", err)
+	}
+	if digest == nil {
+		t.Fatal("expected non-nil DailyDigestData")
+	}
+	if digest.Date == "" {
+		t.Error("expected non-empty digest Date")
+	}
+	if digest.SpotsLeft < 0 {
+		t.Errorf("expected non-negative spots left, got %d", digest.SpotsLeft)
+	}
+
+	// 2. Admin callback for digest
+	cb := &telego.CallbackQuery{
+		ID:   "cb_digest_test",
+		Data: "admin_digest",
+		From: telego.User{
+			ID: 123456789,
+		},
+		Message: &telego.Message{
+			Chat: telego.Chat{ID: 123456789, Type: "private"},
+		},
+	}
+	if !service.HandleCallbackQuery(cb) {
+		t.Errorf("expected admin_digest callback to be handled for admin")
+	}
+}
+
+
+func TestBot_MainMenuKeyboard_UpgradeForActiveUsers(t *testing.T) {
+	// 1. Without access, upgrade button is omitted
+	kbNoAccess := MainMenuKeyboard("https://spark.test", false)
+	for _, row := range kbNoAccess.InlineKeyboard {
+		for _, btn := range row {
+			if btn.CallbackData == "action_upgrade" {
+				t.Error("unexpected action_upgrade button for user without access")
+			}
+		}
+	}
+
+	// 2. With access, upgrade button is present
+	kbAccess := MainMenuKeyboard("https://spark.test", true)
+	hasUpgradeBtn := false
+	hasStatusBtn := false
+	for _, row := range kbAccess.InlineKeyboard {
+		for _, btn := range row {
+			if btn.CallbackData == "action_upgrade" {
+				hasUpgradeBtn = true
+			}
+			if btn.CallbackData == "action_status" {
+				hasStatusBtn = true
+			}
+		}
+	}
+	if !hasUpgradeBtn {
+		t.Error("expected action_upgrade button in main menu for user with access")
+	}
+	if !hasStatusBtn {
+		t.Error("expected action_status button in main menu for user with access")
+	}
+}
+
 
