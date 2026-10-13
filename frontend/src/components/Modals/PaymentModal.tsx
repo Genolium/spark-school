@@ -505,6 +505,17 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                 >
                   <span>Написать куратору (@ilyan_vas)</span>
                 </a>
+
+                <p className="text-[11px] font-mono text-center text-slate-500 dark:text-slate-400 mt-1">
+                  Оплачивая участие, вы соглашаетесь с{" "}
+                  <a href="/offer" target="_blank" className="text-slate-700 dark:text-slate-300 underline underline-offset-2 hover:text-emerald-700 dark:hover:text-white">
+                    офертой
+                  </a>{" "}
+                  и{" "}
+                  <a href="/privacy" target="_blank" className="text-slate-700 dark:text-slate-300 underline underline-offset-2 hover:text-emerald-700 dark:hover:text-white">
+                    политикой конфиденциальности
+                  </a>
+                </p>
               </div>
             </div>
           )}

@@ -660,11 +660,14 @@ func (s *BotService) handleSbpPayment(chatID telego.ChatID, from *telego.User, t
 2. <b>Отправьте скриншот чека прямо в этот чат бота!</b>
 3. Бот проверит чек и сразу выдаст вам персональную ссылку в закрытый канал потока.
 
+ℹ️ <i>Оплачивая участие, вы соглашаетесь с условиями <a href="https://so-called-spark.ru/offer">Публичной оферты</a> (услуга считается оказанной при добавлении в закрытый канал и одном раунде обратной связи) и <a href="https://so-called-spark.ru/privacy">Политики конфиденциальности</a>.</i>
+
 <i>При любых вопросах вы всегда можете написать так называемому Илю (@ilyan_vas).</i>`, tierTitle, formatPriceRub(price), discountText, strings.ToUpper(tier))
 
 	kb := tu.InlineKeyboard(
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("💬 Написать так называемому Илю").WithURL("https://t.me/ilyan_vas"),
+			tu.InlineKeyboardButton("📄 Оферта").WithURL("https://so-called-spark.ru/offer"),
+			tu.InlineKeyboardButton("💬 Написать Илю").WithURL("https://t.me/ilyan_vas"),
 		),
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton("⬅️ Назад к тарифам").WithCallbackData("action_payment"),
