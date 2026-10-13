@@ -566,8 +566,8 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
                   <label className="block text-slate-600 dark:text-slate-400 mb-1">Выплата партнеру (₽):</label>
                   <input
                     type="number"
-                    min="100"
-                    step="50"
+                    min="0"
+                    step="any"
                     value={newReward}
                     onChange={(e) => setNewReward(parseFloat(e.target.value) || 1000)}
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"

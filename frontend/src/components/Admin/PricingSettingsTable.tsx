@@ -91,6 +91,16 @@ export function PricingSettingsTable() {
     return (num || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   };
 
+  const handlePriceChange = (field: keyof CoursePricing, rawValue: string) => {
+    // Strip non-digits and leading zeros (e.g. "07800" -> "7800")
+    const clean = rawValue.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
+    const num = clean === "" ? 0 : parseInt(clean, 10);
+    setPricing((prev) => ({
+      ...prev,
+      [field]: isNaN(num) ? 0 : num,
+    }));
+  };
+
   // Calculations for promo discount preview
   const accPromo = Math.round(pricing.accelerator_price * 0.95);
   const accPromoDiff = pricing.accelerator_price - accPromo;
@@ -154,7 +164,7 @@ export function PricingSettingsTable() {
       )}
 
       {/* Main Pricing Cards Grid */}
-      <form onSubmit={handleSave} className="space-y-8">
+      <form onSubmit={handleSave} noValidate className="space-y-8">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
           
           {/* ========================================================================= */}
@@ -189,18 +199,12 @@ export function PricingSettingsTable() {
                   </label>
                   <div className="relative">
                     <input
-                      type="number"
-                      min="1"
-                      step="100"
-                      value={pricing.accelerator_price}
-                      onChange={(e) =>
-                        setPricing((prev) => ({
-                          ...prev,
-                          accelerator_price: Number(e.target.value) || 0,
-                        }))
-                      }
+                      type="text"
+                      inputMode="numeric"
+                      value={pricing.accelerator_price === 0 ? "" : pricing.accelerator_price}
+                      placeholder="6900"
+                      onChange={(e) => handlePriceChange("accelerator_price", e.target.value)}
                       className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-black/30 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white font-mono text-base font-bold focus:outline-none focus:border-emerald-500 transition-colors"
-                      required
                     />
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-400">
                       RUB
@@ -214,16 +218,11 @@ export function PricingSettingsTable() {
                   </label>
                   <div className="relative">
                     <input
-                      type="number"
-                      min="1"
-                      step="100"
-                      value={pricing.accelerator_old_price}
-                      onChange={(e) =>
-                        setPricing((prev) => ({
-                          ...prev,
-                          accelerator_old_price: Number(e.target.value) || 0,
-                        }))
-                      }
+                      type="text"
+                      inputMode="numeric"
+                      value={pricing.accelerator_old_price === 0 ? "" : pricing.accelerator_old_price}
+                      placeholder="9900"
+                      onChange={(e) => handlePriceChange("accelerator_old_price", e.target.value)}
                       className="w-full px-4 py-2.5 rounded-2xl bg-slate-50 dark:bg-black/30 border border-slate-300 dark:border-white/10 text-slate-700 dark:text-slate-300 font-mono text-sm focus:outline-none focus:border-emerald-500 transition-colors"
                     />
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-400">
@@ -287,18 +286,12 @@ export function PricingSettingsTable() {
                   </label>
                   <div className="relative">
                     <input
-                      type="number"
-                      min="1"
-                      step="100"
-                      value={pricing.vip_price}
-                      onChange={(e) =>
-                        setPricing((prev) => ({
-                          ...prev,
-                          vip_price: Number(e.target.value) || 0,
-                        }))
-                      }
+                      type="text"
+                      inputMode="numeric"
+                      value={pricing.vip_price === 0 ? "" : pricing.vip_price}
+                      placeholder="14900"
+                      onChange={(e) => handlePriceChange("vip_price", e.target.value)}
                       className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-black/30 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white font-mono text-base font-bold focus:outline-none focus:border-amber-500 transition-colors"
-                      required
                     />
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-400">
                       RUB
@@ -312,16 +305,11 @@ export function PricingSettingsTable() {
                   </label>
                   <div className="relative">
                     <input
-                      type="number"
-                      min="1"
-                      step="100"
-                      value={pricing.vip_old_price}
-                      onChange={(e) =>
-                        setPricing((prev) => ({
-                          ...prev,
-                          vip_old_price: Number(e.target.value) || 0,
-                        }))
-                      }
+                      type="text"
+                      inputMode="numeric"
+                      value={pricing.vip_old_price === 0 ? "" : pricing.vip_old_price}
+                      placeholder="19900"
+                      onChange={(e) => handlePriceChange("vip_old_price", e.target.value)}
                       className="w-full px-4 py-2.5 rounded-2xl bg-slate-50 dark:bg-black/30 border border-slate-300 dark:border-white/10 text-slate-700 dark:text-slate-300 font-mono text-sm focus:outline-none focus:border-amber-500 transition-colors"
                     />
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-400">
