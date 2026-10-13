@@ -27,14 +27,30 @@ const (
 )
 
 // MainMenuKeyboard returns the primary navigation keyboard with blog link.
-func MainMenuKeyboard(frontendURL string, canUpgrade ...bool) *telego.InlineKeyboardMarkup {
+func MainMenuKeyboard(frontendURL string, options ...any) *telego.InlineKeyboardMarkup {
+	canUpgrade := false
+	p := models.DefaultCoursePricing
+
+	for _, opt := range options {
+		switch v := opt.(type) {
+		case bool:
+			canUpgrade = v
+		case models.CoursePricing:
+			if v.AcceleratorPrice > 0 {
+				p = v
+			}
+		}
+	}
+
+	buyText := fmt.Sprintf("💳 Купить курс (от %s ₽)", formatPriceRub(int(p.AcceleratorPrice)))
+
 	rows := [][]telego.InlineKeyboardButton{
 		{
 			tu.InlineKeyboardButton("🎯 Рассчитать шансы на грант $20,000").WithCallbackData("calc_start"),
 		},
 	}
 
-	if len(canUpgrade) > 0 && canUpgrade[0] {
+	if canUpgrade {
 		rows = append(rows, []telego.InlineKeyboardButton{
 			tu.InlineKeyboardButton("🚀 Апгрейд тарифа").WithCallbackData("action_upgrade"),
 			tu.InlineKeyboardButton("🎓 Мой статус").WithCallbackData("action_status"),
@@ -43,7 +59,7 @@ func MainMenuKeyboard(frontendURL string, canUpgrade ...bool) *telego.InlineKeyb
 
 	rows = append(rows,
 		[]telego.InlineKeyboardButton{
-			tu.InlineKeyboardButton("💳 Купить курс (от 6 900 ₽)").WithCallbackData("action_payment"),
+			tu.InlineKeyboardButton(buyText).WithCallbackData("action_payment"),
 			tu.InlineKeyboardButton("🎟 Промокод -5%").WithCallbackData("promo_enter"),
 		},
 		[]telego.InlineKeyboardButton{
@@ -132,13 +148,23 @@ func PromoAppliedKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboar
 }
 
 // YooKassaSelectTierKeyboard routes to direct SBP checkout.
-func YooKassaSelectTierKeyboard(hasPromo bool) *telego.InlineKeyboardMarkup {
-	accText := "🏛 Оплатить Акселератор (6 900 ₽) — СБП"
-	vipText := "👑 Оплатить VIP (14 900 ₽) — СБП"
-	if hasPromo {
-		accText = "🏛 Оплатить Акселератор (6 555 ₽) — СБП"
-		vipText = "👑 Оплатить VIP (14 155 ₽) — СБП"
+func YooKassaSelectTierKeyboard(hasPromo bool, pricing ...models.CoursePricing) *telego.InlineKeyboardMarkup {
+	accPrice := 6900
+	vipPrice := 14900
+	if len(pricing) > 0 {
+		if pricing[0].AcceleratorPrice > 0 {
+			accPrice = int(pricing[0].AcceleratorPrice)
+		}
+		if pricing[0].VIPPrice > 0 {
+			vipPrice = int(pricing[0].VIPPrice)
+		}
 	}
+	if hasPromo {
+		accPrice = accPrice - (accPrice*5)/100
+		vipPrice = vipPrice - (vipPrice*5)/100
+	}
+	accText := fmt.Sprintf("🏛 Оплатить Акселератор (%s ₽) — СБП", formatPriceRub(accPrice))
+	vipText := fmt.Sprintf("👑 Оплатить VIP (%s ₽) — СБП", formatPriceRub(vipPrice))
 	return tu.InlineKeyboard(
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton(accText).WithCallbackData("pay_sbp_accelerator"),
@@ -216,10 +242,16 @@ func CalcQ3Keyboard() *telego.InlineKeyboardMarkup {
 }
 
 // Calculator Result Keyboard
-func CalcResultKeyboard() *telego.InlineKeyboardMarkup {
+func CalcResultKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboardMarkup {
+	p := models.DefaultCoursePricing
+	if len(pricing) > 0 && pricing[0].AcceleratorPrice > 0 {
+		p = pricing[0]
+	}
+	buyText := fmt.Sprintf("💳 Купить курс (от %s ₽)", formatPriceRub(int(p.AcceleratorPrice)))
+
 	return tu.InlineKeyboard(
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("💳 Купить курс (от 6 900 ₽)").WithCallbackData("action_payment"),
+			tu.InlineKeyboardButton(buyText).WithCallbackData("action_payment"),
 		),
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton("🎟 Применить промокод -5%").WithCallbackData("promo_enter"),

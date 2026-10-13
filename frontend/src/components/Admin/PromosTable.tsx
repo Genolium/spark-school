@@ -38,6 +38,15 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
   const [newReward, setNewReward] = useState(1000);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [coursePricing, setCoursePricing] = useState({ accelerator_price: 6900 });
+
+  React.useEffect(() => {
+    api.getCoursePricing().then((p) => {
+      if (p && p.accelerator_price > 0) {
+        setCoursePricing({ accelerator_price: p.accelerator_price });
+      }
+    }).catch(() => {});
+  }, []);
 
   // Aggregated analytics calculation
   const totalUses = promos.reduce((sum, p) => sum + (p.uses_count || 0), 0);
@@ -46,7 +55,7 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
       return sum + p.total_revenue;
     }
     const pct = p.discount_percent || 5;
-    const price = Math.round(6900 * (1 - pct / 100));
+    const price = Math.round(coursePricing.accelerator_price * (1 - pct / 100));
     return sum + (p.uses_count || 0) * price;
   }, 0);
   const totalRewards = promos.reduce(
@@ -292,8 +301,8 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
             ) : (
               filtered.map((promo) => {
                 const discountPct = promo.discount_percent || 5;
-                const discountRub = Math.round(6900 * (discountPct / 100));
-                const discountedPrice = 6900 - discountRub;
+                const discountRub = Math.round(coursePricing.accelerator_price * (discountPct / 100));
+                const discountedPrice = coursePricing.accelerator_price - discountRub;
 
                 const promoRevenue =
                   typeof promo.total_revenue === "number" && promo.total_revenue > 0
@@ -559,7 +568,7 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
                   />
                   <span className="text-[10px] text-emerald-600 dark:text-emerald-400 mt-1 block">
-                    Акселератор: {Math.round(6900 * (1 - newDiscount / 100))} ₽
+                    Акселератор: {Math.round(coursePricing.accelerator_price * (1 - newDiscount / 100))} ₽
                   </span>
                 </div>
                 <div>

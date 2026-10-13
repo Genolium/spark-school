@@ -1,6 +1,7 @@
 package models
 
 import (
+	"math"
 	"time"
 
 	"gorm.io/gorm"
@@ -39,14 +40,14 @@ func GetCoursePricing(db *gorm.DB) CoursePricing {
 	if pricing.AcceleratorPrice <= 0 {
 		pricing.AcceleratorPrice = 6900.00
 	}
-	if pricing.AcceleratorOldPrice <= 0 {
-		pricing.AcceleratorOldPrice = 9900.00
+	if pricing.AcceleratorOldPrice <= pricing.AcceleratorPrice {
+		pricing.AcceleratorOldPrice = math.Round((pricing.AcceleratorPrice*1.4)/100) * 100
 	}
 	if pricing.VIPPrice <= 0 {
 		pricing.VIPPrice = 14900.00
 	}
-	if pricing.VIPOldPrice <= 0 {
-		pricing.VIPOldPrice = 19900.00
+	if pricing.VIPOldPrice <= pricing.VIPPrice {
+		pricing.VIPOldPrice = math.Round((pricing.VIPPrice*1.4)/100) * 100
 	}
 	return pricing
 }
@@ -65,6 +66,19 @@ func UpdateCoursePricing(db *gorm.DB, p CoursePricing) (CoursePricing, error) {
 		}
 		return p, nil
 	}
+	if p.AcceleratorPrice <= 0 {
+		p.AcceleratorPrice = 6900.00
+	}
+	if p.AcceleratorOldPrice <= p.AcceleratorPrice {
+		p.AcceleratorOldPrice = math.Round((p.AcceleratorPrice*1.4)/100) * 100
+	}
+	if p.VIPPrice <= 0 {
+		p.VIPPrice = 14900.00
+	}
+	if p.VIPOldPrice <= p.VIPPrice {
+		p.VIPOldPrice = math.Round((p.VIPPrice*1.4)/100) * 100
+	}
+
 	existing.AcceleratorPrice = p.AcceleratorPrice
 	existing.AcceleratorOldPrice = p.AcceleratorOldPrice
 	existing.VIPPrice = p.VIPPrice

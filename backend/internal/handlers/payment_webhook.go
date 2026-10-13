@@ -314,9 +314,9 @@ func (h *PaymentWebhookHandler) HandleAntilopayWebhook(c *gin.Context) {
 
 	// 7. If status is SUCCESS: Grant Access & Process Notifications
 	if strings.ToUpper(payload.Status) == "SUCCESS" {
-		tierNameRU := "Акселератор (6 900 ₽)"
+		tierNameRU := "Акселератор"
 		if tier == "vip" {
-			tierNameRU = "VIP-сопровождение (14 900 ₽)"
+			tierNameRU = "VIP-сопровождение"
 		}
 
 		// Update or Create user in database

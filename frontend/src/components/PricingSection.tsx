@@ -17,6 +17,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
     spots_left: 9,
   });
 
+  // Default pricing fallbacks: 6 900 ₽ (Accelerator) and 14 900 ₽ (VIP)
   const [pricing, setPricing] = useState<CoursePricing>({
     accelerator_price: 6900,
     accelerator_old_price: 9900,
@@ -32,6 +33,15 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
   const formatRub = (num: number) => {
     return (num || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   };
+
+  // Dynamic strikethrough prices: always guaranteed to be strictly higher than current price
+  const accOldPrice = pricing.accelerator_old_price > pricing.accelerator_price
+    ? pricing.accelerator_old_price
+    : Math.round((pricing.accelerator_price * 1.4) / 100) * 100;
+
+  const vipOldPrice = pricing.vip_old_price > pricing.vip_price
+    ? pricing.vip_old_price
+    : Math.round((pricing.vip_price * 1.4) / 100) * 100;
 
   return (
     <section id="pricing" className="relative w-full max-w-[1520px] mx-auto px-3 sm:px-6 py-16 sm:py-24 scroll-mt-20 sm:scroll-mt-24">
@@ -103,10 +113,10 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
 
             <div className="mb-6 pb-6 border-b border-emerald-500/20 dark:border-white/10">
               <div className="text-slate-500 dark:text-slate-400 line-through text-sm font-mono">
-                {pricing.accelerator_old_price === 9900 ? "9 900 ₽" : `${formatRub(pricing.accelerator_old_price)} ₽`}
+                {formatRub(accOldPrice)} ₽
               </div>
               <div className="text-3xl sm:text-4xl font-black font-mono text-emerald-600 dark:text-emerald-400 tracking-tight">
-                {pricing.accelerator_price === 6900 ? "6 900 ₽" : `${formatRub(pricing.accelerator_price)} ₽`}
+                {formatRub(pricing.accelerator_price)} ₽
               </div>
             </div>
 
@@ -144,7 +154,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
             onClick={() => onOpenPayment?.("accelerator")}
             className="btn-primary-mono w-full py-4 text-sm font-bold flex items-center justify-center gap-2 group shadow-xl active:scale-95"
           >
-            <span>Занять место за {pricing.accelerator_price === 6900 ? "6 900 ₽" : `${formatRub(pricing.accelerator_price)} ₽`}</span>
+            <span>Занять место за {formatRub(pricing.accelerator_price)} ₽</span>
             <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
           </button>
         </motion.div>
@@ -176,10 +186,10 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
 
             <div className="mb-6 pb-6 border-b border-emerald-500/15 dark:border-white/10">
               <div className="text-slate-500 dark:text-slate-400 line-through text-sm font-mono">
-                {pricing.vip_old_price === 19900 ? "19 900 ₽" : `${formatRub(pricing.vip_old_price)} ₽`}
+                {formatRub(vipOldPrice)} ₽
               </div>
               <div className="text-3xl sm:text-4xl font-black font-mono text-amber-600 dark:text-amber-400 tracking-tight">
-                {pricing.vip_price === 14900 ? "14 900 ₽" : `${formatRub(pricing.vip_price)} ₽`}
+                {formatRub(pricing.vip_price)} ₽
               </div>
             </div>
 
@@ -213,7 +223,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
             onClick={() => onOpenPayment?.("vip")}
             className="w-full py-3.5 px-4 rounded-2xl bento-pill hover:bg-amber-500/15 border border-amber-500/30 text-xs sm:text-sm font-mono font-bold text-amber-700 dark:text-amber-300 flex items-center justify-center gap-2 transition-all active:scale-95"
           >
-            <span>Выбрать VIP ({pricing.vip_price === 14900 ? "14 900 ₽" : `${formatRub(pricing.vip_price)} ₽`})</span>
+            <span>Выбрать VIP ({formatRub(pricing.vip_price)} ₽)</span>
             <ArrowUpRight className="w-4 h-4" />
           </button>
         </motion.div>

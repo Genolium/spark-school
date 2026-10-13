@@ -63,7 +63,22 @@ export function PricingSettingsTable() {
       return;
     }
 
-    const res = await api.updateCoursePricing(pricing);
+    let accOld = pricing.accelerator_old_price;
+    if (accOld <= pricing.accelerator_price) {
+      accOld = Math.round((pricing.accelerator_price * 1.4) / 100) * 100;
+    }
+    let vipOld = pricing.vip_old_price;
+    if (vipOld <= pricing.vip_price) {
+      vipOld = Math.round((pricing.vip_price * 1.4) / 100) * 100;
+    }
+
+    const payload = {
+      ...pricing,
+      accelerator_old_price: accOld,
+      vip_old_price: vipOld,
+    };
+
+    const res = await api.updateCoursePricing(payload);
     setSaving(false);
 
     if (res.success) {
@@ -95,10 +110,25 @@ export function PricingSettingsTable() {
     // Strip non-digits and leading zeros (e.g. "07800" -> "7800")
     const clean = rawValue.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
     const num = clean === "" ? 0 : parseInt(clean, 10);
-    setPricing((prev) => ({
-      ...prev,
-      [field]: isNaN(num) ? 0 : num,
-    }));
+    setPricing((prev) => {
+      const updated = {
+        ...prev,
+        [field]: isNaN(num) ? 0 : num,
+      };
+      // If current price changed and old strikethrough price is <= new current price,
+      // auto-adjust old strikethrough price (+40% rounded to hundreds)
+      if (field === "accelerator_price" && num > 0) {
+        if (updated.accelerator_old_price <= num) {
+          updated.accelerator_old_price = Math.round((num * 1.4) / 100) * 100;
+        }
+      }
+      if (field === "vip_price" && num > 0) {
+        if (updated.vip_old_price <= num) {
+          updated.vip_old_price = Math.round((num * 1.4) / 100) * 100;
+        }
+      }
+      return updated;
+    });
   };
 
   // Calculations for promo discount preview

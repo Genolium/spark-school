@@ -1,14 +1,25 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
 import { Coins, ArrowUpRight, TrendingUp } from "lucide-react";
+import { api } from "@/lib/api";
 
 export function AffiliateHook() {
   const [friendsCount, setFriendsCount] = useState(3);
-  const payoutPerPerson = 1035; // 15% from 6900
-  const tier2Payout = 345; // 5% from 6900
+  const [pricing, setPricing] = useState({ accelerator_price: 6900 });
+
+  useEffect(() => {
+    api.getCoursePricing().then((p) => {
+      if (p && p.accelerator_price > 0) {
+        setPricing({ accelerator_price: p.accelerator_price });
+      }
+    }).catch(() => {});
+  }, []);
+
+  const payoutPerPerson = Math.round(pricing.accelerator_price * 0.15);
+  const tier2Payout = Math.round(pricing.accelerator_price * 0.05);
   const totalDirectEarnings = friendsCount * payoutPerPerson;
   const estimatedTier2 = Math.floor(friendsCount * 1.5) * tier2Payout;
 
@@ -39,14 +50,14 @@ export function AffiliateHook() {
               <div className="p-4 rounded-xl bg-emerald-500/[0.04] border border-emerald-500/15 dark:bg-white/5 dark:border-white/10 flex flex-col justify-between">
                 <span className="text-xs font-mono text-slate-500 dark:text-slate-400">1-й уровень (Прямой)</span>
                 <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white mt-1">
-                  15% <span className="text-sm text-emerald-600 dark:text-emerald-400 font-normal">(1 035 ₽)</span>
+                  15% <span className="text-sm text-emerald-600 dark:text-emerald-400 font-normal">({payoutPerPerson.toLocaleString("ru-RU")} ₽)</span>
                 </div>
               </div>
 
               <div className="p-4 rounded-xl bg-emerald-500/[0.04] border border-emerald-500/15 dark:bg-white/5 dark:border-white/10 flex flex-col justify-between">
                 <span className="text-xs font-mono text-slate-500 dark:text-slate-400">2-й уровень (Друзья друзей)</span>
                 <div className="text-2xl font-bold font-mono text-slate-900 dark:text-white mt-1">
-                  5% <span className="text-sm text-sky-600 dark:text-sky-400 font-normal">(345 ₽)</span>
+                  5% <span className="text-sm text-sky-600 dark:text-sky-400 font-normal">({tier2Payout.toLocaleString("ru-RU")} ₽)</span>
                 </div>
               </div>
             </div>

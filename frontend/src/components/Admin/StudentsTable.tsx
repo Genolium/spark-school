@@ -59,6 +59,17 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
   const [activatePromo, setActivatePromo] = useState("");
   const [activateAmount, setActivateAmount] = useState("6900");
 
+  const [coursePricing, setCoursePricing] = useState({ accelerator_price: 6900, vip_price: 14900 });
+
+  React.useEffect(() => {
+    api.getCoursePricing().then((p) => {
+      if (p && p.accelerator_price > 0) {
+        setCoursePricing({ accelerator_price: p.accelerator_price, vip_price: p.vip_price });
+        setActivateAmount(String(p.accelerator_price));
+      }
+    }).catch(() => {});
+  }, []);
+
   const isFiltered = query.trim() !== "" || tierFilter !== "all" || accessFilter !== "all" || receiptFilter !== "all";
 
   const [serverStudents, setServerStudents] = useState<UserProfile[] | null>(null);
@@ -128,10 +139,9 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
 
   const calculateDefaultAmount = (tier: "accelerator" | "vip", promo: string): string => {
     const hasDiscount = promo.trim().length > 0;
-    if (tier === "vip") {
-      return hasDiscount ? "14155" : "14900";
-    }
-    return hasDiscount ? "6555" : "6900";
+    const base = tier === "vip" ? coursePricing.vip_price : coursePricing.accelerator_price;
+    const finalPrice = hasDiscount ? Math.round(base * 0.95) : base;
+    return String(finalPrice);
   };
 
   const handleTierChange = (newTier: "accelerator" | "vip") => {
@@ -296,8 +306,8 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
             title="Фильтр по тарифу"
           >
             <option value="all">Все тарифы</option>
-            <option value="accelerator">Акселератор (6 900 ₽)</option>
-            <option value="vip">★ VIP (14 900 ₽)</option>
+            <option value="accelerator">Акселератор ({coursePricing.accelerator_price.toLocaleString("ru-RU")} ₽)</option>
+            <option value="vip">★ VIP ({coursePricing.vip_price.toLocaleString("ru-RU")} ₽)</option>
           </select>
 
           {/* Access Filter */}
@@ -374,7 +384,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
               const displayAmount = s.paid_amount
                 ? s.paid_amount.toLocaleString("ru-RU") + " ₽"
                 : s.has_access
-                ? (isVIP ? "14 900 ₽" : "6 900 ₽")
+                ? ((isVIP ? coursePricing.vip_price : coursePricing.accelerator_price).toLocaleString("ru-RU") + " ₽")
                 : "0 ₽";
 
               return (
@@ -523,8 +533,8 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
                   }}
                   className={`${inputCls} mt-1 font-semibold`}
                 >
-                  <option value="accelerator">Акселератор (6 900 ₽)</option>
-                  <option value="vip">★ VIP-сопровождение (14 900 ₽)</option>
+                  <option value="accelerator">Акселератор ({coursePricing.accelerator_price.toLocaleString("ru-RU")} ₽)</option>
+                  <option value="vip">★ VIP-сопровождение ({coursePricing.vip_price.toLocaleString("ru-RU")} ₽)</option>
                 </select>
               </label>
 
@@ -549,7 +559,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
                   value={activateAmount}
                   onChange={(e) => setActivateAmount(e.target.value)}
                   className={`${inputCls} mt-1 font-bold`}
-                  placeholder="6900"
+                  placeholder={coursePricing.accelerator_price.toString()}
                 />
               </label>
             </div>
@@ -664,8 +674,8 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
                     onChange={(e) => handleTierChange(e.target.value as "accelerator" | "vip")}
                     className={`${inputCls} mt-1 font-semibold`}
                   >
-                    <option value="accelerator">Акселератор (6 900 ₽)</option>
-                    <option value="vip">★ VIP (14 900 ₽)</option>
+                    <option value="accelerator">Акселератор ({coursePricing.accelerator_price.toLocaleString("ru-RU")} ₽)</option>
+                    <option value="vip">★ VIP ({coursePricing.vip_price.toLocaleString("ru-RU")} ₽)</option>
                   </select>
                 </label>
 
@@ -688,7 +698,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
                   value={form.paid_amount}
                   onChange={(e) => setForm({ ...form, paid_amount: e.target.value })}
                   className={`${inputCls} mt-1 font-bold`}
-                  placeholder="6900"
+                  placeholder={coursePricing.accelerator_price.toString()}
                 />
               </label>
 

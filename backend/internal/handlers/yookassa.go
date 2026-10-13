@@ -453,9 +453,9 @@ func (h *YooKassaHandler) HandleWebhook(c *gin.Context) {
 		}
 	}
 
-	tierNameRU := "Акселератор (6 900 ₽)"
+	tierNameRU := "Акселератор"
 	if tier == "vip" {
-		tierNameRU = "VIP-сопровождение (14 900 ₽)"
+		tierNameRU = "VIP-сопровождение"
 	}
 
 	// Deliver to student in Telegram

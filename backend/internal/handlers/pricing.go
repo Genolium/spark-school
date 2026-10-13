@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"math"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -54,12 +55,12 @@ func (h *PricingHandler) UpdatePricing(c *gin.Context) {
 		return
 	}
 
-	// Default old strike-through prices if not specified
-	if req.AcceleratorOldPrice <= 0 {
-		req.AcceleratorOldPrice = req.AcceleratorPrice * 1.4
+	// Ensure old strike-through prices are always dynamically higher than current price
+	if req.AcceleratorOldPrice <= req.AcceleratorPrice {
+		req.AcceleratorOldPrice = math.Round((req.AcceleratorPrice*1.4)/100) * 100
 	}
-	if req.VIPOldPrice <= 0 {
-		req.VIPOldPrice = req.VIPPrice * 1.4
+	if req.VIPOldPrice <= req.VIPPrice {
+		req.VIPOldPrice = math.Round((req.VIPPrice*1.4)/100) * 100
 	}
 
 	newPricing := models.CoursePricing{

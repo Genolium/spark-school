@@ -122,7 +122,7 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroPro
                   href="/#pricing"
                   className="btn-primary-mono px-8 py-4 text-sm sm:text-base flex items-center justify-center gap-2.5 active:scale-95 group shadow-2xl font-bold"
                 >
-                  <span>Выбрать тариф от {pricing.accelerator_price === 6900 ? "6 900 ₽" : `${formatRub(pricing.accelerator_price)} ₽`}</span>
+                  <span>Выбрать тариф от {formatRub(pricing.accelerator_price)} ₽</span>
                   <ArrowUpRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 stroke-[2.5]" />
                 </a>
 

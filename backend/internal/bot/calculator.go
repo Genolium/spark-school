@@ -136,6 +136,10 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) bool 
 		chatBubbles := TgEmoji(EmojiChatBubbles, "💬")
 		fire := TgEmoji(EmojiFire, "🔥")
 
+		pricing := s.getPricing()
+		accPriceStr := formatPriceRub(int(pricing.AcceleratorPrice))
+		accPromoStr := formatPriceRub(int(pricing.AcceleratorPrice * 0.95))
+
 		reply := fmt.Sprintf(`%s <b>Твой расчет шансов на грант $20,000:</b>
 
 Оценка профиля: <b>%d/100</b> %s
@@ -147,15 +151,17 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) bool 
 %s <b>В чём главный нюанс?</b>
 Формальные критерии — это лишь 10%% отбора. Главная битва начинается в <b>резюме американского стандарта</b>, <b>эссе на 500 слов</b> и <b>20-минутном Zoom-интервью</b> с американской комиссией.
 
-В проекте «так называемый SPARK» мы упакуем твою заявку до идеала под ключ от 6 900 ₽ (от 6 555 ₽ по промокоду).
+В проекте «так называемый SPARK» мы упакуем твою заявку до идеала под ключ от %s ₽ (от %s ₽ по промокоду).
 
-%s <i>Места на поток строго ограничены.</i>`, star, score, spark, langLabel, scoreZone, sun, chatBubbles, fire)
+%s <i>Места на поток строго ограничены.</i>`, star, score, spark, langLabel, scoreZone, sun, chatBubbles, accPriceStr, accPromoStr, fire)
+
+		calcKb := CalcResultKeyboard(pricing)
 
 		photoFile := s.ResolvePhotoFile(MediaCalcResult)
 		photoMsg := tu.Photo(chatID, photoFile).
 			WithCaption(reply).
 			WithParseMode(telego.ModeHTML).
-			WithReplyMarkup(CalcResultKeyboard())
+			WithReplyMarkup(calcKb)
 
 		sentMsg, err := s.bot.SendPhoto(photoMsg)
 		if err == nil && sentMsg != nil {
@@ -163,9 +169,9 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) bool 
 		} else if err != nil {
 			log.Printf("[Bot Error] CalcResult SendPhoto failed: %v. Sending fallback...", err)
 			cleanReply := StripTgEmoji(reply)
-			m := tu.Message(chatID, cleanReply).WithParseMode(telego.ModeHTML).WithReplyMarkup(CalcResultKeyboard())
+			m := tu.Message(chatID, cleanReply).WithParseMode(telego.ModeHTML).WithReplyMarkup(calcKb)
 			if _, textErr := s.bot.SendMessage(m); textErr != nil {
-				plainMsg := tu.Message(chatID, cleanReply).WithReplyMarkup(CalcResultKeyboard())
+				plainMsg := tu.Message(chatID, cleanReply).WithReplyMarkup(calcKb)
 				_, _ = s.bot.SendMessage(plainMsg)
 			}
 		}
