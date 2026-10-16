@@ -964,5 +964,44 @@ func TestAdminHandler_GetStats_DetailedRevenueAndBreakdown(t *testing.T) {
 	}
 }
 
+func TestAdminHandler_ListUsers_SortingAndReceiptIssued(t *testing.T) {
+	handler := NewAdminHandler(nil, &config.Config{}, nil, nil)
+	r := gin.New()
+	r.GET("/admin/users", handler.ListUsers)
+
+	sortParams := []string{"purchase_date", "paid_amount", "name", "username", "tier", "receipt_issued", "created_at"}
+	for _, sp := range sortParams {
+		req := httptest.NewRequest("GET", "/admin/users?sort_by="+sp+"&sort_dir=desc&receipt_issued=issued", nil)
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("expected 200 OK for sort_by=%s, got %d", sp, w.Code)
+		}
+	}
+}
+
+func TestAdminHandler_ToggleReceiptIssued_Mock(t *testing.T) {
+	handler := NewAdminHandler(nil, &config.Config{}, nil, nil)
+	r := gin.New()
+	r.POST("/admin/users/:id/receipt-issued", handler.ToggleReceiptIssued)
+
+	req := httptest.NewRequest("POST", "/admin/users/999/receipt-issued", bytes.NewReader([]byte(`{"receipt_issued":true}`)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK when DB is nil mock, got %d", w.Code)
+	}
+
+	var res map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatalf("failed to decode json response: %v", err)
+	}
+	if res["receipt_issued"] != true {
+		t.Fatalf("expected receipt_issued=true, got %v", res["receipt_issued"])
+	}
+}
+
 
 

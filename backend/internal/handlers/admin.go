@@ -383,11 +383,48 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 		}
 	}
 
+	// 5. Filter by Self-Employed Receipt Status (чек самозанятого: выписан / не выписан)
+	receiptIssued := strings.ToLower(strings.TrimSpace(c.Query("receipt_issued")))
+	if receiptIssued == "issued" || receiptIssued == "true" {
+		dbQuery = dbQuery.Where("receipt_issued = true")
+	} else if receiptIssued == "not_issued" || receiptIssued == "false" || receiptIssued == "pending" {
+		dbQuery = dbQuery.Where("receipt_issued = false")
+	}
+
+	// 6. Dynamic Sorting (+ purchase date, amount, name, created_at, receipt_issued)
+	sortBy := strings.ToLower(strings.TrimSpace(c.DefaultQuery("sort_by", "purchase_date")))
+	sortDir := strings.ToLower(strings.TrimSpace(c.DefaultQuery("sort_dir", "desc")))
+	if sortDir != "asc" && sortDir != "desc" {
+		sortDir = "desc"
+	}
+
+	var orderClause string
+	switch sortBy {
+	case "purchase_date", "access_granted_at", "access_date":
+		orderClause = fmt.Sprintf("COALESCE(access_granted_at, created_at) %s, id %s", strings.ToUpper(sortDir), strings.ToUpper(sortDir))
+	case "paid_amount", "amount", "revenue":
+		orderClause = fmt.Sprintf("paid_amount %s, id %s", strings.ToUpper(sortDir), strings.ToUpper(sortDir))
+	case "name", "first_name":
+		orderClause = fmt.Sprintf("LOWER(first_name) %s, LOWER(last_name) %s", strings.ToUpper(sortDir), strings.ToUpper(sortDir))
+	case "username":
+		orderClause = fmt.Sprintf("LOWER(username) %s", strings.ToUpper(sortDir))
+	case "tier":
+		orderClause = fmt.Sprintf("tier %s, paid_amount DESC", strings.ToUpper(sortDir))
+	case "receipt_issued", "fiscal":
+		orderClause = fmt.Sprintf("receipt_issued %s, created_at DESC", strings.ToUpper(sortDir))
+	case "has_access", "access":
+		orderClause = fmt.Sprintf("has_access %s, created_at DESC", strings.ToUpper(sortDir))
+	case "created_at", "date":
+		orderClause = fmt.Sprintf("created_at %s, id %s", strings.ToUpper(sortDir), strings.ToUpper(sortDir))
+	default:
+		orderClause = fmt.Sprintf("COALESCE(access_granted_at, created_at) %s, id %s", strings.ToUpper(sortDir), strings.ToUpper(sortDir))
+	}
+
 	var total int64
 	dbQuery.Count(&total)
 
 	users := make([]models.User, 0)
-	dbQuery.Order("created_at DESC").Offset(offset).Limit(pageSize).Find(&users)
+	dbQuery.Order(orderClause).Offset(offset).Limit(pageSize).Find(&users)
 
 	// Populate receipt_status for returned users
 	if len(users) > 0 {
@@ -501,14 +538,15 @@ func (h *AdminHandler) CreateUser(c *gin.Context) {
 
 // UpdateUserRequest payload for updating user profile
 type UpdateUserRequest struct {
-	Username   string   `json:"username"`
-	FirstName  string   `json:"first_name"`
-	LastName   string   `json:"last_name"`
-	Role       string   `json:"role"`
-	HasAccess  *bool    `json:"has_access"`
-	Tier       string   `json:"tier"`
-	PaidAmount *float64 `json:"paid_amount"`
-	PromoCode  *string  `json:"promo_code"`
+	Username      string   `json:"username"`
+	FirstName     string   `json:"first_name"`
+	LastName      string   `json:"last_name"`
+	Role          string   `json:"role"`
+	HasAccess     *bool    `json:"has_access"`
+	Tier          string   `json:"tier"`
+	PaidAmount    *float64 `json:"paid_amount"`
+	PromoCode     *string  `json:"promo_code"`
+	ReceiptIssued *bool    `json:"receipt_issued"`
 }
 
 // UpdateUser updates user details
@@ -547,6 +585,17 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 	if req.PromoCode != nil {
 		user.PromoCode = strings.ToUpper(strings.TrimSpace(*req.PromoCode))
 	}
+	if req.ReceiptIssued != nil {
+		user.ReceiptIssued = *req.ReceiptIssued
+		if *req.ReceiptIssued {
+			if user.ReceiptIssuedAt == nil {
+				now := time.Now()
+				user.ReceiptIssuedAt = &now
+			}
+		} else {
+			user.ReceiptIssuedAt = nil
+		}
+	}
 	if req.HasAccess != nil {
 		user.HasAccess = *req.HasAccess
 		if *req.HasAccess && user.AccessGrantedAt == nil {
@@ -577,6 +626,64 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, user)
+}
+
+// ToggleReceiptIssued toggles or explicitly sets whether self-employed receipt was issued (Мой налог)
+func (h *AdminHandler) ToggleReceiptIssued(c *gin.Context) {
+	var req struct {
+		ReceiptIssued *bool `json:"receipt_issued"`
+	}
+	_ = c.ShouldBindJSON(&req)
+
+	if h.db == nil {
+		issued := true
+		if req.ReceiptIssued != nil {
+			issued = *req.ReceiptIssued
+		}
+		var now *time.Time
+		if issued {
+			t := time.Now()
+			now = &t
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"success":           true,
+			"receipt_issued":    issued,
+			"receipt_issued_at": now,
+		})
+		return
+	}
+
+	id := c.Param("id")
+	var user models.User
+	if err := h.db.First(&user, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Пользователь не найден"})
+		return
+	}
+
+	if req.ReceiptIssued != nil {
+		user.ReceiptIssued = *req.ReceiptIssued
+	} else {
+		user.ReceiptIssued = !user.ReceiptIssued
+	}
+
+	if user.ReceiptIssued {
+		now := time.Now()
+		user.ReceiptIssuedAt = &now
+	} else {
+		user.ReceiptIssuedAt = nil
+	}
+
+	if err := h.db.Save(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":           true,
+		"receipt_issued":    user.ReceiptIssued,
+		"receipt_issued_at": user.ReceiptIssuedAt,
+		"user":              user,
+	})
 }
 
 // DeleteUser removes a user

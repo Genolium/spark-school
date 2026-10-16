@@ -14,6 +14,9 @@ export interface UserProfile {
   paid_amount?: number;
   promo_code?: string;
   receipt_status?: "pending" | "approved" | "rejected" | "none" | string;
+  created_at?: string;
+  receipt_issued?: boolean;
+  receipt_issued_at?: string;
 }
 
 export interface DailyRevenueStat {
@@ -409,14 +412,30 @@ export const api = {
   },
 
   // Admin students list with search and filters
+  // Admin students list with search, filters, and dynamic sorting
   async getAdminStudents(params?: {
     q?: string;
     tier?: string;
     access?: string;
     receipt_status?: string;
+    receipt_issued?: string;
+    sort_by?: string;
+    sort_dir?: "asc" | "desc";
+    page?: number;
+    pageSize?: number;
   } | string): Promise<UserProfile[]> {
     const queryObj = typeof params === "string" ? { q: params } : (params || {});
-    const { q = "", tier = "", access = "", receipt_status = "" } = queryObj;
+    const {
+      q = "",
+      tier = "",
+      access = "",
+      receipt_status = "",
+      receipt_issued = "",
+      sort_by = "purchase_date",
+      sort_dir = "desc",
+      page,
+      pageSize,
+    } = queryObj;
 
     const token = getAdminToken();
     try {
@@ -425,6 +444,11 @@ export const api = {
       if (tier && tier !== "all") sp.set("tier", tier);
       if (access && access !== "all") sp.set("access", access);
       if (receipt_status && receipt_status !== "all") sp.set("receipt_status", receipt_status);
+      if (receipt_issued && receipt_issued !== "all") sp.set("receipt_issued", receipt_issued);
+      if (sort_by) sp.set("sort_by", sort_by);
+      if (sort_dir) sp.set("sort_dir", sort_dir);
+      if (page) sp.set("page", String(page));
+      if (pageSize) sp.set("pageSize", String(pageSize));
 
       const res = await fetch(`${API_BASE}/admin/users?${sp.toString()}`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
@@ -439,12 +463,12 @@ export const api = {
     }
 
     let list: UserProfile[] = [
-      { id: 1, telegram_id: 891230491, username: "ilyan_vas", first_name: "так называемый Иль", last_name: "", role: "admin", has_access: true, access_granted_at: "2026-09-01", tier: "vip", paid_amount: 14900, receipt_status: "approved" },
-      { id: 2, telegram_id: 481920381, username: "arina_spark", first_name: "Арина", last_name: "Волкова", role: "student", has_access: true, access_granted_at: "2026-09-15", tier: "accelerator", paid_amount: 6555, promo_code: "SPARK5", receipt_status: "approved" },
-      { id: 3, telegram_id: 719284910, username: "mikhail_tech", first_name: "Михаил", last_name: "Соколов", role: "student", has_access: true, access_granted_at: "2026-09-18", tier: "accelerator", paid_amount: 6900, receipt_status: "approved" },
-      { id: 4, telegram_id: 619284910, username: "daria_bmstu", first_name: "Дарья", last_name: "Кузнецова", role: "student", has_access: false, tier: "accelerator", receipt_status: "pending" },
-      { id: 5, telegram_id: 519284910, username: "artem_spbgu", first_name: "Артём", last_name: "Смирнов", role: "student", has_access: true, access_granted_at: "2026-09-22", tier: "vip", paid_amount: 14900, receipt_status: "approved" },
-      { id: 6, telegram_id: 319284910, username: "polina_voenmeh", first_name: "Полина", last_name: "Иванова", role: "student", has_access: false, tier: "accelerator", receipt_status: "none" },
+      { id: 1, telegram_id: 891230491, username: "ilyan_vas", first_name: "так называемый Иль", last_name: "", role: "admin", has_access: true, access_granted_at: "2026-09-01T12:00:00Z", created_at: "2026-09-01T11:00:00Z", tier: "vip", paid_amount: 14900, receipt_status: "approved", receipt_issued: true, receipt_issued_at: "2026-09-01T13:00:00Z" },
+      { id: 2, telegram_id: 481920381, username: "arina_spark", first_name: "Арина", last_name: "Волкова", role: "student", has_access: true, access_granted_at: "2026-09-15T15:30:00Z", created_at: "2026-09-15T14:00:00Z", tier: "accelerator", paid_amount: 6555, promo_code: "SPARK5", receipt_status: "approved", receipt_issued: true, receipt_issued_at: "2026-09-15T16:00:00Z" },
+      { id: 3, telegram_id: 719284910, username: "mikhail_tech", first_name: "Михаил", last_name: "Соколов", role: "student", has_access: true, access_granted_at: "2026-09-18T10:15:00Z", created_at: "2026-09-18T09:30:00Z", tier: "accelerator", paid_amount: 6900, receipt_status: "approved", receipt_issued: false },
+      { id: 4, telegram_id: 619284910, username: "daria_bmstu", first_name: "Дарья", last_name: "Кузнецова", role: "student", has_access: false, created_at: "2026-09-20T18:00:00Z", tier: "accelerator", receipt_status: "pending", receipt_issued: false },
+      { id: 5, telegram_id: 519284910, username: "artem_spbgu", first_name: "Артём", last_name: "Смирнов", role: "student", has_access: true, access_granted_at: "2026-09-22T14:45:00Z", created_at: "2026-09-22T13:10:00Z", tier: "vip", paid_amount: 14900, receipt_status: "approved", receipt_issued: true, receipt_issued_at: "2026-09-22T15:00:00Z" },
+      { id: 6, telegram_id: 319284910, username: "polina_voenmeh", first_name: "Полина", last_name: "Иванова", role: "student", has_access: false, created_at: "2026-09-25T11:20:00Z", tier: "accelerator", receipt_status: "none", receipt_issued: false },
     ];
 
     if (q) {
@@ -469,7 +493,101 @@ export const api = {
     if (receipt_status && receipt_status !== "all") {
       list = list.filter((s) => s.receipt_status?.toLowerCase() === receipt_status.toLowerCase());
     }
+    if (receipt_issued === "issued" || receipt_issued === "true") {
+      list = list.filter((s) => !!s.receipt_issued);
+    } else if (receipt_issued === "not_issued" || receipt_issued === "false") {
+      list = list.filter((s) => !s.receipt_issued);
+    }
+
+    // Mock client-side sorting
+    list.sort((a, b) => {
+      let comparison = 0;
+      switch (sort_by) {
+        case "purchase_date":
+        case "access_granted_at":
+        case "access_date": {
+          const dateA = a.access_granted_at || a.created_at || "";
+          const dateB = b.access_granted_at || b.created_at || "";
+          comparison = dateA.localeCompare(dateB);
+          break;
+        }
+        case "paid_amount":
+        case "amount": {
+          const amtA = a.paid_amount || 0;
+          const amtB = b.paid_amount || 0;
+          comparison = amtA - amtB;
+          break;
+        }
+        case "name":
+        case "first_name": {
+          const nameA = `${a.first_name} ${a.last_name || ""}`.trim().toLowerCase();
+          const nameB = `${b.first_name} ${b.last_name || ""}`.trim().toLowerCase();
+          comparison = nameA.localeCompare(nameB, "ru");
+          break;
+        }
+        case "username": {
+          const userA = (a.username || "").toLowerCase();
+          const userB = (b.username || "").toLowerCase();
+          comparison = userA.localeCompare(userB);
+          break;
+        }
+        case "tier": {
+          const tierA = (a.tier || "").toLowerCase();
+          const tierB = (b.tier || "").toLowerCase();
+          comparison = tierA.localeCompare(tierB);
+          break;
+        }
+        case "receipt_issued":
+        case "fiscal": {
+          const rA = a.receipt_issued ? 1 : 0;
+          const rB = b.receipt_issued ? 1 : 0;
+          comparison = rA - rB;
+          break;
+        }
+        case "created_at": {
+          const caA = a.created_at || "";
+          const caB = b.created_at || "";
+          comparison = caA.localeCompare(caB);
+          break;
+        }
+        default: {
+          const dateA = a.access_granted_at || a.created_at || "";
+          const dateB = b.access_granted_at || b.created_at || "";
+          comparison = dateA.localeCompare(dateB);
+          break;
+        }
+      }
+      return sort_dir === "asc" ? comparison : -comparison;
+    });
+
     return list;
+  },
+
+  // Toggle or set self-employed fiscal receipt issued status
+  async toggleReceiptIssued(
+    userId: number,
+    issued?: boolean
+  ): Promise<{ success: boolean; receipt_issued: boolean; receipt_issued_at?: string; user?: UserProfile; error?: string }> {
+    const token = getAdminToken();
+    try {
+      const res = await fetch(`${API_BASE}/admin/users/${userId}/receipt-issued`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(issued !== undefined ? { receipt_issued: issued } : {}),
+        credentials: "include",
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+      const data = await res.json().catch(() => ({}));
+      return { success: false, receipt_issued: false, error: data.error || "Ошибка сохранения статуса чека" };
+    } catch {
+      // Mock toggle
+      return { success: true, receipt_issued: issued ?? true, receipt_issued_at: new Date().toISOString() };
+    }
   },
 
   // Toggle user access in Admin
@@ -745,6 +863,7 @@ export const api = {
     tier?: "accelerator" | "vip";
     paid_amount?: number;
     promo_code?: string;
+    receipt_issued?: boolean;
   }): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
     const token = getAdminToken();
     try {
@@ -774,6 +893,7 @@ export const api = {
           tier: data.tier || "accelerator",
           paid_amount: data.paid_amount || 0,
           promo_code: data.promo_code || "",
+          receipt_issued: !!data.receipt_issued,
         },
       };
     }
@@ -790,6 +910,7 @@ export const api = {
       tier?: "accelerator" | "vip";
       paid_amount?: number;
       promo_code?: string;
+      receipt_issued?: boolean;
     }
   ): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
     const token = getAdminToken();

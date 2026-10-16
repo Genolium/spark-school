@@ -201,6 +201,7 @@ func main() {
 			adminGroup.PUT("/users/:id", adminHandler.UpdateUser)
 			adminGroup.DELETE("/users/:id", adminHandler.DeleteUser)
 			adminGroup.POST("/users/:id/access", adminHandler.ToggleAccess)
+			adminGroup.POST("/users/:id/receipt-issued", adminHandler.ToggleReceiptIssued)
 			adminGroup.GET("/payouts", adminHandler.ListPayouts)
 			adminGroup.POST("/payouts/:id/approve", adminHandler.ApprovePayout)
 			adminGroup.POST("/payouts/:id/reject", adminHandler.RejectPayout)

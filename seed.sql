@@ -13,6 +13,11 @@ CREATE TABLE IF NOT EXISTS users (
     role VARCHAR(20) DEFAULT 'student',
     has_access BOOLEAN DEFAULT FALSE,
     access_granted_at TIMESTAMP WITH TIME ZONE,
+    tier VARCHAR(32) DEFAULT 'accelerator',
+    paid_amount NUMERIC(10, 2) DEFAULT 0.00,
+    promo_code VARCHAR(32),
+    receipt_issued BOOLEAN DEFAULT FALSE,
+    receipt_issued_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );

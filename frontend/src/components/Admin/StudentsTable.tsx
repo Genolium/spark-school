@@ -1,7 +1,24 @@
 "use client";
 
 import React, { useState } from "react";
-import { Search, UserCheck, Lock, Plus, Pencil, Trash2, Tag, CreditCard, RotateCcw, Filter } from "lucide-react";
+import {
+  Search,
+  UserCheck,
+  Lock,
+  Plus,
+  Pencil,
+  Trash2,
+  Tag,
+  CreditCard,
+  RotateCcw,
+  Filter,
+  ArrowUpDown,
+  ArrowUp,
+  ArrowDown,
+  CheckCircle2,
+  AlertCircle,
+  Calendar,
+} from "lucide-react";
 import { UserProfile, api } from "@/lib/api";
 
 interface StudentsTableProps {
@@ -20,6 +37,7 @@ interface FormState {
   tier: "accelerator" | "vip";
   paid_amount: string;
   promo_code: string;
+  receipt_issued: boolean;
 }
 
 const emptyForm: FormState = {
@@ -32,7 +50,25 @@ const emptyForm: FormState = {
   tier: "accelerator",
   paid_amount: "6900",
   promo_code: "",
+  receipt_issued: false,
 };
+
+function formatPurchaseDate(accessGrantedAt?: string, createdAt?: string): string {
+  const dateStr = accessGrantedAt || createdAt;
+  if (!dateStr) return "—";
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return "—";
+    const day = String(d.getDate()).padStart(2, "0");
+    const months = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
+    const month = months[d.getMonth()];
+    const hours = String(d.getHours()).padStart(2, "0");
+    const minutes = String(d.getMinutes()).padStart(2, "0");
+    return `${day} ${month}, ${hours}:${minutes}`;
+  } catch {
+    return "—";
+  }
+}
 
 const inputCls =
   "w-full px-3 py-2 text-xs font-mono bg-slate-50 dark:bg-black/40 border border-slate-200 dark:border-white/10 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-amber-500";
@@ -45,6 +81,11 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
   const [tierFilter, setTierFilter] = useState<string>("all");
   const [accessFilter, setAccessFilter] = useState<string>("all");
   const [receiptFilter, setReceiptFilter] = useState<string>("all");
+  const [receiptIssuedFilter, setReceiptIssuedFilter] = useState<string>("all");
+
+  // Sorting state: purchase_date, paid_amount, name, username, tier, receipt_issued, created_at
+  const [sortBy, setSortBy] = useState<string>("purchase_date");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
   const [modal, setModal] = useState<"create" | "edit" | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -70,7 +111,14 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
     }).catch(() => {});
   }, []);
 
-  const isFiltered = query.trim() !== "" || tierFilter !== "all" || accessFilter !== "all" || receiptFilter !== "all";
+  const isFiltered =
+    query.trim() !== "" ||
+    tierFilter !== "all" ||
+    accessFilter !== "all" ||
+    receiptFilter !== "all" ||
+    receiptIssuedFilter !== "all" ||
+    sortBy !== "purchase_date" ||
+    sortDir !== "desc";
 
   const [serverStudents, setServerStudents] = useState<UserProfile[] | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -89,6 +137,9 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
           tier: tierFilter,
           access: accessFilter,
           receipt_status: receiptFilter,
+          receipt_issued: receiptIssuedFilter,
+          sort_by: sortBy,
+          sort_dir: sortDir,
         });
         setServerStudents(fetched);
       } catch {
@@ -99,14 +150,45 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
     }, 250);
 
     return () => clearTimeout(timer);
-  }, [query, tierFilter, accessFilter, receiptFilter, isFiltered]);
+  }, [query, tierFilter, accessFilter, receiptFilter, receiptIssuedFilter, sortBy, sortDir, isFiltered]);
 
   const resetFilters = () => {
     setQuery("");
     setTierFilter("all");
     setAccessFilter("all");
     setReceiptFilter("all");
+    setReceiptIssuedFilter("all");
+    setSortBy("purchase_date");
+    setSortDir("desc");
     setServerStudents(null);
+  };
+
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortBy(field);
+      setSortDir(field === "name" || field === "username" ? "asc" : "desc");
+    }
+  };
+
+  const handleToggleReceiptIssued = async (student: UserProfile, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const nextVal = !student.receipt_issued;
+    if (serverStudents) {
+      setServerStudents(
+        serverStudents.map((s) =>
+          s.id === student.id
+            ? { ...s, receipt_issued: nextVal, receipt_issued_at: nextVal ? new Date().toISOString() : undefined }
+            : s
+        )
+      );
+    }
+    const res = await api.toggleReceiptIssued(student.id, nextVal);
+    if (!res.success) {
+      setError(res.error || "Не удалось обновить статус чека");
+    }
+    onRefresh();
   };
 
   const filtered = (students || []).filter((s) => {
@@ -132,7 +214,61 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
       (s.receipt_status && s.receipt_status.toLowerCase() === receiptFilter.toLowerCase()) ||
       (receiptFilter === "none" && (!s.receipt_status || s.receipt_status.toLowerCase() === "none"));
 
-    return matchesQuery && matchesTier && matchesAccess && matchesReceipt;
+    const matchesReceiptIssued =
+      receiptIssuedFilter === "all" ||
+      (receiptIssuedFilter === "issued" ? !!s.receipt_issued : !s.receipt_issued);
+
+    return matchesQuery && matchesTier && matchesAccess && matchesReceipt && matchesReceiptIssued;
+  });
+
+  // Client-side sort fallback
+  filtered.sort((a, b) => {
+    let cmp = 0;
+    switch (sortBy) {
+      case "purchase_date": {
+        const dA = a.access_granted_at || a.created_at || "";
+        const dB = b.access_granted_at || b.created_at || "";
+        cmp = dA.localeCompare(dB);
+        break;
+      }
+      case "paid_amount": {
+        cmp = (a.paid_amount || 0) - (b.paid_amount || 0);
+        break;
+      }
+      case "name": {
+        const nA = `${a.first_name} ${a.last_name || ""}`.trim().toLowerCase();
+        const nB = `${b.first_name} ${b.last_name || ""}`.trim().toLowerCase();
+        cmp = nA.localeCompare(nB, "ru");
+        break;
+      }
+      case "username": {
+        const uA = (a.username || "").toLowerCase();
+        const uB = (b.username || "").toLowerCase();
+        cmp = uA.localeCompare(uB);
+        break;
+      }
+      case "tier": {
+        cmp = (a.tier || "").localeCompare(b.tier || "");
+        break;
+      }
+      case "receipt_issued": {
+        const rA = a.receipt_issued ? 1 : 0;
+        const rB = b.receipt_issued ? 1 : 0;
+        cmp = rA - rB;
+        break;
+      }
+      case "created_at": {
+        cmp = (a.created_at || "").localeCompare(b.created_at || "");
+        break;
+      }
+      default: {
+        const dA = a.access_granted_at || a.created_at || "";
+        const dB = b.access_granted_at || b.created_at || "";
+        cmp = dA.localeCompare(dB);
+        break;
+      }
+    }
+    return sortDir === "asc" ? cmp : -cmp;
   });
 
   const displayList = serverStudents !== null ? serverStudents : filtered;
@@ -176,6 +312,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
       tier: currentTier,
       paid_amount: currentAmount,
       promo_code: currentPromo,
+      receipt_issued: !!s.receipt_issued,
     });
     setEditingId(s.id);
     setError(null);
@@ -207,6 +344,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
         tier: form.tier,
         paid_amount: paidNum,
         promo_code: form.promo_code.trim().toUpperCase(),
+        receipt_issued: form.receipt_issued,
       });
     } else {
       res = await api.updateAdminUser(editingId as number, {
@@ -218,6 +356,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
         tier: form.tier,
         paid_amount: paidNum,
         promo_code: form.promo_code.trim().toUpperCase(),
+        receipt_issued: form.receipt_issued,
       });
     }
 
@@ -262,6 +401,32 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
     setActivateTarget(null);
   };
 
+  const renderSortHeader = (label: string, field: string, alignRight: boolean = false) => {
+    const isActive = sortBy === field;
+    return (
+      <th
+        onClick={() => handleSort(field)}
+        className={`pb-3 font-semibold cursor-pointer select-none group transition-colors hover:text-slate-900 dark:hover:text-white ${
+          alignRight ? "text-right" : ""
+        }`}
+        title={`Сортировать по полю «${label}»`}
+      >
+        <div className={`inline-flex items-center gap-1.5 ${alignRight ? "justify-end" : ""}`}>
+          <span>{label}</span>
+          {isActive ? (
+            sortDir === "asc" ? (
+              <ArrowUp className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            ) : (
+              <ArrowDown className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+            )
+          ) : (
+            <ArrowUpDown className="w-3.5 h-3.5 opacity-30 group-hover:opacity-75 transition-opacity shrink-0" />
+          )}
+        </div>
+      </th>
+    );
+  };
+
   return (
     <div className="p-6 sm:p-8 rounded-[32px] border border-slate-200 dark:border-white/15 bg-white dark:bg-black/30 shadow-sm mb-8">
       {/* Header and Search & Filters */}
@@ -272,7 +437,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
               Управление студентами и ручной эквайринг
             </h3>
             <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mt-1">
-              Фильтрация по тарифам, чекам и статусам • Поиск и моментальная активация
+              Сортировки по дате покупки и суммам • Чеки самозанятого «Мой налог» • Поиск и мгновенная активация
             </p>
           </div>
 
@@ -298,6 +463,32 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
             />
           </div>
 
+          {/* Sort Dropdown */}
+          <select
+            value={`${sortBy}:${sortDir}`}
+            onChange={(e) => {
+              const [field, dir] = e.target.value.split(":");
+              setSortBy(field);
+              setSortDir(dir as "asc" | "desc");
+            }}
+            className={selectCls}
+            title="Сортировка списка"
+          >
+            <option value="purchase_date:desc">📅 Дата покупки (новые)</option>
+            <option value="purchase_date:asc">📅 Дата покупки (старые)</option>
+            <option value="paid_amount:desc">💰 Оплата (убывание)</option>
+            <option value="paid_amount:asc">💰 Оплата (возрастание)</option>
+            <option value="name:asc">🔤 Имя (А → Я)</option>
+            <option value="name:desc">🔤 Имя (Я → А)</option>
+            <option value="username:asc">@ Username (А → Я)</option>
+            <option value="tier:asc">🏷️ Тариф (Акселератор → VIP)</option>
+            <option value="tier:desc">🏷️ Тариф (VIP → Акселератор)</option>
+            <option value="receipt_issued:desc">🧾 Чек СЗ (выписан)</option>
+            <option value="receipt_issued:asc">🧾 Чек СЗ (не выписан)</option>
+            <option value="created_at:desc">🕒 Регистрация (новые)</option>
+            <option value="created_at:asc">🕒 Регистрация (старые)</option>
+          </select>
+
           {/* Tier Filter */}
           <select
             value={tierFilter}
@@ -322,18 +513,30 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
             <option value="pending">Доступ закрыт</option>
           </select>
 
-          {/* Receipt Status Filter */}
+          {/* Payment Receipt Status Filter */}
           <select
             value={receiptFilter}
             onChange={(e) => setReceiptFilter(e.target.value)}
             className={selectCls}
-            title="Фильтр по статусу чека"
+            title="Фильтр по статусу чека перевода"
           >
-            <option value="all">Все чеки</option>
+            <option value="all">Чеки перевода: Все</option>
             <option value="pending">⏳ На проверке</option>
             <option value="approved">✅ Одобрен</option>
             <option value="rejected">❌ Отклонён</option>
             <option value="none">— Без чека</option>
+          </select>
+
+          {/* Self-Employed Receipt Filter */}
+          <select
+            value={receiptIssuedFilter}
+            onChange={(e) => setReceiptIssuedFilter(e.target.value)}
+            className={selectCls}
+            title="Фильтр по чеку самозанятого (Мой налог)"
+          >
+            <option value="all">Чек СЗ: Все</option>
+            <option value="issued">✅ Чек выписан</option>
+            <option value="not_issued">⚠️ Чек не выписан</option>
           </select>
 
           {/* Reset Filters */}
@@ -341,7 +544,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
             <button
               onClick={resetFilters}
               className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15 text-slate-700 dark:text-slate-300 text-xs font-mono flex items-center gap-1.5 transition-all"
-              title="Сбросить все фильтры"
+              title="Сбросить все фильтры и сортировку"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span>Сбросить</span>
@@ -361,11 +564,13 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
         <table className="w-full text-left text-xs font-mono">
           <thead>
             <tr className="border-b border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-              <th className="pb-3 font-semibold">Студент</th>
+              {renderSortHeader("Студент", "name")}
               <th className="pb-3 font-semibold">Telegram ID</th>
-              <th className="pb-3 font-semibold">Тариф</th>
-              <th className="pb-3 font-semibold">Оплачено</th>
-              <th className="pb-3 font-semibold">Чек</th>
+              {renderSortHeader("Тариф", "tier")}
+              {renderSortHeader("Оплачено", "paid_amount")}
+              {renderSortHeader("Дата покупки", "purchase_date")}
+              <th className="pb-3 font-semibold">Чек перевода</th>
+              {renderSortHeader("Чек самозанятого", "receipt_issued")}
               <th className="pb-3 font-semibold">Промокод</th>
               <th className="pb-3 font-semibold">Статус</th>
               <th className="pb-3 font-semibold text-right">Действия</th>
@@ -374,7 +579,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
           <tbody className="divide-y divide-slate-100 dark:divide-white/5">
             {displayList.length === 0 && (
               <tr>
-                <td colSpan={8} className="py-8 text-center text-slate-500">
+                <td colSpan={10} className="py-8 text-center text-slate-500">
                   {isFiltered ? "По заданным фильтрам студенты не найдены" : "Студенты не найдены"}
                 </td>
               </tr>
@@ -425,7 +630,12 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
                     {displayAmount}
                   </td>
 
-                  {/* Receipt Status Badge */}
+                  {/* Purchase Date */}
+                  <td className="py-4 text-slate-600 dark:text-slate-300 text-[11px] whitespace-nowrap">
+                    {formatPurchaseDate(s.access_granted_at, s.created_at)}
+                  </td>
+
+                  {/* Transfer Receipt Status Badge */}
                   <td className="py-4">
                     {s.receipt_status === "approved" ? (
                       <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-semibold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/25">
@@ -441,6 +651,35 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
                       </span>
                     ) : (
                       <span className="text-slate-400 text-xs">—</span>
+                    )}
+                  </td>
+
+                  {/* Self-Employed Fiscal Receipt (Мой налог) 1-Click Toggle */}
+                  <td className="py-4">
+                    {s.receipt_issued ? (
+                      <button
+                        type="button"
+                        onClick={(e) => handleToggleReceiptIssued(s, e)}
+                        title={
+                          s.receipt_issued_at
+                            ? `Чек выписан (${formatPurchaseDate(s.receipt_issued_at)}). Нажмите для отмены`
+                            : "Чек выписан в «Мой налог». Нажмите для отмены"
+                        }
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 active:scale-95 transition-all shadow-sm"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                        <span>Выписан</span>
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={(e) => handleToggleReceiptIssued(s, e)}
+                        title="Чек ещё не выписан в «Мой налог». Нажмите, когда выпишете чек"
+                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 hover:bg-amber-500/25 active:scale-95 transition-all shadow-sm"
+                      >
+                        <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
+                        <span>Не выписан</span>
+                      </button>
                     )}
                   </td>
 
@@ -709,6 +948,15 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
                   onChange={(e) => setForm({ ...form, has_access: e.target.checked })}
                 />
                 Доступ к закрытому каналу и материалам
+              </label>
+
+              <label className="flex items-center gap-2 text-xs font-mono text-slate-700 dark:text-slate-300">
+                <input
+                  type="checkbox"
+                  checked={form.receipt_issued}
+                  onChange={(e) => setForm({ ...form, receipt_issued: e.target.checked })}
+                />
+                Чек самозанятого выписан в «Мой налог» (ФНС)
               </label>
             </div>
 

@@ -19,6 +19,8 @@ type User struct {
 	PaidAmount      float64    `gorm:"type:numeric(10,2);default:0.00" json:"paid_amount"`
 	PromoCode       string     `gorm:"size:32" json:"promo_code"`
 	ReceiptStatus   string     `gorm:"-" json:"receipt_status,omitempty"`
+	ReceiptIssued   bool       `gorm:"default:false;index" json:"receipt_issued"`
+	ReceiptIssuedAt *time.Time `json:"receipt_issued_at,omitempty"`
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
 
