@@ -10,6 +10,7 @@ import { PlacementMap } from "@/components/PlacementMap";
 import { PlatformFeatures } from "@/components/PlatformFeatures";
 import { AuthorSection } from "@/components/AuthorSection";
 import { PricingSection } from "@/components/PricingSection";
+import { QualificationSection } from "@/components/QualificationSection";
 import { FaqSection } from "@/components/FaqSection";
 import { Footer } from "@/components/Footer";
 import { PaymentModal, PricingTier } from "@/components/Modals/PaymentModal";
@@ -104,7 +105,10 @@ export default function HomePage() {
       {/* Screen 7: 3-Tier Pricing Matrix & Scarcity */}
       <PricingSection onOpenPayment={handleOpenPayment} />
 
-      {/* Screen 8: FAQ Accordions */}
+      {/* Screen 8: Qualification Filter (Кому курс НЕ подойдет / Для кого) */}
+      <QualificationSection onSelectTier={() => handleOpenPayment("accelerator")} />
+
+      {/* Screen 9: FAQ Accordions */}
       <FaqSection />
 
       {/* Screen 9: Legal Footer & Disclaimer */}

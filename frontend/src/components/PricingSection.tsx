@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { Check, ArrowUpRight, ShieldCheck, CreditCard, Sparkles, Crown } from "lucide-react";
+import { Check, ArrowUpRight, ShieldCheck, CreditCard, Sparkles, Crown, TrendingUp } from "lucide-react";
 import { api, PlacesStats, CoursePricing } from "@/lib/api";
 import { DeadlineCountdown } from "./DeadlineCountdown";
 
@@ -83,6 +83,109 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
       <div className="max-w-5xl mx-auto mb-10 sm:mb-12">
         <DeadlineCountdown onOpenPayment={() => onOpenPayment?.("accelerator")} />
       </div>
+
+      {/* Value Contrast & ROI Breakdown Card (6 900 ₽ vs Цена ошибки) */}
+      <motion.div
+        initial={{ opacity: 0, y: 16 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.45 }}
+        className="max-w-5xl mx-auto mb-12 p-6 sm:p-8 rounded-3xl bento-card-dark border border-emerald-500/25 dark:border-white/10 shadow-[0_15px_45px_rgba(16,185,129,0.06)] relative overflow-hidden bg-white/80 dark:bg-[#12161f]/80"
+      >
+        <div className="flex items-center justify-between mb-6 pb-4 border-b border-emerald-500/15 dark:border-white/10">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
+              <TrendingUp className="w-4 h-4" />
+            </div>
+            <div>
+              <h3 className="font-editorial text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
+                Математика инвестиции: почему курс окупается сразу
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                Сравните разовую стоимость системной подготовки со стоимостью одной ошибки в заявке
+              </p>
+            </div>
+          </div>
+          <span className="hidden sm:inline-flex px-3 py-1 rounded-full text-xs font-mono font-bold uppercase bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
+            ROI 1 : 290
+          </span>
+        </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-11 gap-6 items-center">
+          {/* Left Side: Course Investment (5 cols) */}
+          <div className="lg:col-span-5 p-5 sm:p-6 rounded-2xl bg-emerald-500/5 dark:bg-emerald-500/10 border border-emerald-500/20 flex flex-col justify-between h-full">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-emerald-700 dark:text-emerald-300">
+                  Стоимость подготовки
+                </span>
+              </div>
+              <div className="text-3xl sm:text-4xl font-black font-mono text-emerald-600 dark:text-emerald-400 my-1">
+                {formatRub(pricing.accelerator_price)} ₽
+              </div>
+              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-doc leading-relaxed mt-2 mb-4">
+                Меньше одного ужина в кафе или 2 часов с репетитором по английскому. Разовая инвестиция за полный цикл подготовки под ключ.
+              </p>
+            </div>
+
+            <div className="space-y-2 pt-3 border-t border-emerald-500/15 text-xs font-mono text-slate-700 dark:text-slate-300">
+              <div className="flex items-center gap-2">
+                <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                <span>Личный аудит эссе, резюме и видеовизитки</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                <span>45-мин персональный Zoom-интервью 1-на-1</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                <span>Пошаговый визовый гайд J-1 и закрытый чат</span>
+              </div>
+            </div>
+          </div>
+
+          {/* VS Divider (1 col) */}
+          <div className="lg:col-span-1 flex items-center justify-center">
+            <span className="w-10 h-10 rounded-full bg-slate-900 text-white dark:bg-white dark:text-black flex items-center justify-center font-mono text-xs font-black uppercase shadow-lg">
+              VS
+            </span>
+          </div>
+
+          {/* Right Side: The Cost of Mistake / What is at stake (5 cols) */}
+          <div className="lg:col-span-5 p-5 sm:p-6 rounded-2xl bg-rose-500/5 dark:bg-rose-500/10 border border-rose-500/20 flex flex-col justify-between h-full">
+            <div>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="w-2 h-2 rounded-full bg-rose-500" />
+                <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-rose-700 dark:text-rose-300">
+                  Что стоит на кону при отказе
+                </span>
+              </div>
+              <div className="text-3xl sm:text-4xl font-black font-mono text-rose-600 dark:text-rose-400 my-1">
+                $20,000 + 1 год
+              </div>
+              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-doc leading-relaxed mt-2 mb-4">
+                Отбор в SPARK проходит строго 1 раз в год. Ошибка в первом туре лишает вас гранта и откладывает поездку в США на год (когда вы можете уже не пройти возрастной ценз 18–21).
+              </p>
+            </div>
+
+            <div className="space-y-2 pt-3 border-t border-rose-500/15 text-xs font-mono text-slate-700 dark:text-slate-300">
+              <div className="flex items-start gap-2">
+                <span className="text-rose-500 font-bold shrink-0">✕</span>
+                <span>$20,000 расходов (перелёт, проживание, кампус в США)</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-rose-500 font-bold shrink-0">✕</span>
+                <span>Нетворкинг с Николаем Давыдовым (Davidovs vc) и топ-фаундерами</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <span className="text-rose-500 font-bold shrink-0">✕</span>
+                <span>Соотношение ценности курса к гранту: <b>1 к 290</b></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </motion.div>
 
       {/* 3-Tier Pricing Grid: Базовый, Акселератор & VIP */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8 items-stretch max-w-7xl mx-auto">
