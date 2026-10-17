@@ -538,6 +538,10 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 	pricing := s.getPricing()
 	accBase := int(pricing.AcceleratorPrice)
 	vipBase := int(pricing.VIPPrice)
+	bankName := pricing.BankName
+	if strings.TrimSpace(bankName) == "" {
+		bankName = "БСПБ (Банк «Санкт-Петербург»)"
+	}
 
 	if withPromo || session.DiscountPct > 0 {
 		pct := session.DiscountPct
@@ -556,7 +560,7 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 %s VIP: <b>%s ₽</b> (скидка %s ₽)
 
 🏛 <b>Прямой перевод по СБП (0%% без комиссии):</b>
-• Банк: <b>Озон Банк (Ozon)</b>
+• Банк: <b>%s</b>
 • Номер телефона: <code>+7 981 163-36-91</code>
 • Получатель: <b>Васюнин Илья Олегович</b>
 • Назначение платежа: <code>SPARK ПРОМО [Тариф]</code>
@@ -564,7 +568,7 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 %s <b>Как получить доступ:</b>
 1. Выберите тариф кнопкой ниже или переведите нужную сумму по СБП.
 2. <b>Отправьте скриншот чека прямо сюда в чат!</b>
-3. Бот проверит чек и сразу выдаст вам одноразовую ссылку в закрытый канал потока.`, sparkle, pct, pct, bullet, formatPriceRub(accPrice), formatPriceRub(accDiscount), bullet, formatPriceRub(vipPrice), formatPriceRub(vipDiscount), clipGreen)
+3. Бот проверит чек и сразу выдаст вам одноразовую ссылку в закрытый канал потока.`, sparkle, pct, pct, bullet, formatPriceRub(accPrice), formatPriceRub(accDiscount), bullet, formatPriceRub(vipPrice), formatPriceRub(vipDiscount), bankName, clipGreen)
 		keyboard = PromoAppliedKeyboard(pricing)
 	} else {
 		accPromoPrice := accBase - (accBase*5)/100
@@ -577,7 +581,7 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 %s <b>VIP:</b> %s ₽ (по промокоду: <b>%s ₽</b>) <i>[Строго ограниченное количество мест]</i>
 
 🏛 <b>Оплата через СБП (0%% без комиссии):</b>
-• Банк: <b>Озон Банк (Ozon)</b>
+• Банк: <b>%s</b>
 • Номер телефона: <code>+7 981 163-36-91</code>
 • Получатель: <b>Васюнин Илья Олегович</b>
 • Назначение: <code>SPARK [Тариф]</code>
@@ -585,7 +589,7 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 %s <b>Как получить доступ:</b>
 1. Выберите тариф кнопкой ниже или сделайте перевод по номеру телефона через СБП.
 2. <b>Отправьте скриншот чека прямо сюда в чат бота!</b>
-3. Бот зафиксирует платёж и сразу выдаст вам персональную ссылку в закрытый канал потока.`, lightning, num1, formatPriceRub(accBase), formatPriceRub(accPromoPrice), num2, formatPriceRub(vipBase), formatPriceRub(vipPromoPrice), paperclip)
+3. Бот зафиксирует платёж и сразу выдаст вам персональную ссылку в закрытый канал потока.`, lightning, num1, formatPriceRub(accBase), formatPriceRub(accPromoPrice), num2, formatPriceRub(vipBase), formatPriceRub(vipPromoPrice), bankName, paperclip)
 		keyboard = PaymentKeyboard(pricing)
 	}
 
@@ -645,12 +649,17 @@ func (s *BotService) handleSbpPayment(chatID telego.ChatID, from *telego.User, t
 		discountText = fmt.Sprintf(" (скидка %d%% по промокоду <code>%s</code>)", pct, session.PromoCode)
 	}
 
+	bankName := pricing.BankName
+	if strings.TrimSpace(bankName) == "" {
+		bankName = "БСПБ (Банк «Санкт-Петербург»)"
+	}
+
 	sbpText := fmt.Sprintf(`🏛 <b>Оплата тарифа «%s» через СБП (0%% без комиссии)</b>
 
 💰 <b>Сумма к переводу: %s ₽</b>%s
 
 <b>Реквизиты для перевода:</b>
-• Банк: <b>Озон Банк (Ozon)</b>
+• Банк: <b>%s</b>
 • Номер телефона: <code>+7 981 163-36-91</code>
 • Получатель: <b>Васюнин Илья Олегович</b>
 • Назначение платежа: <code>SPARK %s</code>
@@ -662,7 +671,7 @@ func (s *BotService) handleSbpPayment(chatID telego.ChatID, from *telego.User, t
 
 ℹ️ <i>Оплачивая участие, вы соглашаетесь с условиями <a href="https://so-called-spark.ru/offer">Публичной оферты</a> (услуга считается оказанной при добавлении в закрытый канал и одном раунде обратной связи) и <a href="https://so-called-spark.ru/privacy">Политики конфиденциальности</a>.</i>
 
-<i>При любых вопросах вы всегда можете написать так называемому Илю (@ilyan_vas).</i>`, tierTitle, formatPriceRub(price), discountText, strings.ToUpper(tier))
+<i>При любых вопросах вы всегда можете написать так называемому Илю (@ilyan_vas).</i>`, tierTitle, formatPriceRub(price), discountText, bankName, strings.ToUpper(tier))
 
 	kb := tu.InlineKeyboard(
 		tu.InlineKeyboardRow(
@@ -1810,12 +1819,18 @@ func (s *BotService) handleUpgradePayment(chatID telego.ChatID, from *telego.Use
 		targetName = "VIP"
 	}
 
+	pricing := s.getPricing()
+	bankName := pricing.BankName
+	if strings.TrimSpace(bankName) == "" {
+		bankName = "БСПБ (Банк «Санкт-Петербург»)"
+	}
+
 	text := fmt.Sprintf(`🚀 <b>Оплата апгрейда до тарифа «%s»</b>
 
 💰 <b>Сумма доплаты: %s ₽</b>
 
 🏛 <b>Оплата через СБП (0%% без комиссии):</b>
-• Банк: <b>Озон Банк (Ozon)</b>
+• Банк: <b>%s</b>
 • Номер телефона: <code>+7 981 163-36-91</code>
 • Получатель: <b>Васюнин Илья Олегович</b>
 • Назначение платежа: <code>SPARK Апгрейд %s</code>
@@ -1823,7 +1838,7 @@ func (s *BotService) handleUpgradePayment(chatID telego.ChatID, from *telego.Use
 📎 <b>Как завершить апгрейд:</b>
 1. Переведите точную сумму доплаты (<b>%s ₽</b>) через СБП.
 2. <b>Отправьте скриншот чека прямо сюда в чат бота!</b>
-3. Так называемый Иль подтвердит оплату и обновит ваш тариф.`, targetName, formatPriceRub(int(amountDiff)), strings.ToUpper(targetTier), formatPriceRub(int(amountDiff)))
+3. Так называемый Иль подтвердит оплату и обновит ваш тариф.`, targetName, formatPriceRub(int(amountDiff)), bankName, strings.ToUpper(targetTier), formatPriceRub(int(amountDiff)))
 
 	kb := tu.InlineKeyboard(
 		tu.InlineKeyboardRow(

@@ -3,6 +3,7 @@ package handlers
 import (
 	"math"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spark-school/backend/internal/models"
@@ -31,6 +32,7 @@ type UpdatePricingRequest struct {
 	AcceleratorOldPrice float64 `json:"accelerator_old_price"`
 	VIPPrice            float64 `json:"vip_price" binding:"required"`
 	VIPOldPrice         float64 `json:"vip_old_price"`
+	BankName            string  `json:"bank_name"`
 }
 
 // UpdatePricing updates course pricing in DB (admin only).
@@ -63,11 +65,17 @@ func (h *PricingHandler) UpdatePricing(c *gin.Context) {
 		req.VIPOldPrice = math.Round((req.VIPPrice*1.4)/100) * 100
 	}
 
+	bankName := strings.TrimSpace(req.BankName)
+	if bankName == "" {
+		bankName = "БСПБ (Банк «Санкт-Петербург»)"
+	}
+
 	newPricing := models.CoursePricing{
 		AcceleratorPrice:    req.AcceleratorPrice,
 		AcceleratorOldPrice: req.AcceleratorOldPrice,
 		VIPPrice:            req.VIPPrice,
 		VIPOldPrice:         req.VIPOldPrice,
+		BankName:            bankName,
 	}
 
 	updated, err := models.UpdateCoursePricing(h.db, newPricing)

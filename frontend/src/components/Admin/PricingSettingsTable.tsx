@@ -14,6 +14,7 @@ import {
   TrendingUp,
   Bot,
   Globe,
+  Building2,
 } from "lucide-react";
 
 export function PricingSettingsTable() {
@@ -22,6 +23,7 @@ export function PricingSettingsTable() {
     accelerator_old_price: 9900,
     vip_price: 14900,
     vip_old_price: 19900,
+    bank_name: "БСПБ (Банк «Санкт-Петербург»)",
   });
 
   const [loading, setLoading] = useState(true);
@@ -76,19 +78,20 @@ export function PricingSettingsTable() {
       ...pricing,
       accelerator_old_price: accOld,
       vip_old_price: vipOld,
+      bank_name: (pricing.bank_name || "").trim() || "БСПБ (Банк «Санкт-Петербург»)",
     };
 
     const res = await api.updateCoursePricing(payload);
     setSaving(false);
 
     if (res.success) {
-      setMsg({ text: "Цены успешно обновлены и синхронизированы на сайте и в боте!", type: "success" });
+      setMsg({ text: "Цены и реквизиты успешно обновлены и синхронизированы на сайте и в боте!", type: "success" });
       if (res.pricing) {
         setPricing(res.pricing);
       }
       setTimeout(() => setMsg(null), 5000);
     } else {
-      setMsg({ text: res.error || "Ошибка сохранения цен", type: "error" });
+      setMsg({ text: res.error || "Ошибка сохранения настроек", type: "error" });
     }
   };
 
@@ -98,6 +101,7 @@ export function PricingSettingsTable() {
       accelerator_old_price: 9900,
       vip_price: 14900,
       vip_old_price: 19900,
+      bank_name: "БСПБ (Банк «Санкт-Петербург»)",
     });
     setMsg({ text: "Установлены стандартные значения. Нажмите «Сохранить», чтобы применить.", type: "success" });
   };
@@ -371,6 +375,74 @@ export function PricingSettingsTable() {
             </div>
           </div>
 
+        </div>
+
+        {/* ========================================================================= */}
+        {/* BANK SETTINGS CARD (Реквизиты банка для СБП и переводов)                  */}
+        {/* ========================================================================= */}
+        <div className="p-6 sm:p-8 rounded-[32px] bg-white dark:bg-[#12161f] border border-slate-200 dark:border-white/10 shadow-sm">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 pb-6 border-b border-slate-100 dark:border-white/5">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
+                <Building2 className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-editorial text-xl font-bold text-slate-900 dark:text-white">
+                  Банк получателя для СБП / перевода
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                  Отображается студенту в окне оплаты на сайте и во всех сообщениях Telegram-бота с инструкцией по переводу.
+                </p>
+              </div>
+            </div>
+            <div className="px-3 py-1 rounded-full text-xs font-mono bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 border border-indigo-500/20 w-fit">
+              СБП &amp; Прямой перевод
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div>
+              <label className="block text-xs font-mono font-bold text-slate-700 dark:text-slate-300 mb-2">
+                Название банка получателя *
+              </label>
+              <input
+                type="text"
+                value={pricing.bank_name || ""}
+                placeholder="БСПБ (Банк «Санкт-Петербург»)"
+                onChange={(e) => setPricing((prev) => ({ ...prev, bank_name: e.target.value }))}
+                className="w-full max-w-xl px-4 py-3 rounded-2xl bg-slate-50 dark:bg-black/30 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white font-mono text-sm font-semibold focus:outline-none focus:border-indigo-500 transition-colors"
+              />
+            </div>
+
+            <div>
+              <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400 mb-2">
+                Быстрый выбор популярного банка:
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {[
+                  "БСПБ (Банк «Санкт-Петербург»)",
+                  "Т-Банк (Тинькофф)",
+                  "СберБанк",
+                  "Альфа-Банк",
+                  "ВТБ",
+                  "Райффайзенбанк",
+                ].map((b) => (
+                  <button
+                    key={b}
+                    type="button"
+                    onClick={() => setPricing((prev) => ({ ...prev, bank_name: b }))}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-mono transition-all ${
+                      pricing.bank_name === b
+                        ? "bg-indigo-600 text-white shadow-sm font-bold"
+                        : "bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300"
+                    }`}
+                  >
+                    {b}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
 
         {/* Upgrade Math Auto-Preview */}

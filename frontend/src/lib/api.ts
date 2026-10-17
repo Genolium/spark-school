@@ -125,6 +125,7 @@ export interface CoursePricing {
   accelerator_old_price: number;
   vip_price: number;
   vip_old_price: number;
+  bank_name?: string;
   updated_at?: string;
 }
 
@@ -257,6 +258,7 @@ export const api = {
       accelerator_old_price: 9900,
       vip_price: 14900,
       vip_old_price: 19900,
+      bank_name: "БСПБ (Банк «Санкт-Петербург»)",
     };
   },
 
