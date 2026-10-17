@@ -586,10 +586,16 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
             )}
             {displayList.map((s) => {
               const isVIP = s.tier === "vip";
+              const isBasic = s.tier === "basic";
+              const defaultTierPrice = isVIP
+                ? coursePricing.vip_price
+                : isBasic
+                ? 3990
+                : coursePricing.accelerator_price;
               const displayAmount = s.paid_amount
                 ? s.paid_amount.toLocaleString("ru-RU") + " ₽"
                 : s.has_access
-                ? ((isVIP ? coursePricing.vip_price : coursePricing.accelerator_price).toLocaleString("ru-RU") + " ₽")
+                ? (defaultTierPrice.toLocaleString("ru-RU") + " ₽")
                 : "0 ₽";
 
               return (
@@ -612,17 +618,26 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
 
                   <td className="py-4 text-slate-600 dark:text-slate-300">{s.telegram_id}</td>
 
-                  {/* Tier Badge */}
+                  {/* Tier Badge & Upsells */}
                   <td className="py-4">
-                    <span
-                      className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 ${
-                        isVIP
-                          ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
-                          : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30"
-                      }`}
-                    >
-                      {isVIP ? "★ VIP" : "Акселератор"}
-                    </span>
+                    <div className="flex flex-col gap-1 items-start">
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 ${
+                          isVIP
+                            ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                            : isBasic
+                            ? "bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30"
+                            : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30"
+                        }`}
+                      >
+                        {isVIP ? "★ VIP" : isBasic ? "Базовый" : "Акселератор"}
+                      </span>
+                      {s.has_audit_upsell && (
+                        <span className="px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-tight bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 border border-indigo-500/30">
+                          +Аудит эссе (1 900 ₽)
+                        </span>
+                      )}
+                    </div>
                   </td>
 
                   {/* Paid Amount */}

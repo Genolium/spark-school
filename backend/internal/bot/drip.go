@@ -93,6 +93,7 @@ func (s *BotService) startDripWorker() {
 			return
 		case <-ticker.C:
 			s.processDueDripLeads()
+			s.processDueBasicUpsells()
 		}
 	}
 }
@@ -280,4 +281,65 @@ func (s *BotService) sendDripMessageWithFallback(chatID telego.ChatID, text stri
 		_, _ = s.bot.SendMessage(cleanMsg)
 	}
 }
+
+// processDueBasicUpsells automatically offers the 1900 RUB essay audit order bump to students on 'basic' tier after 3 days.
+func (s *BotService) processDueBasicUpsells() {
+	if s.db == nil || s.bot == nil {
+		return
+	}
+
+	var dueStudents []models.User
+	threeDaysAgo := time.Now().Add(-72 * time.Hour)
+	err := s.db.Where("has_access = true AND LOWER(tier) = 'basic' AND upsell_audit_sent = false AND has_audit_upsell = false AND access_granted_at IS NOT NULL AND access_granted_at <= ?", threeDaysAgo).
+		Limit(20).
+		Find(&dueStudents).Error
+	if err != nil || len(dueStudents) == 0 {
+		return
+	}
+
+	for _, student := range dueStudents {
+		chatID := tu.ID(student.TelegramID)
+		s.sendBasicUpsellMessage(chatID, student)
+
+		now := time.Now()
+		student.UpsellAuditSent = true
+		student.UpsellAuditSentAt = &now
+		s.db.Save(&student)
+	}
+}
+
+// sendBasicUpsellMessage delivers the Order Bump offer to student who bought Basic tier.
+func (s *BotService) sendBasicUpsellMessage(chatID telego.ChatID, student models.User) {
+	name := student.FirstName
+	if name == "" {
+		name = "Студент"
+	}
+
+	text := fmt.Sprintf(`👋 Привет, %s!
+
+Ты уже 3 дня на курсе и наверняка изучил уроки по написанию эссе.
+
+Хочешь, я сделаю <b>текстовый аудит твоего черновика с подробными правками в Google Docs</b> без полного созвона?
+
+✍️ <b>Что входит в текстовый аудит:</b>
+• Построчный разбор каждого абзаца эссе на 500 слов
+• Проверка структуры, логики аргументов и ответа на вопрос «Why SPARK?»
+• Вычитка шаблонных фраз, которые сразу режут глаз американской комиссии
+• Конкретные правки в режиме рецензирования в Google Docs
+
+💳 <b>Доплата всего 1 900 ₽</b> (вместо полного тарифа Акселератор за 6 900 ₽)`, name)
+
+	kb := tu.InlineKeyboard(
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("✍️ Оформить аудит эссе (1 900 ₽)").WithCallbackData("pay_upsell_audit"),
+		),
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("💬 Написать так называемому Илю").WithURL("https://t.me/ilyan_vas"),
+		),
+	)
+
+	s.sendDripMessageWithFallback(chatID, text, kb)
+	log.Printf("[Upsell Nurture] Sent 72h Basic Upsell offer to %d (@%s)", student.TelegramID, student.Username)
+}
+
 

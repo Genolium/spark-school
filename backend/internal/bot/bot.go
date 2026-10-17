@@ -220,10 +220,20 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 			param = parts[1]
 		}
 
+		if param == "pay_audit" || param == "upsell_audit" || param == "audit" || strings.HasPrefix(param, "pay_audit") {
+			s.handleAuditUpsellPayment(chatID, msg.From)
+			return true
+		}
+
 		if strings.HasPrefix(param, "pay") {
 			payload := strings.TrimPrefix(param, "pay_")
 			if param == "pay" {
 				payload = ""
+			}
+
+			if strings.HasPrefix(payload, "audit") {
+				s.handleAuditUpsellPayment(chatID, msg.From)
+				return true
 			}
 
 			// 1. Extract tier
@@ -707,6 +717,59 @@ func (s *BotService) handleYooKassaPayment(chatID telego.ChatID, from *telego.Us
 	s.handleSbpPayment(chatID, from, tier)
 }
 
+func (s *BotService) handleAuditUpsellPayment(chatID telego.ChatID, from *telego.User) {
+	session := s.getSession(chatID.ID)
+	session.State = StateWaitingReceipt
+	session.SelectedTier = "audit_essay"
+	session.IsUpgrade = true
+	session.UpgradeAmount = 1900.0
+	session.UpgradeToTier = "audit_essay"
+
+	if s.bot == nil {
+		return
+	}
+
+	pricing := s.getPricing()
+	bankName := pricing.BankName
+	if strings.TrimSpace(bankName) == "" {
+		bankName = "БСПБ (Банк «Санкт-Петербург»)"
+	}
+
+	text := fmt.Sprintf(`✍️ <b>Оплата текстового аудита эссе — 1 900 ₽</b>
+
+Вы получите подробный построчный аудит черновика вашего эссе на 500 слов с комментариями, правками структуры и формулировок от финалиста SPARK 2026.
+
+💰 <b>Сумма к переводу: 1 900 ₽</b>
+
+<b>Реквизиты для перевода через СБП:</b>
+• Банк: <b>%s</b>
+• Номер телефона: <code>+7 981 163-36-91</code>
+• Получатель: <b>Васюнин Илья Олегович</b>
+• Назначение платежа: <code>АУДИТ ЭССЕ</code>
+
+📎 <b>Как получить аудит:</b>
+1. Совершите перевод <b>1 900 ₽</b> через СБП в вашем банке.
+2. <b>Отправьте скриншот или PDF чека прямо в этот чат!</b>
+3. Так называемый Иль проверит платёж и сразу пришлёт инструкцию, куда прислать ссылку на черновик в Google Docs.
+
+<i>Разбор с правками готовится в течение 24–48 часов после получения текста. По всем вопросам: @ilyan_vas</i>`, bankName)
+
+	kb := tu.InlineKeyboard(
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("💬 Задать вопрос так называемому Илю").WithURL("https://t.me/ilyan_vas"),
+		),
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu"),
+		),
+	)
+
+	m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
+	if _, sendErr := s.bot.SendMessage(m); sendErr != nil {
+		cleanMsg := tu.Message(chatID, StripTgEmoji(text)).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
+		_, _ = s.bot.SendMessage(cleanMsg)
+	}
+}
+
 func (s *BotService) processPromoInput(chatID telego.ChatID, from *telego.User, rawCode string) {
 	if s.bot == nil {
 		return
@@ -906,6 +969,10 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 
 	case "pay_yk_vip", "pay_sbp_vip":
 		s.handleSbpPayment(chatID, &query.From, "vip")
+		return true
+
+	case "pay_upsell_audit":
+		s.handleAuditUpsellPayment(chatID, &query.From)
 		return true
 
 	case "action_upgrade":
@@ -1264,7 +1331,9 @@ func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr s
 			now := time.Now()
 			student.AccessGrantedAt = &now
 		}
-		if receipt.Tier != "" {
+		if strings.ToLower(receipt.Tier) == "audit_essay" {
+			student.HasAuditUpsell = true
+		} else if receipt.Tier != "" {
 			student.Tier = receipt.Tier
 		}
 		if wasActive {
@@ -1283,7 +1352,18 @@ func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr s
 		}
 	}
 
-	if wasActive {
+	if strings.ToLower(receipt.Tier) == "audit_essay" {
+		auditSuccessMsg := `🎉 <b>Оплата текстового аудита эссе успешно подтверждена!</b>
+
+Теперь ты можешь прислать ссылку на своё эссе в Google Docs (с правами комментирования) прямо в этот чат или написать так называемому Илю лично: @ilyan_vas.
+
+Так называемый Иль проведёт подробный построчный аудит твоего эссе и подготовит разбор с правками в течение 24–48 часов.`
+		_ = s.SendNotification(receipt.TelegramID, auditSuccessMsg)
+		_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+			CallbackQueryID: query.ID,
+			Text:            "✅ Текстовый аудит эссе успешно одобрен!",
+		})
+	} else if wasActive {
 		tierTitle := "Акселератор"
 		if strings.ToLower(receipt.Tier) == "vip" {
 			tierTitle = "VIP"

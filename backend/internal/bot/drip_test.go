@@ -54,3 +54,35 @@ func TestDrip_MessageCopy_Sanity(t *testing.T) {
 		t.Errorf("forbidden text in username")
 	}
 }
+
+func TestDrip_BasicUpsellOrderBump(t *testing.T) {
+	service := NewBotService(&config.Config{}, nil)
+	defer service.Stop()
+
+	// Should not panic with nil DB
+	service.processDueBasicUpsells()
+
+	// Verify upsell message copy and keyboard
+	student := models.User{
+		TelegramID: 112233,
+		FirstName:  "Дмитрий",
+		Tier:       "basic",
+		HasAccess:  true,
+	}
+
+	kb := BasicUpsellAuditKeyboard()
+	if kb == nil || len(kb.InlineKeyboard) == 0 {
+		t.Fatalf("expected non-empty BasicUpsellAuditKeyboard")
+	}
+
+	btn := kb.InlineKeyboard[0][0]
+	if btn.CallbackData != "pay_upsell_audit" {
+		t.Errorf("expected callback pay_upsell_audit, got %s", btn.CallbackData)
+	}
+	if !strings.Contains(btn.Text, "1 900") {
+		t.Errorf("expected 1 900 in button text, got %s", btn.Text)
+	}
+
+	_ = student
+}
+

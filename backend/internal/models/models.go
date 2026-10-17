@@ -21,6 +21,9 @@ type User struct {
 	ReceiptStatus   string     `gorm:"-" json:"receipt_status,omitempty"`
 	ReceiptIssued   bool       `gorm:"default:false;index" json:"receipt_issued"`
 	ReceiptIssuedAt *time.Time `json:"receipt_issued_at,omitempty"`
+	UpsellAuditSent   bool       `gorm:"default:false;index" json:"upsell_audit_sent"`
+	UpsellAuditSentAt *time.Time `json:"upsell_audit_sent_at,omitempty"`
+	HasAuditUpsell    bool       `gorm:"default:false;index" json:"has_audit_upsell"`
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
 

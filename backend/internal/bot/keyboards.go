@@ -365,3 +365,16 @@ func AdminPanelKeyboard() *telego.InlineKeyboardMarkup {
 	)
 }
 
+// BasicUpsellAuditKeyboard returns buttons for the +3 days upsell message (Order Bump: Текстовый аудит эссе за 1 900 ₽).
+func BasicUpsellAuditKeyboard() *telego.InlineKeyboardMarkup {
+	return tu.InlineKeyboard(
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("✍️ Оформить аудит эссе (1 900 ₽)").WithCallbackData("pay_upsell_audit"),
+		),
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("💬 Задать вопрос так называемому Илю").WithURL("https://t.me/ilyan_vas"),
+		),
+	)
+}
+
+

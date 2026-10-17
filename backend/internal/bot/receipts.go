@@ -70,7 +70,11 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) bool {
 	var upgradeCurrentTier string
 	var amount float64
 
-	if session.IsUpgrade && session.UpgradeAmount > 0 {
+	if chosenTier == "audit_essay" || strings.ToLower(strings.TrimSpace(session.UpgradeToTier)) == "audit_essay" {
+		isUpgrade = true
+		chosenTier = "audit_essay"
+		amount = 1900.0
+	} else if session.IsUpgrade && session.UpgradeAmount > 0 {
 		isUpgrade = true
 		amount = session.UpgradeAmount
 		chosenTier = strings.ToLower(strings.TrimSpace(session.UpgradeToTier))
@@ -160,7 +164,11 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) bool {
 
 	// Send confirmation to student
 	var reply string
-	if isUpgrade {
+	if chosenTier == "audit_essay" {
+		reply = `🧾 <b>Чек на текстовый аудит эссе (1 900 ₽) успешно принят!</b>
+
+Так называемый Иль проверит поступление средств и сразу напишет вам с подробной инструкцией, как отправить черновик в Google Docs.`
+	} else if isUpgrade {
 		reply = fmt.Sprintf(`🧾 <b>Чек на апгрейд тарифа успешно принят!</b>
 
 Новый тариф: <b>%s</b>
@@ -227,7 +235,23 @@ func (s *BotService) SendAdminReceiptCard(adminID int64, receipt *models.Payment
 
 	var caption string
 	var btnApprove telego.InlineKeyboardButton
-	if isUpgradeCard {
+	if strings.ToLower(receipt.Tier) == "audit_essay" {
+		caption = fmt.Sprintf(`✍️ <b>Чек на ТЕКСТОВЫЙ АУДИТ ЭССЕ #%d (Order Bump)</b>
+
+👤 Студент: <b>%s</b>
+🆔 ID: <code>%d</code>
+💰 Сумма: <b>%.0f ₽</b>
+📅 Дата: <i>%s</i>
+
+Подтвердите оплату текстового аудита черновика в Google Docs:`,
+			receipt.ID,
+			studentDisplay,
+			receipt.TelegramID,
+			receipt.Amount,
+			dateStr,
+		)
+		btnApprove = tu.InlineKeyboardButton("✅ Одобрить аудит (1 900 ₽)").WithCallbackData(fmt.Sprintf("receipt_approve_%d", receipt.ID))
+	} else if isUpgradeCard {
 		caption = fmt.Sprintf(`🚀 <b>Чек на АПГРЕЙД тарифа #%d</b>
 
 👤 Студент: <b>%s</b>

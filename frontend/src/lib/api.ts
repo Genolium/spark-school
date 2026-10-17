@@ -17,6 +17,7 @@ export interface UserProfile {
   created_at?: string;
   receipt_issued?: boolean;
   receipt_issued_at?: string;
+  has_audit_upsell?: boolean;
 }
 
 export interface DailyRevenueStat {

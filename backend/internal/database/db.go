@@ -120,6 +120,11 @@ func Init(cfg *config.Config) *gorm.DB {
 	db.Exec("UPDATE course_pricings SET basic_price = 3990.00 WHERE basic_price IS NULL OR basic_price <= 0;")
 	db.Exec("UPDATE course_pricings SET basic_old_price = 5900.00 WHERE basic_old_price IS NULL OR basic_old_price <= 0;")
 
+	// Ensure upsell audit columns exist in users table
+	db.Exec("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS upsell_audit_sent BOOLEAN DEFAULT FALSE;")
+	db.Exec("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS upsell_audit_sent_at TIMESTAMP WITH TIME ZONE;")
+	db.Exec("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS has_audit_upsell BOOLEAN DEFAULT FALSE;")
+
 	// Backfill users from payment_receipts if missing in users table
 	db.Exec(`
 		INSERT INTO users (telegram_id, username, first_name, role, has_access, tier, paid_amount, created_at)
