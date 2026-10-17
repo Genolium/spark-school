@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, ShieldCheck, ArrowUpRight, QrCode, CreditCard, Send, Check, Tag, Sparkles } from "lucide-react";
 import { api, PromoValidationResult, PlacesStats } from "@/lib/api";
 
-export type PricingTier = "accelerator" | "vip";
+export type PricingTier = "basic" | "accelerator" | "vip";
 
 interface PaymentModalProps {
   isOpen: boolean;
@@ -14,6 +14,13 @@ interface PaymentModalProps {
 }
 
 const TIERS: Record<PricingTier, { name: string; price: number; discountPrice: number; discountAmount: number; tag: string }> = {
+  basic: {
+    name: "Базовый",
+    price: 3990,
+    discountPrice: 3790,
+    discountAmount: 200,
+    tag: "Без обратной связи",
+  },
   accelerator: {
     name: "Акселератор",
     price: 6900,
@@ -59,9 +66,17 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
         if (p.bank_name) {
           setBankName(p.bank_name);
         }
+        const basicPrice = p.basic_price || 3990;
         const accPrice = p.accelerator_price || 6900;
         const vipPrice = p.vip_price || 14900;
         setTiersConfig({
+          basic: {
+            name: "Базовый",
+            price: basicPrice,
+            discountPrice: Math.round(basicPrice * 0.95),
+            discountAmount: basicPrice - Math.round(basicPrice * 0.95),
+            tag: "Без обратной связи",
+          },
           accelerator: {
             name: "Акселератор",
             price: accPrice,
@@ -213,8 +228,8 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                 <label className="block text-xs font-mono text-slate-700 dark:text-slate-300 mb-1.5 font-semibold">
                   Выбери тариф:
                 </label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(["accelerator", "vip"] as PricingTier[]).map((t) => {
+                <div className="grid grid-cols-3 gap-2">
+                  {(["basic", "accelerator", "vip"] as PricingTier[]).map((t) => {
                     const cfg = tiersConfig[t];
                     const isSelected = tier === t;
                     return (

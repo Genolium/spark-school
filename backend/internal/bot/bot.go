@@ -228,7 +228,11 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 
 			// 1. Extract tier
 			tier := "accelerator"
-			if strings.HasPrefix(payload, "vip") {
+			if strings.HasPrefix(payload, "basic") {
+				tier = "basic"
+				payload = strings.TrimPrefix(payload, "basic")
+				payload = strings.TrimPrefix(payload, "_")
+			} else if strings.HasPrefix(payload, "vip") {
 				tier = "vip"
 				payload = strings.TrimPrefix(payload, "vip")
 				payload = strings.TrimPrefix(payload, "_")
@@ -536,6 +540,7 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 	paperclip := TgEmoji(EmojiPaperclip, "📎")
 
 	pricing := s.getPricing()
+	basicBase := int(pricing.BasicPrice)
 	accBase := int(pricing.AcceleratorPrice)
 	vipBase := int(pricing.VIPPrice)
 	bankName := pricing.BankName
@@ -548,6 +553,8 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 		if pct <= 0 {
 			pct = 5
 		}
+		basicDiscount := (basicBase * pct) / 100
+		basicPrice := basicBase - basicDiscount
 		accDiscount := (accBase * pct) / 100
 		accPrice := accBase - accDiscount
 		vipDiscount := (vipBase * pct) / 100
@@ -556,6 +563,7 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 		text = fmt.Sprintf(`%s <b>Промокод успешно активирован! Скидка %d%%</b>
 
 <b>Стоимость со скидкой %d%%:</b>
+%s Базовый: <b>%s ₽</b> (скидка %s ₽) <i>[без обратной связи]</i>
 %s Акселератор: <b>%s ₽</b> (скидка %s ₽)
 %s VIP: <b>%s ₽</b> (скидка %s ₽)
 
@@ -568,15 +576,17 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 %s <b>Как получить доступ:</b>
 1. Выберите тариф кнопкой ниже или переведите нужную сумму по СБП.
 2. <b>Отправьте скриншот чека прямо сюда в чат!</b>
-3. Бот проверит чек и сразу выдаст вам одноразовую ссылку в закрытый канал потока.`, sparkle, pct, pct, bullet, formatPriceRub(accPrice), formatPriceRub(accDiscount), bullet, formatPriceRub(vipPrice), formatPriceRub(vipDiscount), bankName, clipGreen)
+3. Бот проверит чек и сразу выдаст вам одноразовую ссылку в закрытый канал потока.`, sparkle, pct, pct, bullet, formatPriceRub(basicPrice), formatPriceRub(basicDiscount), bullet, formatPriceRub(accPrice), formatPriceRub(accDiscount), bullet, formatPriceRub(vipPrice), formatPriceRub(vipDiscount), bankName, clipGreen)
 		keyboard = PromoAppliedKeyboard(pricing)
 	} else {
+		basicPromoPrice := basicBase - (basicBase*5)/100
 		accPromoPrice := accBase - (accBase*5)/100
 		vipPromoPrice := vipBase - (vipBase*5)/100
 
 		text = fmt.Sprintf(`%s <b>Бронирование места в проекте «так называемый SPARK»</b>
 
 <b>Тарифы участия:</b>
+⚡️ <b>Базовый:</b> %s ₽ (по промокоду: <b>%s ₽</b>) <i>[Без обратной связи]</i>
 %s <b>Акселератор [Хит]:</b> %s ₽ (по промокоду: <b>%s ₽</b>)
 %s <b>VIP:</b> %s ₽ (по промокоду: <b>%s ₽</b>) <i>[Строго ограниченное количество мест]</i>
 
@@ -589,7 +599,7 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 %s <b>Как получить доступ:</b>
 1. Выберите тариф кнопкой ниже или сделайте перевод по номеру телефона через СБП.
 2. <b>Отправьте скриншот чека прямо сюда в чат бота!</b>
-3. Бот зафиксирует платёж и сразу выдаст вам персональную ссылку в закрытый канал потока.`, lightning, num1, formatPriceRub(accBase), formatPriceRub(accPromoPrice), num2, formatPriceRub(vipBase), formatPriceRub(vipPromoPrice), bankName, paperclip)
+3. Бот зафиксирует платёж и сразу выдаст вам персональную ссылку в закрытый канал потока.`, lightning, formatPriceRub(basicBase), formatPriceRub(basicPromoPrice), num1, formatPriceRub(accBase), formatPriceRub(accPromoPrice), num2, formatPriceRub(vipBase), formatPriceRub(vipPromoPrice), bankName, paperclip)
 		keyboard = PaymentKeyboard(pricing)
 	}
 
@@ -632,7 +642,10 @@ func (s *BotService) handleSbpPayment(chatID telego.ChatID, from *telego.User, t
 	pricing := s.getPricing()
 	tierTitle := "Акселератор"
 	basePrice := int(pricing.AcceleratorPrice)
-	if tier == "vip" {
+	if tier == "basic" {
+		tierTitle = "Базовый"
+		basePrice = int(pricing.BasicPrice)
+	} else if tier == "vip" {
 		tierTitle = "VIP"
 		basePrice = int(pricing.VIPPrice)
 	}
@@ -883,6 +896,10 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 		s.sendPaymentDetails(chatID, &query.From, false)
 		return true
 
+	case "pay_yk_basic", "pay_sbp_basic":
+		s.handleSbpPayment(chatID, &query.From, "basic")
+		return true
+
 	case "pay_yk_accelerator", "pay_sbp_accelerator":
 		s.handleSbpPayment(chatID, &query.From, "accelerator")
 		return true
@@ -895,9 +912,26 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 		s.sendUpgradeOptions(chatID, &query.From)
 		return true
 
+	case "upgrade_to_accelerator":
+		pricing := s.getPricing()
+		diff := pricing.AcceleratorPrice - pricing.BasicPrice
+		if diff <= 0 {
+			diff = 2910.0
+		}
+		s.handleUpgradePayment(chatID, &query.From, "accelerator", diff)
+		return true
+
 	case "upgrade_to_vip":
 		pricing := s.getPricing()
 		diff := pricing.VIPPrice - pricing.AcceleratorPrice
+		if query.From.ID != 0 && s.db != nil {
+			var u models.User
+			if err := s.db.Where("telegram_id = ?", query.From.ID).First(&u).Error; err == nil {
+				if strings.ToLower(strings.TrimSpace(u.Tier)) == "basic" {
+					diff = pricing.VIPPrice - pricing.BasicPrice
+				}
+			}
+		}
 		if diff <= 0 {
 			diff = 8000.0
 		}
@@ -1768,8 +1802,45 @@ func (s *BotService) sendUpgradeOptions(chatID telego.ChatID, from *telego.User)
 		return
 	}
 
-	// Default: currentTier == accelerator
 	pricing := s.getPricing()
+
+	if currentTier == "basic" {
+		diffAcc := pricing.AcceleratorPrice - pricing.BasicPrice
+		if diffAcc <= 0 {
+			diffAcc = 2910.0
+		}
+		diffVIP := pricing.VIPPrice - pricing.BasicPrice
+		if diffVIP <= 0 {
+			diffVIP = 10910.0
+		}
+
+		reply := fmt.Sprintf(`🚀 <b>Апгрейд тарифа «Базовый»</b>
+
+Ваш текущий тариф: <b>Базовый</b> (%s ₽).
+Вы можете перейти на тариф с менторством или VIP, доплатив только разницу:
+
+• <b>Акселератор:</b> доплата <b>%s ₽</b> (вместо %s ₽)
+  <i>+ Личный аудит всех эссе и резюме</i>
+  <i>+ 45-мин персональное Zoom-интервью 1-на-1</i>
+  <i>+ Визовый гайд J-1 и закрытый чат</i>
+
+• <b>VIP:</b> доплата <b>%s ₽</b> (вместо %s ₽)
+  <i>+ Всё из Акселератора + 3 мок-интервью</i>
+  <i>+ Приоритетный личный чат до вылета в США</i>
+
+Выберите вариант апгрейда:`,
+			formatPriceRub(int(pricing.BasicPrice)),
+			formatPriceRub(int(diffAcc)),
+			formatPriceRub(int(pricing.AcceleratorPrice)),
+			formatPriceRub(int(diffVIP)),
+			formatPriceRub(int(pricing.VIPPrice)),
+		)
+		m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML).WithReplyMarkup(UpgradeOptionsKeyboard("basic", diffAcc, diffVIP))
+		_, _ = s.bot.SendMessage(m)
+		return
+	}
+
+	// Default: currentTier == accelerator
 	diff := pricing.VIPPrice - pricing.AcceleratorPrice
 	if diff <= 0 {
 		diff = 8000.0

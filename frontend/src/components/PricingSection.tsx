@@ -7,7 +7,7 @@ import { api, PlacesStats, CoursePricing } from "@/lib/api";
 import { DeadlineCountdown } from "./DeadlineCountdown";
 
 interface PricingSectionProps {
-  onOpenPayment?: (tier?: "accelerator" | "vip") => void;
+  onOpenPayment?: (tier?: "basic" | "accelerator" | "vip") => void;
 }
 
 export function PricingSection({ onOpenPayment }: PricingSectionProps) {
@@ -17,8 +17,10 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
     spots_left: 9,
   });
 
-  // Default pricing fallbacks: 6 900 ₽ (Accelerator) and 14 900 ₽ (VIP)
+  // Default pricing fallbacks: 3 990 ₽ (Basic), 6 900 ₽ (Accelerator) and 14 900 ₽ (VIP)
   const [pricing, setPricing] = useState<CoursePricing>({
+    basic_price: 3990,
+    basic_old_price: 5900,
     accelerator_price: 6900,
     accelerator_old_price: 9900,
     vip_price: 14900,
@@ -33,6 +35,11 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
   const formatRub = (num: number) => {
     return (num || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   };
+
+  const basicPrice = pricing.basic_price || 3990;
+  const basicOldPrice = (pricing.basic_old_price && pricing.basic_old_price > basicPrice)
+    ? pricing.basic_old_price
+    : Math.round((basicPrice * 1.4) / 100) * 100;
 
   // Dynamic strikethrough prices: always guaranteed to be strictly higher than current price
   const accOldPrice = pricing.accelerator_old_price > pricing.accelerator_price
@@ -56,7 +63,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
           <span className="text-emerald-600 dark:text-emerald-400 font-serif italic">выиграть грант $20,000</span>
         </h2>
         <p className="mt-4 text-base text-slate-600 dark:text-slate-300 leading-relaxed font-normal">
-          Выбери комфортный формат подготовки: полное персональное менторство от финалиста SPARK 2026 или VIP-сопровождение под ключ.
+          Выбери комфортный формат подготовки: самостоятельный по видео- и аудиоурокам, полное персональное менторство от финалиста SPARK 2026 или VIP-сопровождение под ключ.
         </p>
 
         {/* Live Scarcity Counter Bar */}
@@ -77,11 +84,90 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
         <DeadlineCountdown onOpenPayment={() => onOpenPayment?.("accelerator")} />
       </div>
 
-      {/* 2-Tier Pricing Grid: Акселератор & VIP */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8 items-stretch max-w-5xl mx-auto">
+      {/* 3-Tier Pricing Grid: Базовый, Акселератор & VIP */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8 items-stretch max-w-7xl mx-auto">
         
         {/* ========================================================================= */}
-        {/* TIER 1: АКСЕЛЕРАТОР (Full Mentorship) - ХИТ ПРОДАЖ                         */}
+        {/* TIER 1: БАЗОВЫЙ (Self-Paced) - БЕЗ ОБРАТНОЙ СВЯЗИ                          */}
+        {/* ========================================================================= */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          transition={{ duration: 0.5 }}
+          className="bento-card-dark p-6 sm:p-8 rounded-3xl border border-slate-200 dark:border-white/10 flex flex-col justify-between relative overflow-hidden bg-white/70 dark:bg-[#12161f]/70"
+        >
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <span className="px-3 py-1 rounded-full text-xs font-mono font-medium uppercase bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10">
+                Self-Paced
+              </span>
+              <span className="text-[11px] font-mono text-rose-600 dark:text-rose-400 font-semibold">
+                Без обратной связи
+              </span>
+            </div>
+
+            <h3 className="font-editorial text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-2">
+              Базовый
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-doc mb-6 leading-relaxed">
+              Самостоятельное прохождение курса по материалам и видеоразборам заявок в удобном темпе.
+            </p>
+
+            <div className="mb-6 pb-6 border-b border-emerald-500/15 dark:border-white/10">
+              <div className="text-slate-400 line-through text-sm font-mono">
+                {formatRub(basicOldPrice)} ₽
+              </div>
+              <div className="text-3xl sm:text-4xl font-black font-mono text-slate-900 dark:text-white tracking-tight">
+                {formatRub(basicPrice)} ₽
+              </div>
+            </div>
+
+            {/* Features */}
+            <div className="space-y-3 font-doc text-xs sm:text-sm text-slate-700 dark:text-slate-200 mb-8">
+              <div className="flex items-start gap-2.5">
+                <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                <span><b>Видеоуроки</b> по всем этапам и критериям отбора</span>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                <span><b>Уроки текстом</b> с подробными конспектами и примерами</span>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                <span><b>Аудиоверсия всех уроков</b> — удобно слушать в дороге</span>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                <span>Библиотека победных эссе и шаблонов Google XYZ</span>
+              </div>
+              <div className="flex items-start gap-2.5">
+                <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
+                <span>Доступ в закрытый Telegram-канал со всеми материалами</span>
+              </div>
+              <div className="flex items-start gap-2.5 text-slate-400 dark:text-slate-500">
+                <span className="w-4 h-4 text-center shrink-0 font-bold">—</span>
+                <span className="line-through"><b>БЕЗ обратной связи</b> и проверки заданий</span>
+              </div>
+              <div className="flex items-start gap-2.5 text-slate-400 dark:text-slate-500">
+                <span className="w-4 h-4 text-center shrink-0 font-bold">—</span>
+                <span className="line-through">Без личного Zoom мок-интервью</span>
+              </div>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => onOpenPayment?.("basic")}
+            className="w-full py-3.5 px-4 rounded-2xl bento-pill hover:bg-emerald-500/15 border border-emerald-500/25 text-xs sm:text-sm font-mono font-bold text-slate-900 dark:text-white flex items-center justify-center gap-2 transition-all active:scale-95"
+          >
+            <span>Выбрать Базовый ({formatRub(basicPrice)} ₽)</span>
+            <ArrowUpRight className="w-4 h-4" />
+          </button>
+        </motion.div>
+
+        {/* ========================================================================= */}
+        {/* TIER 2: АКСЕЛЕРАТОР (Full Mentorship) - ХИТ ПРОДАЖ                         */}
         {/* ========================================================================= */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}

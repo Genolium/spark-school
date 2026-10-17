@@ -69,7 +69,11 @@ func (h *YooKassaHandler) CreateCheckout(c *gin.Context) {
 	}
 
 	tier := strings.ToLower(strings.TrimSpace(req.Tier))
-	if tier != "vip" {
+	if tier == "basic" {
+		tier = "basic"
+	} else if tier == "vip" {
+		tier = "vip"
+	} else {
 		tier = "accelerator"
 	}
 
@@ -98,9 +102,12 @@ func (h *YooKassaHandler) CreateCheckout(c *gin.Context) {
 		cleanPromo = cleanPromo[:32]
 	}
 
-	basePrice := 6900.00
-	if tier == "vip" {
-		basePrice = 14900.00
+	pricing := models.GetCoursePricing(h.db)
+	basePrice := pricing.AcceleratorPrice
+	if tier == "basic" {
+		basePrice = pricing.BasicPrice
+	} else if tier == "vip" {
+		basePrice = pricing.VIPPrice
 	}
 
 	finalPrice := basePrice

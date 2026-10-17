@@ -131,6 +131,7 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 			"promo_usage_count":     0,
 			"promo_saved_amount":    0.0,
 			"tier_breakdown": gin.H{
+				"basic":       gin.H{"count": 0, "revenue": 0.0, "percentage": 0.0},
 				"accelerator": gin.H{"count": 0, "revenue": 0.0, "percentage": 0.0},
 				"vip":         gin.H{"count": 0, "revenue": 0.0, "percentage": 0.0},
 			},
@@ -170,6 +171,8 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 	var promoUsageCount int
 	var promoSavedAmount float64
 
+	basicCount := 0
+	basicRevenue := 0.0
 	acceleratorCount := 0
 	acceleratorRevenue := 0.0
 	vipCount := 0
@@ -211,6 +214,8 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 
 			if strings.ToLower(u.Tier) == "vip" {
 				userPaid = pricing.VIPPrice * discountFactor
+			} else if strings.ToLower(u.Tier) == "basic" {
+				userPaid = pricing.BasicPrice * discountFactor
 			} else {
 				userPaid = pricing.AcceleratorPrice * discountFactor
 			}
@@ -222,6 +227,9 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 		if strings.ToLower(u.Tier) == "vip" {
 			vipCount++
 			vipRevenue += userPaid
+		} else if strings.ToLower(u.Tier) == "basic" {
+			basicCount++
+			basicRevenue += userPaid
 		} else {
 			acceleratorCount++
 			acceleratorRevenue += userPaid
@@ -232,6 +240,8 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 			promoUsageCount++
 			if strings.ToLower(u.Tier) == "vip" {
 				promoSavedAmount += pricing.VIPPrice * 0.05
+			} else if strings.ToLower(u.Tier) == "basic" {
+				promoSavedAmount += pricing.BasicPrice * 0.05
 			} else {
 				promoSavedAmount += pricing.AcceleratorPrice * 0.05
 			}
@@ -288,9 +298,11 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 		conversionRate = (float64(activeStudents) / float64(totalUsers)) * 100.0
 	}
 
+	basicPct := 0.0
 	accPct := 0.0
 	vipPct := 0.0
 	if grossVolume > 0 {
+		basicPct = (basicRevenue / grossVolume) * 100.0
 		accPct = (acceleratorRevenue / grossVolume) * 100.0
 		vipPct = (vipRevenue / grossVolume) * 100.0
 	}
@@ -310,6 +322,11 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 		"promo_usage_count":     promoUsageCount,
 		"promo_saved_amount":    promoSavedAmount,
 		"tier_breakdown": gin.H{
+			"basic": gin.H{
+				"count":      basicCount,
+				"revenue":    basicRevenue,
+				"percentage": basicPct,
+			},
 			"accelerator": gin.H{
 				"count":      acceleratorCount,
 				"revenue":    acceleratorRevenue,

@@ -220,7 +220,9 @@ func (h *PaymentWebhookHandler) HandleAntilopayWebhook(c *gin.Context) {
 							telegramID = id
 						}
 					case "tier":
-						if strings.ToLower(v) == "vip" {
+						if strings.ToLower(v) == "basic" {
+							tier = "basic"
+						} else if strings.ToLower(v) == "vip" {
 							tier = "vip"
 						}
 					case "promo", "promocode", "promo_code":
@@ -235,8 +237,12 @@ func (h *PaymentWebhookHandler) HandleAntilopayWebhook(c *gin.Context) {
 
 	// Determine tier based on amount if not explicit:
 	// VIP without promo is 14900, with 5% discount is 14155
+	// Accelerator is 6900 / 6555
+	// Basic is 3990 / 3790
 	if payload.Amount >= 13000 {
 		tier = "vip"
+	} else if payload.Amount < 5000 {
+		tier = "basic"
 	}
 
 	// 6. Anti-Underpayment & Tampering Protection

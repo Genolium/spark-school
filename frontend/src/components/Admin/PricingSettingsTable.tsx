@@ -19,6 +19,8 @@ import {
 
 export function PricingSettingsTable() {
   const [pricing, setPricing] = useState<CoursePricing>({
+    basic_price: 3990,
+    basic_old_price: 5900,
     accelerator_price: 6900,
     accelerator_old_price: 9900,
     vip_price: 14900,
@@ -37,7 +39,11 @@ export function PricingSettingsTable() {
   const loadPricing = async () => {
     setLoading(true);
     const data = await api.getCoursePricing();
-    setPricing(data);
+    setPricing({
+      ...data,
+      basic_price: data.basic_price || 3990,
+      basic_old_price: data.basic_old_price || 5900,
+    });
     setLoading(false);
   };
 
@@ -46,7 +52,15 @@ export function PricingSettingsTable() {
     setSaving(true);
     setMsg(null);
 
+    const bPrice = pricing.basic_price || 3990;
+
     // Frontend validation
+    if (bPrice <= 0) {
+      setMsg({ text: "Цена тарифа «Базовый» должна быть положительным числом", type: "error" });
+      setSaving(false);
+      return;
+    }
+
     if (pricing.accelerator_price <= 0) {
       setMsg({ text: "Цена тарифа «Акселератор» должна быть положительным числом", type: "error" });
       setSaving(false);
@@ -59,12 +73,22 @@ export function PricingSettingsTable() {
       return;
     }
 
+    if (pricing.accelerator_price <= bPrice) {
+      setMsg({ text: "Цена тарифа «Акселератор» должна быть выше тарифа «Базовый»", type: "error" });
+      setSaving(false);
+      return;
+    }
+
     if (pricing.vip_price <= pricing.accelerator_price) {
       setMsg({ text: "Цена тарифа «VIP» должна быть выше тарифа «Акселератор»", type: "error" });
       setSaving(false);
       return;
     }
 
+    let bOld = pricing.basic_old_price || 5900;
+    if (bOld <= bPrice) {
+      bOld = Math.round((bPrice * 1.4) / 100) * 100;
+    }
     let accOld = pricing.accelerator_old_price;
     if (accOld <= pricing.accelerator_price) {
       accOld = Math.round((pricing.accelerator_price * 1.4) / 100) * 100;
@@ -76,6 +100,8 @@ export function PricingSettingsTable() {
 
     const payload = {
       ...pricing,
+      basic_price: bPrice,
+      basic_old_price: bOld,
       accelerator_old_price: accOld,
       vip_old_price: vipOld,
       bank_name: (pricing.bank_name || "").trim() || "БСПБ (Банк «Санкт-Петербург»)",
@@ -87,7 +113,11 @@ export function PricingSettingsTable() {
     if (res.success) {
       setMsg({ text: "Цены и реквизиты успешно обновлены и синхронизированы на сайте и в боте!", type: "success" });
       if (res.pricing) {
-        setPricing(res.pricing);
+        setPricing({
+          ...res.pricing,
+          basic_price: res.pricing.basic_price || 3990,
+          basic_old_price: res.pricing.basic_old_price || 5900,
+        });
       }
       setTimeout(() => setMsg(null), 5000);
     } else {
@@ -97,13 +127,15 @@ export function PricingSettingsTable() {
 
   const handleResetDefaults = () => {
     setPricing({
+      basic_price: 3990,
+      basic_old_price: 5900,
       accelerator_price: 6900,
       accelerator_old_price: 9900,
       vip_price: 14900,
       vip_old_price: 19900,
       bank_name: "БСПБ (Банк «Санкт-Петербург»)",
     });
-    setMsg({ text: "Установлены стандартные значения. Нажмите «Сохранить», чтобы применить.", type: "success" });
+    setMsg({ text: "Установлены стандартные значения (3 990 / 6 900 / 14 900 ₽). Нажмите «Сохранить», чтобы применить.", type: "success" });
   };
 
   const formatRub = (num: number) => {
@@ -121,6 +153,11 @@ export function PricingSettingsTable() {
       };
       // If current price changed and old strikethrough price is <= new current price,
       // auto-adjust old strikethrough price (+40% rounded to hundreds)
+      if (field === "basic_price" && num > 0) {
+        if ((updated.basic_old_price || 0) <= num) {
+          updated.basic_old_price = Math.round((num * 1.4) / 100) * 100;
+        }
+      }
       if (field === "accelerator_price" && num > 0) {
         if (updated.accelerator_old_price <= num) {
           updated.accelerator_old_price = Math.round((num * 1.4) / 100) * 100;
@@ -136,13 +173,18 @@ export function PricingSettingsTable() {
   };
 
   // Calculations for promo discount preview
+  const basicPromo = Math.round((pricing.basic_price || 3990) * 0.95);
+  const basicPromoDiff = (pricing.basic_price || 3990) - basicPromo;
+
   const accPromo = Math.round(pricing.accelerator_price * 0.95);
   const accPromoDiff = pricing.accelerator_price - accPromo;
 
   const vipPromo = Math.round(pricing.vip_price * 0.95);
   const vipPromoDiff = pricing.vip_price - vipPromo;
 
-  const upgradeDiff = Math.max(0, pricing.vip_price - pricing.accelerator_price);
+  const basicToAccDiff = Math.max(0, pricing.accelerator_price - (pricing.basic_price || 3990));
+  const accToVipDiff = Math.max(0, pricing.vip_price - pricing.accelerator_price);
+  const basicToVipDiff = Math.max(0, pricing.vip_price - (pricing.basic_price || 3990));
 
   return (
     <div className="space-y-8">
@@ -199,10 +241,96 @@ export function PricingSettingsTable() {
 
       {/* Main Pricing Cards Grid */}
       <form onSubmit={handleSave} noValidate className="space-y-8">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 lg:gap-8">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
           
           {/* ========================================================================= */}
-          {/* CARD 1: ТАРИФ АКСЕЛЕРАТОР                                                 */}
+          {/* CARD 1: ТАРИФ БАЗОВЫЙ                                                     */}
+          {/* ========================================================================= */}
+          <div className="p-6 sm:p-8 rounded-[32px] bg-white dark:bg-[#12161f] border border-slate-200 dark:border-white/10 shadow-sm relative overflow-hidden flex flex-col justify-between">
+            <div className="absolute top-0 right-0 left-0 h-1.5 bg-gradient-to-r from-slate-400 to-slate-500" />
+            
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <span className="px-3 py-1 rounded-full text-xs font-mono font-medium uppercase bg-slate-100 dark:bg-white/10 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10">
+                  Self-Paced
+                </span>
+                <span className="text-[11px] font-mono text-rose-600 dark:text-rose-400 font-semibold">
+                  Без обратной связи
+                </span>
+              </div>
+
+              <h3 className="font-editorial text-2xl font-bold text-slate-900 dark:text-white mb-1">
+                Тариф «Базовый»
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-6">
+                Видеоуроки, уроки текстом и их аудиоверсия без проверки заданий и мок-интервью.
+              </p>
+
+              {/* Input Fields */}
+              <div className="space-y-4 mb-6">
+                <div>
+                  <label className="block text-xs font-mono font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                    Текущая цена (₽) *
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={pricing.basic_price === 0 ? "" : (pricing.basic_price || 3990)}
+                      placeholder="3990"
+                      onChange={(e) => handlePriceChange("basic_price", e.target.value)}
+                      className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-black/30 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white font-mono text-base font-bold focus:outline-none focus:border-slate-500 transition-colors"
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-400">
+                      RUB
+                    </span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-mono text-slate-600 dark:text-slate-400 mb-1.5">
+                    Старая зачёркнутая цена (₽)
+                  </label>
+                  <div className="relative">
+                    <input
+                      type="text"
+                      inputMode="numeric"
+                      value={pricing.basic_old_price === 0 ? "" : (pricing.basic_old_price || 5900)}
+                      placeholder="5900"
+                      onChange={(e) => handlePriceChange("basic_old_price", e.target.value)}
+                      className="w-full px-4 py-2.5 rounded-2xl bg-slate-50 dark:bg-black/30 border border-slate-300 dark:border-white/10 text-slate-700 dark:text-slate-300 font-mono text-sm focus:outline-none focus:border-slate-500 transition-colors"
+                    />
+                    <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-400">
+                      RUB
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Live Preview Box */}
+              <div className="p-4 rounded-2xl bg-slate-500/5 dark:bg-slate-500/10 border border-slate-500/20 text-xs font-mono space-y-2">
+                <div className="flex items-center justify-between text-slate-500 dark:text-slate-400">
+                  <span>Отображение на сайте:</span>
+                  <div className="flex items-center gap-2">
+                    <span className="line-through">{formatRub(pricing.basic_old_price || 5900)} ₽</span>
+                    <span className="font-bold text-slate-900 dark:text-white text-sm">
+                      {formatRub(pricing.basic_price || 3990)} ₽
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between text-slate-700 dark:text-slate-300 pt-1 border-t border-slate-500/15">
+                  <span>Со скидкой -5% (промокод):</span>
+                  <span className="font-bold text-slate-900 dark:text-white">
+                    {formatRub(basicPromo)} ₽ <span className="text-emerald-600 dark:text-emerald-400">(-{formatRub(basicPromoDiff)} ₽)</span>
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ========================================================================= */}
+          {/* CARD 2: ТАРИФ АКСЕЛЕРАТОР                                                 */}
           {/* ========================================================================= */}
           <div className="p-6 sm:p-8 rounded-[32px] bg-white dark:bg-[#12161f] border-2 border-emerald-500/40 shadow-lg relative overflow-hidden flex flex-col justify-between">
             <div className="absolute top-0 right-0 left-0 h-1.5 bg-gradient-to-r from-emerald-500 to-teal-400" />
@@ -447,7 +575,7 @@ export function PricingSettingsTable() {
 
         {/* Upgrade Math Auto-Preview */}
         <div className="p-6 rounded-[28px] bg-slate-900 text-white dark:bg-black/40 border border-slate-800 dark:border-white/10 shadow-md">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
             <div className="flex items-start gap-3">
               <div className="w-10 h-10 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold shrink-0">
                 <TrendingUp className="w-5 h-5" />
@@ -457,18 +585,30 @@ export function PricingSettingsTable() {
                   Автоматический расчет апгрейда в боте
                 </h4>
                 <p className="text-xs text-slate-400 font-mono mt-0.5">
-                  Студенты тарифа «Акселератор» могут перейти на «VIP», доплатив только математическую разницу.
+                  Студенты могут повысить тариф в любой момент, оплатив только математическую разницу стоимости.
                 </p>
               </div>
             </div>
 
-            <div className="sm:text-right font-mono">
-              <div className="text-[11px] text-slate-400">Сумма доплаты для студента:</div>
-              <div className="text-xl sm:text-2xl font-bold text-amber-400 mt-0.5">
-                {formatRub(upgradeDiff)} ₽
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 font-mono">
+              <div className="p-3 rounded-2xl bg-white/5 border border-white/5">
+                <div className="text-[11px] text-slate-400">Базовый ➔ Акселератор:</div>
+                <div className="text-lg font-bold text-amber-400 mt-0.5">
+                  +{formatRub(basicToAccDiff)} ₽
+                </div>
+                <div className="text-[10px] text-slate-500">
+                  ({formatRub(pricing.accelerator_price)} − {formatRub(pricing.basic_price || 3990)})
+                </div>
               </div>
-              <div className="text-[10px] text-slate-500">
-                ({formatRub(pricing.vip_price)} − {formatRub(pricing.accelerator_price)})
+
+              <div className="p-3 rounded-2xl bg-white/5 border border-white/5">
+                <div className="text-[11px] text-slate-400">Акселератор ➔ VIP:</div>
+                <div className="text-lg font-bold text-amber-400 mt-0.5">
+                  +{formatRub(accToVipDiff)} ₽
+                </div>
+                <div className="text-[10px] text-slate-500">
+                  ({formatRub(pricing.vip_price)} − {formatRub(pricing.accelerator_price)})
+                </div>
               </div>
             </div>
           </div>
@@ -482,7 +622,7 @@ export function PricingSettingsTable() {
             className="px-5 py-3 rounded-2xl bg-slate-200/80 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 text-xs font-mono font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2 transition-all active:scale-95"
           >
             <RotateCcw className="w-4 h-4" />
-            <span>Сбросить к рекомендованным (6 900 / 14 900 ₽)</span>
+            <span>Сбросить к рекомендованным (3 990 / 6 900 / 14 900 ₽)</span>
           </button>
 
           <button

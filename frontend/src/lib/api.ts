@@ -10,7 +10,7 @@ export interface UserProfile {
   role: "student" | "admin";
   has_access: boolean;
   access_granted_at?: string;
-  tier?: "accelerator" | "vip";
+  tier?: "basic" | "accelerator" | "vip";
   paid_amount?: number;
   promo_code?: string;
   receipt_status?: "pending" | "approved" | "rejected" | "none" | string;
@@ -121,6 +121,8 @@ export interface PlacesStats {
 }
 
 export interface CoursePricing {
+  basic_price?: number;
+  basic_old_price?: number;
   accelerator_price: number;
   accelerator_old_price: number;
   vip_price: number;
@@ -254,6 +256,8 @@ export const api = {
     }
 
     return {
+      basic_price: 3990,
+      basic_old_price: 5900,
       accelerator_price: 6900,
       accelerator_old_price: 9900,
       vip_price: 14900,
@@ -862,7 +866,7 @@ export const api = {
     username?: string;
     role?: "student" | "admin";
     has_access?: boolean;
-    tier?: "accelerator" | "vip";
+    tier?: "basic" | "accelerator" | "vip";
     paid_amount?: number;
     promo_code?: string;
     receipt_issued?: boolean;
@@ -909,7 +913,7 @@ export const api = {
       username?: string;
       role?: "student" | "admin";
       has_access?: boolean;
-      tier?: "accelerator" | "vip";
+      tier?: "basic" | "accelerator" | "vip";
       paid_amount?: number;
       promo_code?: string;
       receipt_issued?: boolean;
@@ -1014,7 +1018,7 @@ export const api = {
   },
 
   async createYooKassaPayment(data: {
-    tier: "accelerator" | "vip";
+    tier: "basic" | "accelerator" | "vip";
     telegram_username: string;
     telegram_id?: number;
     promo_code?: string;

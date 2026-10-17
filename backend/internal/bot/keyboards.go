@@ -42,7 +42,11 @@ func MainMenuKeyboard(frontendURL string, options ...any) *telego.InlineKeyboard
 		}
 	}
 
-	buyText := fmt.Sprintf("💳 Купить курс (от %s ₽)", formatPriceRub(int(p.AcceleratorPrice)))
+	minPrice := p.BasicPrice
+	if minPrice <= 0 {
+		minPrice = p.AcceleratorPrice
+	}
+	buyText := fmt.Sprintf("💳 Купить курс (от %s ₽)", formatPriceRub(int(minPrice)))
 
 	rows := [][]telego.InlineKeyboardButton{
 		{
@@ -82,9 +86,13 @@ func MainMenuKeyboard(frontendURL string, options ...any) *telego.InlineKeyboard
 
 // PaymentKeyboard returns the checkout keyboard with direct SBP transfer.
 func PaymentKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboardMarkup {
+	basicPrice := 3990
 	accPrice := 6900
 	vipPrice := 14900
 	if len(pricing) > 0 {
+		if pricing[0].BasicPrice > 0 {
+			basicPrice = int(pricing[0].BasicPrice)
+		}
 		if pricing[0].AcceleratorPrice > 0 {
 			accPrice = int(pricing[0].AcceleratorPrice)
 		}
@@ -92,10 +100,14 @@ func PaymentKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboardMark
 			vipPrice = int(pricing[0].VIPPrice)
 		}
 	}
+	basicText := fmt.Sprintf("⚡️ Базовый (%s ₽) — без куратора", formatPriceRub(basicPrice))
 	accText := fmt.Sprintf("🏛 Оплатить Акселератор (%s ₽) — СБП", formatPriceRub(accPrice))
 	vipText := fmt.Sprintf("👑 Оплатить VIP (%s ₽) — СБП", formatPriceRub(vipPrice))
 
 	return tu.InlineKeyboard(
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton(basicText).WithCallbackData("pay_sbp_basic"),
+		),
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton(accText).WithCallbackData("pay_sbp_accelerator"),
 		),
@@ -116,9 +128,14 @@ func PaymentKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboardMark
 
 // PromoAppliedKeyboard returns keyboard after successful promo code redemption.
 func PromoAppliedKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboardMarkup {
+	basicPrice := 3790
 	accPrice := 6555
 	vipPrice := 14155
 	if len(pricing) > 0 {
+		if pricing[0].BasicPrice > 0 {
+			base := int(pricing[0].BasicPrice)
+			basicPrice = base - (base*5)/100
+		}
 		if pricing[0].AcceleratorPrice > 0 {
 			base := int(pricing[0].AcceleratorPrice)
 			accPrice = base - (base*5)/100
@@ -128,10 +145,14 @@ func PromoAppliedKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboar
 			vipPrice = base - (base*5)/100
 		}
 	}
+	basicText := fmt.Sprintf("⚡️ Базовый (%s ₽) — со скидкой 5%%", formatPriceRub(basicPrice))
 	accText := fmt.Sprintf("🏛 Оплатить Акселератор (%s ₽) — СБП", formatPriceRub(accPrice))
 	vipText := fmt.Sprintf("👑 Оплатить VIP (%s ₽) — СБП", formatPriceRub(vipPrice))
 
 	return tu.InlineKeyboard(
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton(basicText).WithCallbackData("pay_sbp_basic"),
+		),
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton(accText).WithCallbackData("pay_sbp_accelerator"),
 		),
@@ -149,9 +170,13 @@ func PromoAppliedKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboar
 
 // YooKassaSelectTierKeyboard routes to direct SBP checkout.
 func YooKassaSelectTierKeyboard(hasPromo bool, pricing ...models.CoursePricing) *telego.InlineKeyboardMarkup {
+	basicPrice := 3990
 	accPrice := 6900
 	vipPrice := 14900
 	if len(pricing) > 0 {
+		if pricing[0].BasicPrice > 0 {
+			basicPrice = int(pricing[0].BasicPrice)
+		}
 		if pricing[0].AcceleratorPrice > 0 {
 			accPrice = int(pricing[0].AcceleratorPrice)
 		}
@@ -160,12 +185,17 @@ func YooKassaSelectTierKeyboard(hasPromo bool, pricing ...models.CoursePricing) 
 		}
 	}
 	if hasPromo {
+		basicPrice = basicPrice - (basicPrice*5)/100
 		accPrice = accPrice - (accPrice*5)/100
 		vipPrice = vipPrice - (vipPrice*5)/100
 	}
+	basicText := fmt.Sprintf("⚡️ Оплатить Базовый (%s ₽) — СБП", formatPriceRub(basicPrice))
 	accText := fmt.Sprintf("🏛 Оплатить Акселератор (%s ₽) — СБП", formatPriceRub(accPrice))
 	vipText := fmt.Sprintf("👑 Оплатить VIP (%s ₽) — СБП", formatPriceRub(vipPrice))
 	return tu.InlineKeyboard(
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton(basicText).WithCallbackData("pay_sbp_basic"),
+		),
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton(accText).WithCallbackData("pay_sbp_accelerator"),
 		),
@@ -270,6 +300,28 @@ func UpgradeOptionsKeyboard(currentTier string, diffAmount ...float64) *telego.I
 	currentTier = strings.ToLower(strings.TrimSpace(currentTier))
 	if currentTier == "vip" {
 		return tu.InlineKeyboard(
+			tu.InlineKeyboardRow(
+				tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu"),
+			),
+		)
+	}
+
+	if currentTier == "basic" {
+		diffAcc := 2910 // 6900 - 3990
+		diffVIP := 10910 // 14900 - 3990
+		if len(diffAmount) > 0 && diffAmount[0] > 0 {
+			diffAcc = int(diffAmount[0])
+		}
+		if len(diffAmount) > 1 && diffAmount[1] > 0 {
+			diffVIP = int(diffAmount[1])
+		}
+		return tu.InlineKeyboard(
+			tu.InlineKeyboardRow(
+				tu.InlineKeyboardButton(fmt.Sprintf("🚀 До Акселератора (доплата %s ₽)", formatPriceRub(diffAcc))).WithCallbackData("upgrade_to_accelerator"),
+			),
+			tu.InlineKeyboardRow(
+				tu.InlineKeyboardButton(fmt.Sprintf("👑 До VIP (доплата %s ₽)", formatPriceRub(diffVIP))).WithCallbackData("upgrade_to_vip"),
+			),
 			tu.InlineKeyboardRow(
 				tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu"),
 			),

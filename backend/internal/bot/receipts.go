@@ -97,6 +97,9 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) bool {
 
 		pricing := s.getPricing()
 		switch chosenTier {
+		case "basic":
+			amount = pricing.BasicPrice
+			chosenTier = "basic"
 		case "vip":
 			amount = pricing.VIPPrice
 			chosenTier = "vip"

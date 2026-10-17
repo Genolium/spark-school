@@ -114,6 +114,12 @@ func Init(cfg *config.Config) *gorm.DB {
 	db.Exec("UPDATE users SET tier = 'accelerator' WHERE tier IS NULL OR tier = ''")
 	db.Exec("UPDATE users SET paid_amount = 6900.00 WHERE has_access = true AND (paid_amount IS NULL OR paid_amount = 0)")
 
+	// Ensure basic_price and basic_old_price columns exist in course_pricings
+	db.Exec("ALTER TABLE IF EXISTS course_pricings ADD COLUMN IF NOT EXISTS basic_price NUMERIC(10,2) DEFAULT 3990.00;")
+	db.Exec("ALTER TABLE IF EXISTS course_pricings ADD COLUMN IF NOT EXISTS basic_old_price NUMERIC(10,2) DEFAULT 5900.00;")
+	db.Exec("UPDATE course_pricings SET basic_price = 3990.00 WHERE basic_price IS NULL OR basic_price <= 0;")
+	db.Exec("UPDATE course_pricings SET basic_old_price = 5900.00 WHERE basic_old_price IS NULL OR basic_old_price <= 0;")
+
 	// Backfill users from payment_receipts if missing in users table
 	db.Exec(`
 		INSERT INTO users (telegram_id, username, first_name, role, has_access, tier, paid_amount, created_at)

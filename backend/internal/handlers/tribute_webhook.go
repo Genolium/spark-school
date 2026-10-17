@@ -22,8 +22,8 @@ import (
 )
 
 // Minimum allowable payment amount to prevent underpayment/tampering attacks.
-// 6 000 ₽ safely covers Accelerator with 5% promo (6 555 ₽).
-const MinCoursePaymentThreshold = 6000.00
+// 3 500 ₽ safely covers Basic with 5% promo (3 790.50 ₽).
+const MinCoursePaymentThreshold = 3500.00
 const MinVipPaymentThreshold = 13000.00
 
 // TributeWebhookPayload models the incoming notification from Tribute (@tribute / web.tribute.tg).

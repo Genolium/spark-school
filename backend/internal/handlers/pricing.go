@@ -28,6 +28,8 @@ func (h *PricingHandler) GetPricing(c *gin.Context) {
 
 // UpdatePricingRequest validates payload for changing course pricing.
 type UpdatePricingRequest struct {
+	BasicPrice          float64 `json:"basic_price"`
+	BasicOldPrice       float64 `json:"basic_old_price"`
 	AcceleratorPrice    float64 `json:"accelerator_price" binding:"required"`
 	AcceleratorOldPrice float64 `json:"accelerator_old_price"`
 	VIPPrice            float64 `json:"vip_price" binding:"required"`
@@ -44,6 +46,10 @@ func (h *PricingHandler) UpdatePricing(c *gin.Context) {
 		return
 	}
 
+	if req.BasicPrice <= 0 {
+		req.BasicPrice = 3990.00
+	}
+
 	if req.AcceleratorPrice <= 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Цена тарифа «Акселератор» должна быть положительным числом"})
 		return
@@ -52,12 +58,19 @@ func (h *PricingHandler) UpdatePricing(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Цена тарифа «VIP» должна быть положительным числом"})
 		return
 	}
+	if req.AcceleratorPrice < req.BasicPrice {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Цена тарифа «Акселератор» не может быть ниже тарифа «Базовый»"})
+		return
+	}
 	if req.VIPPrice < req.AcceleratorPrice {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Цена тарифа «VIP» не может быть ниже тарифа «Акселератор»"})
 		return
 	}
 
 	// Ensure old strike-through prices are always dynamically higher than current price
+	if req.BasicOldPrice <= req.BasicPrice {
+		req.BasicOldPrice = math.Round((req.BasicPrice*1.4)/100) * 100
+	}
 	if req.AcceleratorOldPrice <= req.AcceleratorPrice {
 		req.AcceleratorOldPrice = math.Round((req.AcceleratorPrice*1.4)/100) * 100
 	}
@@ -71,6 +84,8 @@ func (h *PricingHandler) UpdatePricing(c *gin.Context) {
 	}
 
 	newPricing := models.CoursePricing{
+		BasicPrice:          req.BasicPrice,
+		BasicOldPrice:       req.BasicOldPrice,
 		AcceleratorPrice:    req.AcceleratorPrice,
 		AcceleratorOldPrice: req.AcceleratorOldPrice,
 		VIPPrice:            req.VIPPrice,

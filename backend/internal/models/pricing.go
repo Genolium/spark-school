@@ -11,6 +11,8 @@ import (
 // CoursePricing stores the dynamic tier pricing configured via the admin panel.
 type CoursePricing struct {
 	ID                  uint      `gorm:"primaryKey" json:"id"`
+	BasicPrice          float64   `gorm:"type:numeric(10,2);default:3990.00" json:"basic_price"`
+	BasicOldPrice       float64   `gorm:"type:numeric(10,2);default:5900.00" json:"basic_old_price"`
 	AcceleratorPrice    float64   `gorm:"type:numeric(10,2);default:6900.00" json:"accelerator_price"`
 	AcceleratorOldPrice float64   `gorm:"type:numeric(10,2);default:9900.00" json:"accelerator_old_price"`
 	VIPPrice            float64   `gorm:"type:numeric(10,2);default:14900.00" json:"vip_price"`
@@ -21,6 +23,8 @@ type CoursePricing struct {
 
 // DefaultCoursePricing provides fallback prices when database record is not yet present.
 var DefaultCoursePricing = CoursePricing{
+	BasicPrice:          3990.00,
+	BasicOldPrice:       5900.00,
 	AcceleratorPrice:    6900.00,
 	AcceleratorOldPrice: 9900.00,
 	VIPPrice:            14900.00,
@@ -39,6 +43,12 @@ func GetCoursePricing(db *gorm.DB) CoursePricing {
 		pricing.UpdatedAt = time.Now()
 		_ = db.Create(&pricing).Error
 		return pricing
+	}
+	if pricing.BasicPrice <= 0 {
+		pricing.BasicPrice = 3990.00
+	}
+	if pricing.BasicOldPrice <= pricing.BasicPrice {
+		pricing.BasicOldPrice = math.Round((pricing.BasicPrice*1.4)/100) * 100
 	}
 	if pricing.AcceleratorPrice <= 0 {
 		pricing.AcceleratorPrice = 6900.00
@@ -68,6 +78,12 @@ func UpdateCoursePricing(db *gorm.DB, p CoursePricing) (CoursePricing, error) {
 	var existing CoursePricing
 	err := db.Order("id ASC").First(&existing).Error
 	if err != nil {
+		if p.BasicPrice <= 0 {
+			p.BasicPrice = 3990.00
+		}
+		if p.BasicOldPrice <= p.BasicPrice {
+			p.BasicOldPrice = math.Round((p.BasicPrice*1.4)/100) * 100
+		}
 		if strings.TrimSpace(p.BankName) == "" {
 			p.BankName = "БСПБ (Банк «Санкт-Петербург»)"
 		}
@@ -76,6 +92,12 @@ func UpdateCoursePricing(db *gorm.DB, p CoursePricing) (CoursePricing, error) {
 			return p, createErr
 		}
 		return p, nil
+	}
+	if p.BasicPrice <= 0 {
+		p.BasicPrice = 3990.00
+	}
+	if p.BasicOldPrice <= p.BasicPrice {
+		p.BasicOldPrice = math.Round((p.BasicPrice*1.4)/100) * 100
 	}
 	if p.AcceleratorPrice <= 0 {
 		p.AcceleratorPrice = 6900.00
@@ -93,6 +115,8 @@ func UpdateCoursePricing(db *gorm.DB, p CoursePricing) (CoursePricing, error) {
 		p.BankName = "БСПБ (Банк «Санкт-Петербург»)"
 	}
 
+	existing.BasicPrice = p.BasicPrice
+	existing.BasicOldPrice = p.BasicOldPrice
 	existing.AcceleratorPrice = p.AcceleratorPrice
 	existing.AcceleratorOldPrice = p.AcceleratorOldPrice
 	existing.VIPPrice = p.VIPPrice

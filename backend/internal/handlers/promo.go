@@ -51,6 +51,8 @@ func GetTierPrice(tier string, fallbackPrice float64) float64 {
 		return fallbackPrice
 	}
 	switch strings.ToLower(strings.TrimSpace(tier)) {
+	case "basic", "базовый":
+		return 3990.00
 	case "vip":
 		return 14900.00
 	case "accelerator", "акселератор":
