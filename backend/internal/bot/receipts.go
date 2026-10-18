@@ -291,21 +291,26 @@ func (s *BotService) SendAdminReceiptCard(adminID int64, receipt *models.Payment
 
 	btnReject := tu.InlineKeyboardButton("❌ Отклонить").WithCallbackData(fmt.Sprintf("receipt_reject_%d", receipt.ID))
 
-	// Button to toggle tier if wrong tier was detected
-	var btnSwitchTier telego.InlineKeyboardButton
+	// Buttons to toggle tier if wrong tier was detected
+	var switchTierButtons []telego.InlineKeyboardButton
 	if !isUpgradeCard {
-		if strings.ToLower(receipt.Tier) == "vip" {
-			btnSwitchTier = tu.InlineKeyboardButton("🔄 Сменить тариф на Акселератор").WithCallbackData(fmt.Sprintf("receipt_tier_accelerator_%d", receipt.ID))
-		} else {
-			btnSwitchTier = tu.InlineKeyboardButton("👑 Сменить тариф на VIP").WithCallbackData(fmt.Sprintf("receipt_tier_vip_%d", receipt.ID))
+		tierLow := strings.ToLower(strings.TrimSpace(receipt.Tier))
+		if tierLow != "basic" {
+			switchTierButtons = append(switchTierButtons, tu.InlineKeyboardButton("⚡️ На Базовый").WithCallbackData(fmt.Sprintf("receipt_tier_basic_%d", receipt.ID)))
+		}
+		if tierLow != "accelerator" {
+			switchTierButtons = append(switchTierButtons, tu.InlineKeyboardButton("🔄 На Акселератор").WithCallbackData(fmt.Sprintf("receipt_tier_accelerator_%d", receipt.ID)))
+		}
+		if tierLow != "vip" {
+			switchTierButtons = append(switchTierButtons, tu.InlineKeyboardButton("👑 На VIP").WithCallbackData(fmt.Sprintf("receipt_tier_vip_%d", receipt.ID)))
 		}
 	}
 
 	rows := [][]telego.InlineKeyboardButton{
 		{btnApprove, btnReject},
 	}
-	if btnSwitchTier.Text != "" {
-		rows = append(rows, []telego.InlineKeyboardButton{btnSwitchTier})
+	if len(switchTierButtons) > 0 {
+		rows = append(rows, switchTierButtons)
 	}
 	if receipt.Username != "" {
 		cleanUser := strings.TrimPrefix(receipt.Username, "@")

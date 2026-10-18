@@ -915,6 +915,11 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 		s.processReceiptRejection(query, idStr)
 		return true
 	}
+	if strings.HasPrefix(data, "receipt_tier_basic_") {
+		idStr := strings.TrimPrefix(data, "receipt_tier_basic_")
+		s.processReceiptTierToggle(query, idStr, "basic")
+		return true
+	}
 	if strings.HasPrefix(data, "receipt_tier_vip_") {
 		idStr := strings.TrimPrefix(data, "receipt_tier_vip_")
 		s.processReceiptTierToggle(query, idStr, "vip")
@@ -1528,7 +1533,23 @@ func (s *BotService) processReceiptTierToggle(query *telego.CallbackQuery, idStr
 	receipt.Tier = newTier
 	pricing := s.getPricing()
 	if isUpgrade {
-		if prevTier == "accelerator" {
+		if prevTier == "basic" {
+			if newTier == "vip" {
+				diff := pricing.VIPPrice - pricing.BasicPrice
+				if diff <= 0 {
+					diff = 10910.0
+				}
+				receipt.Amount = diff
+				receipt.Tier = "vip"
+			} else {
+				diff := pricing.AcceleratorPrice - pricing.BasicPrice
+				if diff <= 0 {
+					diff = 2910.0
+				}
+				receipt.Amount = diff
+				receipt.Tier = "accelerator"
+			}
+		} else if prevTier == "accelerator" {
 			diff := pricing.VIPPrice - pricing.AcceleratorPrice
 			if diff <= 0 {
 				diff = 8000.0
@@ -1538,8 +1559,12 @@ func (s *BotService) processReceiptTierToggle(query *telego.CallbackQuery, idStr
 		}
 	} else {
 		switch newTier {
+		case "basic":
+			receipt.Amount = pricing.BasicPrice
+			receipt.Tier = "basic"
 		case "vip":
 			receipt.Amount = pricing.VIPPrice
+			receipt.Tier = "vip"
 		default:
 			receipt.Amount = pricing.AcceleratorPrice
 			receipt.Tier = "accelerator"
@@ -1577,7 +1602,6 @@ func (s *BotService) processReceiptTierToggle(query *telego.CallbackQuery, idStr
 
 		var newCaption string
 		var btnApprove telego.InlineKeyboardButton
-		var btnSwitchTier telego.InlineKeyboardButton
 
 		if isUpgrade {
 			newCaption = fmt.Sprintf(`🚀 <b>Чек на АПГРЕЙД тарифа #%d</b>
@@ -1615,20 +1639,29 @@ func (s *BotService) processReceiptTierToggle(query *telego.CallbackQuery, idStr
 				dateStr,
 			)
 			btnApprove = tu.InlineKeyboardButton("✅ Одобрить и выдать доступ").WithCallbackData(fmt.Sprintf("receipt_approve_%d", receipt.ID))
-			if strings.ToLower(receipt.Tier) == "vip" {
-				btnSwitchTier = tu.InlineKeyboardButton("🔄 Сменить тариф на Акселератор").WithCallbackData(fmt.Sprintf("receipt_tier_accelerator_%d", receipt.ID))
-			} else {
-				btnSwitchTier = tu.InlineKeyboardButton("👑 Сменить тариф на VIP").WithCallbackData(fmt.Sprintf("receipt_tier_vip_%d", receipt.ID))
-			}
 		}
 
 		btnReject := tu.InlineKeyboardButton("❌ Отклонить").WithCallbackData(fmt.Sprintf("receipt_reject_%d", receipt.ID))
 
+		var switchTierButtons []telego.InlineKeyboardButton
+		if !isUpgrade {
+			tierLow := strings.ToLower(strings.TrimSpace(receipt.Tier))
+			if tierLow != "basic" {
+				switchTierButtons = append(switchTierButtons, tu.InlineKeyboardButton("⚡️ На Базовый").WithCallbackData(fmt.Sprintf("receipt_tier_basic_%d", receipt.ID)))
+			}
+			if tierLow != "accelerator" {
+				switchTierButtons = append(switchTierButtons, tu.InlineKeyboardButton("🔄 На Акселератор").WithCallbackData(fmt.Sprintf("receipt_tier_accelerator_%d", receipt.ID)))
+			}
+			if tierLow != "vip" {
+				switchTierButtons = append(switchTierButtons, tu.InlineKeyboardButton("👑 На VIP").WithCallbackData(fmt.Sprintf("receipt_tier_vip_%d", receipt.ID)))
+			}
+		}
+
 		rows := [][]telego.InlineKeyboardButton{
 			{btnApprove, btnReject},
 		}
-		if btnSwitchTier.Text != "" {
-			rows = append(rows, []telego.InlineKeyboardButton{btnSwitchTier})
+		if len(switchTierButtons) > 0 {
+			rows = append(rows, switchTierButtons)
 		}
 		if receipt.Username != "" {
 			cleanUser := strings.TrimPrefix(receipt.Username, "@")
