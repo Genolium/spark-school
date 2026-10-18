@@ -50,6 +50,11 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
     ? pricing.vip_old_price
     : Math.round((pricing.vip_price * 1.4) / 100) * 100;
 
+  // Dynamic ROI calculation: $20,000 grant (~2,000,000 ₽ benchmark) vs accelerator price
+  const grantRub = 20000 * 100;
+  const currentAccPrice = pricing.accelerator_price || 6900;
+  const roiMultiplier = Math.round(grantRub / currentAccPrice);
+
   return (
     <section id="pricing" className="relative w-full max-w-[1520px] mx-auto px-3 sm:px-6 py-16 sm:py-24 scroll-mt-20 sm:scroll-mt-24">
       {/* Section Header */}
@@ -107,7 +112,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
             </div>
           </div>
           <span className="hidden sm:inline-flex px-3 py-1 rounded-full text-xs font-mono font-bold uppercase bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-            ROI 1 : 290
+            ROI 1 : {roiMultiplier}
           </span>
         </div>
 
@@ -146,10 +151,12 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
           </div>
 
           {/* VS Divider (1 col) */}
-          <div className="lg:col-span-1 flex items-center justify-center">
-            <span className="w-10 h-10 rounded-full bg-slate-900 text-white dark:bg-white dark:text-black flex items-center justify-center font-mono text-xs font-black uppercase shadow-lg">
+          <div className="lg:col-span-1 flex lg:flex-col items-center justify-center my-3 lg:my-0 gap-2">
+            <div className="hidden lg:block w-px h-8 bg-slate-200 dark:bg-white/10" />
+            <span className="px-3 py-1 rounded-full bg-slate-100 dark:bg-white/5 border border-slate-300/80 dark:border-white/15 text-[11px] font-mono font-bold text-slate-700 dark:text-slate-300 tracking-wider shadow-sm">
               VS
             </span>
+            <div className="hidden lg:block w-px h-8 bg-slate-200 dark:bg-white/10" />
           </div>
 
           {/* Right Side: The Cost of Mistake / What is at stake (5 cols) */}
@@ -176,11 +183,11 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
               </div>
               <div className="flex items-start gap-2">
                 <span className="text-rose-500 font-bold shrink-0">✕</span>
-                <span>Нетворкинг с Николаем Давыдовым (Davidovs vc) и топ-фаундерами</span>
+                <span>Обучение в США, проживание в кампусе, авиабилеты и стипендия</span>
               </div>
               <div className="flex items-start gap-2">
                 <span className="text-rose-500 font-bold shrink-0">✕</span>
-                <span>Соотношение ценности курса к гранту: <b>1 к 290</b></span>
+                <span>Соотношение ценности курса к гранту: <b>1 к {roiMultiplier}</b></span>
               </div>
             </div>
           </div>
