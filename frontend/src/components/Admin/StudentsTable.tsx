@@ -18,6 +18,10 @@ import {
   CheckCircle2,
   AlertCircle,
   Calendar,
+  Receipt,
+  ExternalLink,
+  Send,
+  FileCheck,
 } from "lucide-react";
 import { UserProfile, api } from "@/lib/api";
 
@@ -38,6 +42,8 @@ interface FormState {
   paid_amount: string;
   promo_code: string;
   receipt_issued: boolean;
+  receipt_url?: string;
+  receipt_number?: string;
 }
 
 const emptyForm: FormState = {
@@ -51,6 +57,8 @@ const emptyForm: FormState = {
   paid_amount: "6900",
   promo_code: "",
   receipt_issued: false,
+  receipt_url: "",
+  receipt_number: "",
 };
 
 function formatPurchaseDate(accessGrantedAt?: string, createdAt?: string): string {
@@ -101,6 +109,21 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
   const [activateAmount, setActivateAmount] = useState("6900");
 
   const [coursePricing, setCoursePricing] = useState({ accelerator_price: 6900, vip_price: 14900 });
+
+  // Issue Receipt modal state
+  const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
+  const [issueReceiptTarget, setIssueReceiptTarget] = useState<UserProfile | null>(null);
+  const [receiptStudentId, setReceiptStudentId] = useState<number | null>(null);
+  const [receiptUrl, setReceiptUrl] = useState("");
+  const [receiptNumber, setReceiptNumber] = useState("");
+  const [receiptAmount, setReceiptAmount] = useState("");
+  const [receiptServiceName, setReceiptServiceName] = useState("");
+  const [receiptSendTelegram, setReceiptSendTelegram] = useState(true);
+  const [issuingReceipt, setIssuingReceipt] = useState(false);
+  const [receiptSuccessMsg, setReceiptSuccessMsg] = useState<string | null>(null);
+  const [studentSearchTerm, setStudentSearchTerm] = useState("");
+
+  const unissuedCount = (students || []).filter((s) => s.has_access && !s.receipt_issued).length;
 
   React.useEffect(() => {
     api.getCoursePricing().then((p) => {
@@ -313,10 +336,113 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
       paid_amount: currentAmount,
       promo_code: currentPromo,
       receipt_issued: !!s.receipt_issued,
+      receipt_url: s.receipt_url || "",
+      receipt_number: s.receipt_number || "",
     });
     setEditingId(s.id);
     setError(null);
     setModal("edit");
+  };
+
+  const openIssueReceipt = (student?: UserProfile) => {
+    setError(null);
+    setReceiptSuccessMsg(null);
+    setStudentSearchTerm("");
+    if (student) {
+      setIssueReceiptTarget(student);
+      setReceiptStudentId(student.id);
+      setReceiptUrl(student.receipt_url || "");
+      setReceiptNumber(student.receipt_number || "");
+      const defaultAmount = student.paid_amount && student.paid_amount > 0
+        ? String(student.paid_amount)
+        : student.tier === "vip"
+        ? String(coursePricing.vip_price)
+        : String(coursePricing.accelerator_price);
+      setReceiptAmount(defaultAmount);
+      const tierLabel = student.tier === "vip" ? "VIP" : student.tier === "basic" ? "Базовый" : "Акселератор";
+      setReceiptServiceName(`Информационно-консультационные услуги по подготовке к поступлению в ШАД (Тариф «${tierLabel}»)`);
+      setReceiptSendTelegram(true);
+    } else {
+      setIssueReceiptTarget(null);
+      setReceiptStudentId(null);
+      setReceiptUrl("");
+      setReceiptNumber("");
+      setReceiptAmount(String(coursePricing.accelerator_price));
+      setReceiptServiceName("Информационно-консультационные услуги по подготовке к поступлению в ШАД (Тариф «Акселератор»)");
+      setReceiptSendTelegram(true);
+    }
+    setIsIssueModalOpen(true);
+  };
+
+  const handleSelectStudentForReceipt = (student: UserProfile) => {
+    setIssueReceiptTarget(student);
+    setReceiptStudentId(student.id);
+    setReceiptUrl(student.receipt_url || "");
+    setReceiptNumber(student.receipt_number || "");
+    const defaultAmount = student.paid_amount && student.paid_amount > 0
+      ? String(student.paid_amount)
+      : student.tier === "vip"
+      ? String(coursePricing.vip_price)
+      : String(coursePricing.accelerator_price);
+    setReceiptAmount(defaultAmount);
+    const tierLabel = student.tier === "vip" ? "VIP" : student.tier === "basic" ? "Базовый" : "Акселератор";
+    setReceiptServiceName(`Информационно-консультационные услуги по подготовке к поступлению в ШАД (Тариф «${tierLabel}»)`);
+  };
+
+  const handleConfirmIssueReceipt = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!receiptStudentId) {
+      setError("Пожалуйста, выберите ученика для выписки чека");
+      return;
+    }
+    setIssuingReceipt(true);
+    setError(null);
+    setReceiptSuccessMsg(null);
+
+    const amountNum = parseFloat(receiptAmount) || undefined;
+    const cleanUrl = receiptUrl.trim();
+    const cleanNumber = receiptNumber.trim();
+    const cleanService = receiptServiceName.trim();
+
+    const res = await api.issueReceipt(receiptStudentId, {
+      receipt_url: cleanUrl,
+      receipt_number: cleanNumber,
+      amount: amountNum,
+      service_name: cleanService,
+      send_telegram: receiptSendTelegram,
+    });
+
+    setIssuingReceipt(false);
+    if (!res.success) {
+      setError(res.error || "Не удалось выписать чек");
+      return;
+    }
+
+    setReceiptSuccessMsg(res.message || "Чек успешно сформирован и отправлен ученику в Telegram!");
+
+    if (serverStudents) {
+      setServerStudents((prev) =>
+        prev
+          ? prev.map((s) =>
+              s.id === receiptStudentId
+                ? {
+                    ...s,
+                    receipt_issued: true,
+                    receipt_issued_at: new Date().toISOString(),
+                    receipt_url: cleanUrl,
+                    receipt_number: cleanNumber,
+                    paid_amount: amountNum || s.paid_amount,
+                  }
+                : s
+            )
+          : null
+      );
+    }
+
+    setTimeout(() => {
+      setIsIssueModalOpen(false);
+      onRefresh();
+    }, 1500);
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -357,6 +483,8 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
         paid_amount: paidNum,
         promo_code: form.promo_code.trim().toUpperCase(),
         receipt_issued: form.receipt_issued,
+        receipt_url: form.receipt_url?.trim(),
+        receipt_number: form.receipt_number?.trim(),
       });
     }
 
@@ -441,13 +569,30 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
             </p>
           </div>
 
-          <button
-            onClick={openCreate}
-            className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-mono font-bold flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 whitespace-nowrap self-start sm:self-auto"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Добавить студента</span>
-          </button>
+          <div className="flex items-center gap-2.5 self-start sm:self-auto flex-wrap">
+            <button
+              type="button"
+              onClick={() => openIssueReceipt()}
+              className="px-4 py-2 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/30 text-emerald-700 dark:text-emerald-400 text-xs font-mono font-bold flex items-center justify-center gap-2 transition-all shadow-sm active:scale-95 whitespace-nowrap"
+              title="Выбрать ученика, указать ссылку на чек из «Мой налог» и отправить в Telegram-бота"
+            >
+              <Receipt className="w-4 h-4 text-emerald-500" />
+              <span>Выписать чек</span>
+              {unissuedCount > 0 && (
+                <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500 text-black font-bold" title={`Не выписано чеков: ${unissuedCount}`}>
+                  {unissuedCount}
+                </span>
+              )}
+            </button>
+
+            <button
+              onClick={openCreate}
+              className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-400 text-black text-xs font-mono font-bold flex items-center justify-center gap-2 transition-all shadow-md active:scale-95 whitespace-nowrap"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Добавить студента</span>
+            </button>
+          </div>
         </div>
 
         {/* Search & Filters Bar */}
@@ -669,33 +814,65 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
                     )}
                   </td>
 
-                  {/* Self-Employed Fiscal Receipt (Мой налог) 1-Click Toggle */}
+                  {/* Self-Employed Fiscal Receipt (Мой налог) */}
                   <td className="py-4">
-                    {s.receipt_issued ? (
-                      <button
-                        type="button"
-                        onClick={(e) => handleToggleReceiptIssued(s, e)}
-                        title={
-                          s.receipt_issued_at
-                            ? `Чек выписан (${formatPurchaseDate(s.receipt_issued_at)}). Нажмите для отмены`
-                            : "Чек выписан в «Мой налог». Нажмите для отмены"
-                        }
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 active:scale-95 transition-all shadow-sm"
-                      >
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
-                        <span>Выписан</span>
-                      </button>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={(e) => handleToggleReceiptIssued(s, e)}
-                        title="Чек ещё не выписан в «Мой налог». Нажмите, когда выпишете чек"
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 hover:bg-amber-500/25 active:scale-95 transition-all shadow-sm"
-                      >
-                        <AlertCircle className="w-3.5 h-3.5 text-amber-500" />
-                        <span>Не выписан</span>
-                      </button>
-                    )}
+                    <div className="flex flex-col gap-1 items-start">
+                      {s.receipt_issued ? (
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <button
+                            type="button"
+                            onClick={(e) => handleToggleReceiptIssued(s, e)}
+                            title={
+                              s.receipt_issued_at
+                                ? `Чек выписан (${formatPurchaseDate(s.receipt_issued_at)}). Нажмите для отмены`
+                                : "Чек выписан в «Мой налог». Нажмите для отмены"
+                            }
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/25 active:scale-95 transition-all shadow-sm"
+                          >
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+                            <span>Выписан</span>
+                          </button>
+                          {s.receipt_url && (
+                            <a
+                              href={s.receipt_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              title="Открыть официальный чек в новой вкладке"
+                              className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-mono bg-slate-100 dark:bg-white/10 hover:bg-slate-200 dark:hover:bg-white/20 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-white/10 transition-colors"
+                            >
+                              <ExternalLink className="w-3 h-3 text-emerald-500" />
+                              <span>Чек</span>
+                            </a>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openIssueReceipt(s);
+                            }}
+                            title="Редактировать реквизиты или переотправить чек через Telegram-бота"
+                            className="p-1 rounded-md text-slate-400 hover:text-amber-500 hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
+                          >
+                            <Pencil className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openIssueReceipt(s);
+                            }}
+                            title="Выписать официальный чек и отправить в Telegram-бота"
+                            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/30 hover:bg-amber-500/25 active:scale-95 transition-all shadow-sm group"
+                          >
+                            <Receipt className="w-3.5 h-3.5 text-amber-500 group-hover:scale-110 transition-transform" />
+                            <span>Выписать чек</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </td>
 
                   {/* Promo Code */}
@@ -1018,6 +1195,300 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Issue Receipt Modal */}
+      {isIssueModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <form
+            onSubmit={handleConfirmIssueReceipt}
+            className="bg-white dark:bg-[#12161D] border border-slate-200 dark:border-white/20 rounded-3xl max-w-lg w-full p-6 sm:p-7 space-y-4 shadow-2xl text-slate-900 dark:text-white max-h-[90vh] overflow-y-auto"
+          >
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-slate-200 dark:border-white/10 pb-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-500">
+                  <Receipt className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
+                    Выписка электронного чека
+                  </h3>
+                  <p className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                    Регистрация чека самозанятого и доставка ученику в Telegram
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsIssueModalOpen(false)}
+                className="p-1 rounded-lg text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-white/10 transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+
+            {error && (
+              <div className="p-3 bg-rose-500/10 border border-rose-500/30 text-rose-600 dark:text-rose-300 rounded-xl text-xs font-mono flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                <span>{error}</span>
+              </div>
+            )}
+
+            {receiptSuccessMsg && (
+              <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 text-emerald-600 dark:text-emerald-300 rounded-xl text-xs font-mono flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-500" />
+                <span>{receiptSuccessMsg}</span>
+              </div>
+            )}
+
+            {/* Student Selection (if not pre-selected) */}
+            {!issueReceiptTarget ? (
+              <div className="space-y-2">
+                <label className="block text-[11px] font-mono font-semibold text-slate-600 dark:text-slate-300">
+                  1. Выберите ученика для оформления чека:
+                </label>
+                <div className="relative">
+                  <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Поиск по имени, @username или Telegram ID..."
+                    value={studentSearchTerm}
+                    onChange={(e) => setStudentSearchTerm(e.target.value)}
+                    className={`${inputCls} pl-9`}
+                    autoFocus
+                  />
+                </div>
+                <div className="max-h-52 overflow-y-auto space-y-1.5 border border-slate-200 dark:border-white/10 rounded-2xl p-2 bg-slate-50/50 dark:bg-black/20">
+                  {(students || [])
+                    .filter((s) => {
+                      if (!studentSearchTerm.trim()) return true;
+                      const term = studentSearchTerm.toLowerCase();
+                      return (
+                        s.first_name?.toLowerCase().includes(term) ||
+                        s.last_name?.toLowerCase().includes(term) ||
+                        s.username?.toLowerCase().includes(term) ||
+                        String(s.telegram_id).includes(term)
+                      );
+                    })
+                    .slice(0, 20)
+                    .map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => handleSelectStudentForReceipt(s)}
+                        className="w-full text-left p-2.5 rounded-xl hover:bg-slate-200/60 dark:hover:bg-white/10 transition-colors flex items-center justify-between gap-3 text-xs font-mono border border-transparent hover:border-slate-300 dark:hover:border-white/15 group"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-7 h-7 rounded-full bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold text-xs shrink-0 group-hover:scale-105 transition-transform">
+                            {s.first_name ? s.first_name[0] : "?"}
+                          </div>
+                          <div className="truncate">
+                            <span className="font-bold text-slate-900 dark:text-white">
+                              {s.first_name} {s.last_name}
+                            </span>
+                            <span className="text-slate-400 ml-1.5">
+                              {s.username ? `@${s.username}` : `TG: ${s.telegram_id}`}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                            s.receipt_issued
+                              ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                              : "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+                          }`}>
+                            {s.receipt_issued ? "Чек выписан" : "Без чека"}
+                          </span>
+                          <span className="font-bold text-slate-800 dark:text-slate-200">
+                            {s.paid_amount ? `${s.paid_amount.toLocaleString("ru-RU")} ₽` : "—"}
+                          </span>
+                        </div>
+                      </button>
+                    ))}
+                </div>
+              </div>
+            ) : (
+              /* Selected Student Card */
+              <div className="p-4 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-black/40 flex items-center justify-between gap-3 shadow-inner">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-2xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center font-bold text-sm shrink-0 border border-amber-500/30">
+                    {issueReceiptTarget.first_name ? issueReceiptTarget.first_name[0] : "?"}
+                  </div>
+                  <div className="truncate">
+                    <div className="font-bold text-xs text-slate-900 dark:text-white flex items-center gap-2">
+                      <span>{issueReceiptTarget.first_name} {issueReceiptTarget.last_name}</span>
+                      {issueReceiptTarget.receipt_issued && (
+                        <span className="inline-flex items-center gap-0.5 px-2 py-0.2 rounded-full text-[9px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                          <CheckCircle2 className="w-2.5 h-2.5" /> Выписан
+                        </span>
+                      )}
+                    </div>
+                    <div className="text-[11px] font-mono text-slate-400 flex items-center gap-2 mt-0.5">
+                      <span>{issueReceiptTarget.username ? `@${issueReceiptTarget.username}` : `ID: ${issueReceiptTarget.telegram_id}`}</span>
+                      <span>•</span>
+                      <span className="text-amber-600 dark:text-amber-400 font-semibold">
+                        {issueReceiptTarget.tier === "vip" ? "Тариф VIP" : issueReceiptTarget.tier === "basic" ? "Тариф Базовый" : "Тариф Акселератор"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIssueReceiptTarget(null);
+                    setReceiptStudentId(null);
+                  }}
+                  className="px-3 py-1.5 text-[11px] font-mono rounded-xl border border-slate-200 dark:border-white/10 hover:bg-slate-200/60 dark:hover:bg-white/10 text-slate-600 dark:text-slate-300 transition-colors shrink-0"
+                >
+                  Сменить
+                </button>
+              </div>
+            )}
+
+            {/* Receipt Details Form */}
+            {issueReceiptTarget && (
+              <div className="space-y-3.5 pt-1">
+                <label className="block text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                  Ссылка на чек в ФНС / «Мой налог» / ОФД:
+                  <div className="relative mt-1">
+                    <input
+                      type="url"
+                      value={receiptUrl}
+                      onChange={(e) => setReceiptUrl(e.target.value)}
+                      placeholder="https://lknpd.nalog.ru/api/v1/receipt/.../print"
+                      className={`${inputCls} pr-8`}
+                    />
+                    {receiptUrl && (
+                      <a
+                        href={receiptUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-emerald-500 transition-colors"
+                        title="Проверить ссылку"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    )}
+                  </div>
+                  <span className="text-[10px] text-slate-400 mt-1 block">
+                    Скопируйте ссылку в приложении «Мой налог» (раздел «Чеки» ➔ открыть чек ➔ «Поделиться / Ссылка»)
+                  </span>
+                </label>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <label className="block text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                    Номер чека (необязательно):
+                    <input
+                      type="text"
+                      value={receiptNumber}
+                      onChange={(e) => setReceiptNumber(e.target.value)}
+                      placeholder="Например: 2026-10-18/001"
+                      className={`${inputCls} mt-1`}
+                    />
+                  </label>
+
+                  <label className="block text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                    Сумма в чеке (₽):
+                    <input
+                      type="number"
+                      value={receiptAmount}
+                      onChange={(e) => setReceiptAmount(e.target.value)}
+                      placeholder="6900"
+                      className={`${inputCls} mt-1 font-bold text-amber-600 dark:text-amber-400`}
+                    />
+                  </label>
+                </div>
+
+                <label className="block text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                  Наименование услуги в чеке:
+                  <input
+                    type="text"
+                    value={receiptServiceName}
+                    onChange={(e) => setReceiptServiceName(e.target.value)}
+                    placeholder="Информационно-консультационные услуги по подготовке к поступлению в ШАД"
+                    className={`${inputCls} mt-1`}
+                  />
+                </label>
+
+                <label className="flex items-start gap-2.5 text-xs font-mono text-slate-700 dark:text-slate-300 pt-1 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={receiptSendTelegram}
+                    onChange={(e) => setReceiptSendTelegram(e.target.checked)}
+                    className="mt-0.5 rounded accent-emerald-500"
+                  />
+                  <div>
+                    <span className="font-bold">Отправить чек ученику через Telegram-бота</span>
+                    <p className="text-[10px] text-slate-400">
+                      Бот моментально доставит ученику сообщение с реквизитами платежа и кнопкой прямого перехода к чеку ФНС.
+                    </p>
+                  </div>
+                </label>
+
+                {/* Live Telegram Preview */}
+                {receiptSendTelegram && (
+                  <div className="p-4 rounded-2xl border border-slate-200 dark:border-white/10 bg-slate-100/70 dark:bg-black/50 space-y-2 text-xs">
+                    <div className="flex items-center justify-between text-[10px] font-mono text-slate-400 border-b border-slate-200 dark:border-white/10 pb-2">
+                      <span className="flex items-center gap-1 font-semibold text-sky-500">
+                        <Send className="w-3 h-3" /> Превью сообщения в Telegram-боте:
+                      </span>
+                      <span>@spark_prep_bot</span>
+                    </div>
+
+                    <div className="text-[11px] leading-relaxed text-slate-800 dark:text-slate-200 font-mono space-y-1">
+                      <p className="font-bold">🧾 Электронный чек об оплате</p>
+                      <p className="text-slate-500 dark:text-slate-400 text-[10px]">
+                        Здравствуйте! Ваш платёж за обучение в проекте «так называемый SPARK» успешно зарегистрирован и фискализирован в соответствии с законодательством РФ (ФЗ № 422-ФЗ / 54-ФЗ).
+                      </p>
+                      <div className="pt-1 text-[10px] space-y-0.5">
+                        <p>• <b>Услуга:</b> {receiptServiceName || "—"}</p>
+                        <p>• <b>Тариф:</b> {issueReceiptTarget.tier === "vip" ? "«VIP»" : issueReceiptTarget.tier === "basic" ? "«Базовый»" : "«Акселератор»"}</p>
+                        <p>• <b>Сумма:</b> {receiptAmount || "0"} ₽</p>
+                        {receiptNumber && <p>• <b>Номер чека:</b> {receiptNumber}</p>}
+                        <p>• <b>Дата формирования:</b> {new Date().toLocaleDateString("ru-RU")} МСК</p>
+                      </div>
+                    </div>
+
+                    {/* Inline Button Preview */}
+                    <div className="pt-2 flex flex-col gap-1.5">
+                      {receiptUrl ? (
+                        <div className="w-full py-2 px-3 rounded-xl bg-sky-500 hover:bg-sky-400 text-white font-mono text-xs font-bold text-center flex items-center justify-center gap-1.5 shadow-sm">
+                          <Receipt className="w-3.5 h-3.5" />
+                          <span>🧾 Открыть официальный чек</span>
+                        </div>
+                      ) : (
+                        <div className="w-full py-1.5 px-3 rounded-xl border border-dashed border-slate-300 dark:border-white/20 text-slate-400 font-mono text-[10px] text-center">
+                          (Кнопка чека появится при заполнении ссылки на чек)
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Modal Actions */}
+            <div className="flex gap-3 pt-3 border-t border-slate-200 dark:border-white/10">
+              <button
+                type="button"
+                onClick={() => setIsIssueModalOpen(false)}
+                className="flex-1 px-4 py-2.5 rounded-xl border border-slate-200 dark:border-white/10 text-xs font-mono hover:bg-slate-100 dark:hover:bg-white/5 transition-colors"
+              >
+                Отмена
+              </button>
+              <button
+                type="submit"
+                disabled={issuingReceipt || !issueReceiptTarget}
+                className="flex-1 px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-mono font-bold disabled:opacity-50 transition-all shadow-md flex items-center justify-center gap-2"
+              >
+                <FileCheck className="w-4 h-4" />
+                <span>{issuingReceipt ? "Формирование..." : "Выписать и отправить чек"}</span>
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>

@@ -103,6 +103,7 @@ func Init(cfg *config.Config) *gorm.DB {
 		&models.PaymentTransaction{},
 		&models.DripLead{},
 		&models.CoursePricing{},
+		&models.FiscalReceipt{},
 	}
 	for _, m := range modelsToMigrate {
 		if mErr := db.AutoMigrate(m); mErr != nil {
@@ -124,6 +125,10 @@ func Init(cfg *config.Config) *gorm.DB {
 	db.Exec("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS upsell_audit_sent BOOLEAN DEFAULT FALSE;")
 	db.Exec("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS upsell_audit_sent_at TIMESTAMP WITH TIME ZONE;")
 	db.Exec("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS has_audit_upsell BOOLEAN DEFAULT FALSE;")
+
+	// Ensure receipt_url and receipt_number columns exist in users table
+	db.Exec("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS receipt_url VARCHAR(512);")
+	db.Exec("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS receipt_number VARCHAR(64);")
 
 	// Backfill users from payment_receipts if missing in users table
 	db.Exec(`

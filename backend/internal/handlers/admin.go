@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -27,6 +28,7 @@ type AdminHandler struct {
 	notifyFunc       func(telegramID int64, message string) error
 	inviteLinkFunc   func(ctx context.Context, channelID int64) (string, error)
 	digestFunc       func() error
+	receiptSender    func(telegramID int64, tier string, amount float64, receiptURL string, receiptNumber string, serviceName string) error
 }
 
 func NewAdminHandler(db *gorm.DB, cfg *config.Config, aff *services.AffiliateService, notify func(telegramID int64, message string) error, inviteLinkGen ...func(ctx context.Context, channelID int64) (string, error)) *AdminHandler {
@@ -46,6 +48,12 @@ func NewAdminHandler(db *gorm.DB, cfg *config.Config, aff *services.AffiliateSer
 // SetInviteLinkGenerator sets a custom generator for one-time Telegram invite links.
 func (h *AdminHandler) SetInviteLinkGenerator(fn func(ctx context.Context, channelID int64) (string, error)) *AdminHandler {
 	h.inviteLinkFunc = fn
+	return h
+}
+
+// SetReceiptSender sets the handler function for dispatching fiscal receipts to students via Telegram.
+func (h *AdminHandler) SetReceiptSender(fn func(telegramID int64, tier string, amount float64, receiptURL string, receiptNumber string, serviceName string) error) *AdminHandler {
+	h.receiptSender = fn
 	return h
 }
 
@@ -564,6 +572,8 @@ type UpdateUserRequest struct {
 	PaidAmount    *float64 `json:"paid_amount"`
 	PromoCode     *string  `json:"promo_code"`
 	ReceiptIssued *bool    `json:"receipt_issued"`
+	ReceiptURL    *string  `json:"receipt_url"`
+	ReceiptNumber *string  `json:"receipt_number"`
 }
 
 // UpdateUser updates user details
@@ -612,6 +622,12 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 		} else {
 			user.ReceiptIssuedAt = nil
 		}
+	}
+	if req.ReceiptURL != nil {
+		user.ReceiptURL = strings.TrimSpace(*req.ReceiptURL)
+	}
+	if req.ReceiptNumber != nil {
+		user.ReceiptNumber = strings.TrimSpace(*req.ReceiptNumber)
 	}
 	if req.HasAccess != nil {
 		user.HasAccess = *req.HasAccess
@@ -700,6 +716,161 @@ func (h *AdminHandler) ToggleReceiptIssued(c *gin.Context) {
 		"receipt_issued":    user.ReceiptIssued,
 		"receipt_issued_at": user.ReceiptIssuedAt,
 		"user":              user,
+	})
+}
+
+// IssueReceiptRequest payload for issuing a tax/self-employed receipt to a student
+type IssueReceiptRequest struct {
+	ReceiptURL    string   `json:"receipt_url"`
+	ReceiptNumber string   `json:"receipt_number"`
+	Amount        *float64 `json:"amount"`
+	ServiceName   string   `json:"service_name"`
+	SendTelegram  *bool    `json:"send_telegram"`
+}
+
+// IssueReceipt issues an official fiscal receipt to a student and optionally delivers it via Telegram bot
+func (h *AdminHandler) IssueReceipt(c *gin.Context) {
+	id := c.Param("id")
+	var req IssueReceiptRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный формат запроса"})
+		return
+	}
+
+	cleanURL := strings.TrimSpace(req.ReceiptURL)
+	cleanNum := strings.TrimSpace(req.ReceiptNumber)
+	serviceName := strings.TrimSpace(req.ServiceName)
+	sendTelegram := true
+	if req.SendTelegram != nil {
+		sendTelegram = *req.SendTelegram
+	}
+
+	now := time.Now()
+
+	if h.db == nil {
+		amount := 6900.0
+		if req.Amount != nil && *req.Amount > 0 {
+			amount = *req.Amount
+		}
+		c.JSON(http.StatusOK, gin.H{
+			"success":       true,
+			"message":       "Чек успешно выписан и отправлен в Telegram (тестовый режим)",
+			"telegram_sent": sendTelegram,
+			"receipt_issued": true,
+			"receipt_issued_at": now,
+			"user": gin.H{
+				"id":                1,
+				"receipt_issued":    true,
+				"receipt_issued_at": now,
+				"receipt_url":       cleanURL,
+				"receipt_number":    cleanNum,
+				"paid_amount":       amount,
+			},
+		})
+		return
+	}
+
+	var user models.User
+	if err := h.db.First(&user, id).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Пользователь не найден"})
+		return
+	}
+
+	amount := user.PaidAmount
+	if req.Amount != nil && *req.Amount > 0 {
+		amount = *req.Amount
+		user.PaidAmount = amount
+	} else if amount <= 0 {
+		pricing := models.GetCoursePricing(h.db)
+		switch strings.ToLower(user.Tier) {
+		case "basic":
+			amount = pricing.BasicPrice
+		case "vip":
+			amount = pricing.VIPPrice
+		default:
+			amount = pricing.AcceleratorPrice
+		}
+		user.PaidAmount = amount
+	}
+
+	user.ReceiptIssued = true
+	user.ReceiptIssuedAt = &now
+	user.ReceiptURL = cleanURL
+	user.ReceiptNumber = cleanNum
+
+	if err := h.db.Save(&user).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения данных пользователя: " + err.Error()})
+		return
+	}
+
+	telegramSent := false
+	var botErr error
+
+	if sendTelegram && user.TelegramID != 0 {
+		if h.receiptSender != nil {
+			botErr = h.receiptSender(user.TelegramID, user.Tier, amount, cleanURL, cleanNum, serviceName)
+			if botErr == nil {
+				telegramSent = true
+			} else {
+				log.Printf("[Admin IssueReceipt] Warning: failed to send receipt via bot to %d: %v", user.TelegramID, botErr)
+			}
+		} else if h.notifyFunc != nil {
+			tierDisplay := "«Акселератор»"
+			switch strings.ToLower(user.Tier) {
+			case "basic":
+				tierDisplay = "«Базовый»"
+			case "vip":
+				tierDisplay = "«VIP»"
+			}
+			msg := fmt.Sprintf("🧾 <b>Электронный чек об оплате</b>\n\n"+
+				"Поздравляем! Ваш платёж за курс в проекте «так называемый SPARK» (Тариф %s) на сумму %.2f ₽ успешно зарегистрирован.\n", tierDisplay, amount)
+			if cleanNum != "" {
+				msg += fmt.Sprintf("Номер чека: <code>%s</code>\n", cleanNum)
+			}
+			if cleanURL != "" {
+				msg += fmt.Sprintf("Ссылка на чек: %s\n", cleanURL)
+			}
+			botErr = h.notifyFunc(user.TelegramID, msg)
+			if botErr == nil {
+				telegramSent = true
+			}
+		}
+	}
+
+	// Record in fiscal_receipts audit log
+	fiscal := models.FiscalReceipt{
+		UserID:        user.ID,
+		TelegramID:    user.TelegramID,
+		Amount:        amount,
+		Tier:          user.Tier,
+		ReceiptURL:    cleanURL,
+		ReceiptNumber: cleanNum,
+		ServiceName:   serviceName,
+		SentToBot:     telegramSent,
+		CreatedAt:     now,
+	}
+	if telegramSent {
+		fiscal.SentAt = &now
+	}
+	_ = h.db.Create(&fiscal)
+
+	respMsg := "Чек успешно выписан"
+	if telegramSent {
+		respMsg = "Чек успешно выписан и отправлен ученику в Telegram"
+	} else if sendTelegram && botErr != nil {
+		respMsg = fmt.Sprintf("Чек сохранён в системе, но бот не смог доставить сообщение (%v)", botErr)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success":           true,
+		"message":           respMsg,
+		"telegram_sent":     telegramSent,
+		"receipt_issued":    user.ReceiptIssued,
+		"receipt_issued_at": user.ReceiptIssuedAt,
+		"receipt_url":       user.ReceiptURL,
+		"receipt_number":    user.ReceiptNumber,
+		"user":              user,
+		"fiscal_record":     fiscal,
 	})
 }
 

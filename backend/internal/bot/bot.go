@@ -3,6 +3,7 @@ package bot
 import (
 	"context"
 	"fmt"
+	"html"
 	"log"
 	"strings"
 	"time"
@@ -1791,6 +1792,79 @@ func (s *BotService) CreateOneTimeInviteLink(ctx context.Context, channelID int6
 		return "", fmt.Errorf("failed to create chat invite link: %w", err)
 	}
 	return link.InviteLink, nil
+}
+
+// SendFiscalReceipt formats and delivers an official fiscal receipt notification with an optional inline button to view the receipt.
+func (s *BotService) SendFiscalReceipt(telegramID int64, tier string, amount float64, receiptURL string, receiptNumber string, serviceName string) error {
+	if telegramID == 0 {
+		return fmt.Errorf("student Telegram ID is 0")
+	}
+
+	tierDisplay := "«Акселератор»"
+	switch strings.ToLower(tier) {
+	case "basic":
+		tierDisplay = "«Базовый»"
+	case "vip":
+		tierDisplay = "«VIP»"
+	}
+
+	if strings.TrimSpace(serviceName) == "" {
+		serviceName = fmt.Sprintf("Информационно-консультационные услуги по подготовке к поступлению в ШАД (Тариф %s)", tierDisplay)
+	}
+
+	msk := time.FixedZone("MSK", 3*3600)
+	dateStr := time.Now().In(msk).Format("02.01.2006 15:04")
+
+	msg := fmt.Sprintf("🧾 <b>Электронный чек об оплате</b>\n\n"+
+		"Здравствуйте! Ваш платёж за обучение в проекте «так называемый SPARK» успешно зарегистрирован и фискализирован в соответствии с законодательством РФ (ФЗ № 422-ФЗ / 54-ФЗ).\n\n"+
+		"<b>Реквизиты операции:</b>\n"+
+		"• <b>Услуга:</b> %s\n"+
+		"• <b>Тариф:</b> %s\n"+
+		"• <b>Сумма:</b> %.2f ₽\n",
+		html.EscapeString(serviceName), tierDisplay, amount)
+
+	cleanNumber := strings.TrimSpace(receiptNumber)
+	if cleanNumber != "" {
+		msg += fmt.Sprintf("• <b>Номер чека:</b> <code>%s</code>\n", html.EscapeString(cleanNumber))
+	}
+	msg += fmt.Sprintf("• <b>Дата формирования:</b> %s МСК\n\n", dateStr)
+	msg += "Электронный чек имеет полную юридическую силу и подтверждает факт оплаты образовательных материалов."
+
+	var kb *telego.InlineKeyboardMarkup
+	receiptURL = strings.TrimSpace(receiptURL)
+	var rows [][]telego.InlineKeyboardButton
+
+	if strings.HasPrefix(receiptURL, "http://") || strings.HasPrefix(receiptURL, "https://") {
+		rows = append(rows, tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("🧾 Открыть официальный чек").WithURL(receiptURL),
+		))
+	}
+
+	rows = append(rows, tu.InlineKeyboardRow(
+		tu.InlineKeyboardButton("💬 Связаться с так называемым Илем").WithURL("https://t.me/ilyan_vas"),
+	))
+	kb = tu.InlineKeyboard(rows...)
+
+	if s.bot == nil {
+		log.Printf("[Bot Fiscal Receipt Mock] to %d (amount: %.2f, url: %s): %s", telegramID, amount, receiptURL, msg)
+		return nil
+	}
+
+	studentChatID := tu.ID(telegramID)
+	m := tu.Message(studentChatID, msg).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
+	_, err := s.bot.SendMessage(m)
+	if err != nil {
+		log.Printf("[Bot Fiscal Receipt] HTML send failed for %d: %v. Retrying with stripped formatting...", telegramID, err)
+		cleanMsg := StripTgEmoji(msg)
+		cleanM := tu.Message(studentChatID, cleanMsg).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
+		if _, cleanErr := s.bot.SendMessage(cleanM); cleanErr == nil {
+			return nil
+		}
+		rawM := tu.Message(studentChatID, cleanMsg).WithReplyMarkup(kb)
+		_, rawErr := s.bot.SendMessage(rawM)
+		return rawErr
+	}
+	return nil
 }
 
 // syncTelegramUser ensures every user interacting with the bot is persisted in Postgres,

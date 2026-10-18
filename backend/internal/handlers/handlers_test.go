@@ -1003,5 +1003,32 @@ func TestAdminHandler_ToggleReceiptIssued_Mock(t *testing.T) {
 	}
 }
 
+func TestAdminHandler_IssueReceipt_Mock(t *testing.T) {
+	handler := NewAdminHandler(nil, &config.Config{}, nil, nil)
+	r := gin.New()
+	r.POST("/admin/users/:id/issue-receipt", handler.IssueReceipt)
+
+	payload := `{"receipt_url":"https://lknpd.nalog.ru/api/v1/receipt/123/print","receipt_number":"CHK-2026-001","amount":6900,"service_name":"Обучение ШАД","send_telegram":true}`
+	req := httptest.NewRequest("POST", "/admin/users/1/issue-receipt", bytes.NewReader([]byte(payload)))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK when issuing receipt in mock mode, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var res map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &res); err != nil {
+		t.Fatalf("failed to decode json response: %v", err)
+	}
+	if res["success"] != true {
+		t.Fatalf("expected success=true, got %v", res["success"])
+	}
+	if res["receipt_issued"] != true {
+		t.Fatalf("expected receipt_issued=true, got %v", res["receipt_issued"])
+	}
+}
+
 
 

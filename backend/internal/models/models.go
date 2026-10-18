@@ -21,6 +21,8 @@ type User struct {
 	ReceiptStatus   string     `gorm:"-" json:"receipt_status,omitempty"`
 	ReceiptIssued   bool       `gorm:"default:false;index" json:"receipt_issued"`
 	ReceiptIssuedAt *time.Time `json:"receipt_issued_at,omitempty"`
+	ReceiptURL      string     `gorm:"size:512" json:"receipt_url,omitempty"`
+	ReceiptNumber   string     `gorm:"size:64" json:"receipt_number,omitempty"`
 	UpsellAuditSent   bool       `gorm:"default:false;index" json:"upsell_audit_sent"`
 	UpsellAuditSentAt *time.Time `json:"upsell_audit_sent_at,omitempty"`
 	HasAuditUpsell    bool       `gorm:"default:false;index" json:"has_audit_upsell"`
@@ -150,4 +152,19 @@ type DripLead struct {
 	IsCompleted     bool      `gorm:"default:false;index" json:"is_completed"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
+}
+
+// FiscalReceipt stores issued official tax/self-employed receipts sent to students.
+type FiscalReceipt struct {
+	ID            uint       `gorm:"primaryKey" json:"id"`
+	UserID        uint       `gorm:"index;not null" json:"user_id"`
+	TelegramID    int64      `gorm:"index;not null" json:"telegram_id"`
+	Amount        float64    `gorm:"type:numeric(10,2);not null" json:"amount"`
+	Tier          string     `gorm:"size:32" json:"tier"`
+	ReceiptURL    string     `gorm:"size:512" json:"receipt_url"`
+	ReceiptNumber string     `gorm:"size:64" json:"receipt_number"`
+	ServiceName   string     `gorm:"size:255" json:"service_name"`
+	SentToBot     bool       `gorm:"default:false" json:"sent_to_bot"`
+	SentAt        *time.Time `json:"sent_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
 }

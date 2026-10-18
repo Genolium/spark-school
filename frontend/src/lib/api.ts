@@ -17,6 +17,8 @@ export interface UserProfile {
   created_at?: string;
   receipt_issued?: boolean;
   receipt_issued_at?: string;
+  receipt_url?: string;
+  receipt_number?: string;
   has_audit_upsell?: boolean;
 }
 
@@ -597,6 +599,57 @@ export const api = {
     }
   },
 
+  // Issue and send official fiscal receipt to student via Telegram bot
+  async issueReceipt(
+    userId: number,
+    payload: {
+      receipt_url?: string;
+      receipt_number?: string;
+      amount?: number;
+      service_name?: string;
+      send_telegram?: boolean;
+    }
+  ): Promise<{
+    success: boolean;
+    message?: string;
+    telegram_sent?: boolean;
+    receipt_issued?: boolean;
+    receipt_issued_at?: string;
+    receipt_url?: string;
+    receipt_number?: string;
+    user?: UserProfile;
+    error?: string;
+  }> {
+    const token = getAdminToken();
+    try {
+      const res = await fetch(`${API_BASE}/admin/users/${userId}/issue-receipt`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(payload),
+        credentials: "include",
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+      const data = await res.json().catch(() => ({}));
+      return { success: false, error: data.error || "Ошибка выписки чека" };
+    } catch {
+      // Mock issue
+      return {
+        success: true,
+        message: "Чек успешно выписан (тестовый режим)",
+        telegram_sent: payload.send_telegram ?? true,
+        receipt_issued: true,
+        receipt_issued_at: new Date().toISOString(),
+        receipt_url: payload.receipt_url,
+        receipt_number: payload.receipt_number,
+      };
+    }
+  },
+
   // Toggle user access in Admin
   async toggleUserAccess(
     userId: number,
@@ -918,6 +971,8 @@ export const api = {
       paid_amount?: number;
       promo_code?: string;
       receipt_issued?: boolean;
+      receipt_url?: string;
+      receipt_number?: string;
     }
   ): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
     const token = getAdminToken();

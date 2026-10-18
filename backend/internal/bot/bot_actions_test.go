@@ -290,4 +290,26 @@ func TestBot_MainMenuKeyboard_UpgradeForActiveUsers(t *testing.T) {
 	}
 }
 
+func TestBot_SendFiscalReceipt(t *testing.T) {
+	service := NewBotService(&config.Config{}, nil)
+	defer service.Stop()
+
+	// 1. Zero Telegram ID returns error
+	if err := service.SendFiscalReceipt(0, "accelerator", 6900, "https://lknpd.nalog.ru/receipt/123", "001", "Курс"); err == nil {
+		t.Error("expected error for zero Telegram ID")
+	}
+
+	// 2. Mock mode executes cleanly
+	err := service.SendFiscalReceipt(12345678, "vip", 14900, "https://lknpd.nalog.ru/receipt/123", "002", "VIP Обучение")
+	if err != nil {
+		t.Errorf("expected nil error in mock mode, got %v", err)
+	}
+
+	// 3. Without receipt URL
+	errNoURL := service.SendFiscalReceipt(12345678, "basic", 3990, "", "003", "")
+	if errNoURL != nil {
+		t.Errorf("expected nil error for receipt without URL, got %v", errNoURL)
+	}
+}
+
 
