@@ -1039,6 +1039,7 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 	case "info_program":
 		star := TgEmoji(EmojiSparkleGreen, "✨")
 		spark := TgEmoji(EmojiStarGreen, "⭐")
+		lightning := TgEmoji(EmojiLightning, "⚡️")
 		num1 := TgEmoji(EmojiNum1, "1️⃣")
 		num2 := TgEmoji(EmojiNum2, "2️⃣")
 		pricing := s.getPricing()
@@ -1054,11 +1055,12 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 • <b>Персональный аудит</b> и созвон 45–60 мин с симуляцией 20-мин интервью с так называемым Илем
 
 <b>Тарифные планы:</b>
+%s <b>Базовый:</b> %s ₽ (%s ₽ по промокоду) <i>[без обратной связи]</i>
 %s <b>Акселератор [Хит]:</b> %s ₽ (%s ₽ по промокоду)
-%s <b>VIP:</b> %s ₽ (%s ₽ по промокоду)`, star, spark, num1,
-			formatPriceRub(int(pricing.AcceleratorPrice)), formatPriceRub(int(pricing.AcceleratorPrice*0.95)),
-			num2,
-			formatPriceRub(int(pricing.VIPPrice)), formatPriceRub(int(pricing.VIPPrice*0.95)))
+%s <b>VIP:</b> %s ₽ (%s ₽ по промокоду)`, star, spark,
+			lightning, formatPriceRub(int(pricing.BasicPrice)), formatPriceRub(int(pricing.BasicPrice*0.95)),
+			num1, formatPriceRub(int(pricing.AcceleratorPrice)), formatPriceRub(int(pricing.AcceleratorPrice*0.95)),
+			num2, formatPriceRub(int(pricing.VIPPrice)), formatPriceRub(int(pricing.VIPPrice*0.95)))
 
 		btnPay := tu.InlineKeyboardButton(fmt.Sprintf("%s Купить курс", "💳")).WithCallbackData("action_payment")
 		btnPromo := tu.InlineKeyboardButton(fmt.Sprintf("%s Применить промокод -5%%", "🎟")).WithCallbackData("promo_enter")

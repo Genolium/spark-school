@@ -252,12 +252,12 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
                 <span>Доступ в закрытый Telegram-канал со всеми материалами</span>
               </div>
               <div className="flex items-start gap-2.5 text-slate-400 dark:text-slate-500">
-                <span className="w-4 h-4 text-center shrink-0 font-bold">—</span>
-                <span className="line-through"><b>БЕЗ обратной связи</b> и проверки заданий</span>
+                <span className="w-4 h-4 text-center shrink-0 font-bold text-rose-500/80">✕</span>
+                <span className="line-through">Обратная связь и личная проверка заданий</span>
               </div>
               <div className="flex items-start gap-2.5 text-slate-400 dark:text-slate-500">
-                <span className="w-4 h-4 text-center shrink-0 font-bold">—</span>
-                <span className="line-through">Без личного Zoom мок-интервью</span>
+                <span className="w-4 h-4 text-center shrink-0 font-bold text-rose-500/80">✕</span>
+                <span className="line-through">Персональный созвон и мок-интервью</span>
               </div>
             </div>
           </div>

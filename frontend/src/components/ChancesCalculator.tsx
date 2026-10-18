@@ -395,7 +395,7 @@ export function ChancesCalculator() {
               </div>
 
               <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white mb-2">
-                Ты проходишь базовые фильтры проекта «так называемый SPARK»!
+                Ты проходишь базовые фильтры отбора программы SPARK!
               </h3>
 
               <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-doc mb-6 leading-relaxed">

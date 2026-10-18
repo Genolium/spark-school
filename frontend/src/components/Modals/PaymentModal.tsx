@@ -480,16 +480,18 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                   <ArrowUpRight className="w-4 h-4" />
                 </a>
 
-                <a
-                  href={tier === "vip" ? "https://web.tribute.tg/p/GID" : "https://web.tribute.tg/p/GIB"}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full py-3 px-4 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-xs font-mono font-bold text-emerald-800 dark:text-emerald-300 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm text-center"
-                >
-                  <CreditCard className="w-4 h-4" />
-                  <span>{tier === "vip" ? "Оплатить VIP (Tribute)" : "Оплатить Акселератор (Tribute)"}</span>
-                  <ArrowUpRight className="w-3.5 h-3.5" />
-                </a>
+                {tier !== "basic" && (
+                  <a
+                    href={tier === "vip" ? "https://web.tribute.tg/p/GID" : "https://web.tribute.tg/p/GIB"}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full py-3 px-4 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-xs font-mono font-bold text-emerald-800 dark:text-emerald-300 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm text-center"
+                  >
+                    <CreditCard className="w-4 h-4" />
+                    <span>{tier === "vip" ? "Оплатить VIP (Tribute)" : "Оплатить Акселератор (Tribute)"}</span>
+                    <ArrowUpRight className="w-3.5 h-3.5" />
+                  </a>
+                )}
               </div>
 
               {/* Payment Details Card for manual SBP */}
