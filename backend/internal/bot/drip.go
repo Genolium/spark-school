@@ -167,6 +167,8 @@ func (s *BotService) sendDripStep1(chatID telego.ChatID, lead models.DripLead) {
 	}
 
 	pricing := s.getPricing()
+	basicPrice := formatPriceRub(int(pricing.BasicPrice))
+	basicPromo := formatPriceRub(int(pricing.BasicPrice * 0.95))
 	accPrice := formatPriceRub(int(pricing.AcceleratorPrice))
 	accPromo := formatPriceRub(int(pricing.AcceleratorPrice * 0.95))
 	vipPrice := formatPriceRub(int(pricing.VIPPrice))
@@ -177,10 +179,11 @@ func (s *BotService) sendDripStep1(chatID telego.ChatID, lead models.DripLead) {
 %s Твой профиль набрал <b>%d/100</b> в расчёте шансов на грант $20,000. Это высокий потенциал, но отбор строгий: из 500+ претендентов грант получают единицы.
 
 %s Для тебя зафиксирована <b>скидка 5%% по промокоду SPARK5</b>:
+• <b>Базовый:</b> <s>%s ₽</s> ➔ <b>%s ₽</b> <i>[без обратной связи]</i>
 • <b>Акселератор:</b> <s>%s ₽</s> ➔ <b>%s ₽</b>
 • <b>VIP:</b> <s>%s ₽</s> ➔ <b>%s ₽</b>
 
-<i>В потоке действует строгий лимит мест на личные Zoom-интервью 1-на-1. Зафиксируй участие со скидкой прямо сейчас:</i>`, lightning, greeting, score, fire, accPrice, accPromo, vipPrice, vipPromo)
+<i>В потоке действует строгий лимит мест на личные Zoom-интервью 1-на-1. Зафиксируй участие со скидкой прямо сейчас:</i>`, lightning, greeting, score, fire, basicPrice, basicPromo, accPrice, accPromo, vipPrice, vipPromo)
 
 	payBtnText := fmt.Sprintf("💳 Оплатить со скидкой (%s ₽)", accPromo)
 	kb := tu.InlineKeyboard(
@@ -262,7 +265,7 @@ func (s *BotService) sendDripStep3(chatID telego.ChatID, lead models.DripLead) {
 			tu.InlineKeyboardButton("⚡️ Занять последнее место (6 555 ₽)").WithCallbackData("action_payment"),
 		),
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("💬 Написать Илье лично").WithURL("https://t.me/ilyan_vas"),
+			tu.InlineKeyboardButton("💬 Написать так называемому Илю").WithURL("https://t.me/ilyan_vas"),
 		),
 	)
 
