@@ -19,6 +19,8 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroPro
     spots_left: 9,
   });
   const [pricing, setPricing] = useState<CoursePricing>({
+    basic_price: 3990,
+    basic_old_price: 5900,
     accelerator_price: 6900,
     accelerator_old_price: 9900,
     vip_price: 14900,
@@ -33,6 +35,14 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroPro
   const formatRub = (num: number) => {
     return (num || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   };
+
+  // Dynamically determine the lowest price among available active tiers
+  const validPrices = [
+    pricing.basic_price,
+    pricing.accelerator_price,
+    pricing.vip_price,
+  ].filter((p): p is number => typeof p === "number" && p > 0);
+  const minPrice = validPrices.length > 0 ? Math.min(...validPrices) : 3990;
 
   return (
     <section id="hero-canvas" className="relative w-full max-w-[1520px] mx-auto px-3 sm:px-6 pt-24 sm:pt-28 pb-8">
@@ -113,7 +123,7 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroPro
 
               {/* Subtitle */}
               <p className="mt-6 text-base sm:text-lg text-white max-w-2xl leading-relaxed font-medium drop-shadow-[0_2px_10px_rgba(0,0,0,0.7)]">
-                Практический проект от финалиста программы SPARK 2026. Разборы победных заявок, шаблоны документов, персональная 45-минутная симуляция интервью в Zoom и закрытые инсайды отбора.
+                Практический проект от финалиста программы SPARK 2026. Разборы победных заявок, шаблоны документов, симуляция 20-минутного интервью на персональном созвоне с обратной связью и закрытые инсайды отбора.
               </p>
 
               {/* High-Contrast Action Buttons */}
@@ -122,7 +132,7 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroPro
                   href="/#pricing"
                   className="btn-primary-mono px-8 py-4 text-sm sm:text-base flex items-center justify-center gap-2.5 active:scale-95 group shadow-2xl font-bold"
                 >
-                  <span>Выбрать тариф от {formatRub(pricing.accelerator_price)} ₽</span>
+                  <span>Выбрать тариф от {formatRub(minPrice)} ₽</span>
                   <ArrowUpRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 stroke-[2.5]" />
                 </a>
 
@@ -168,17 +178,17 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroPro
                     Live Mock-Interview
                   </span>
                   <span className="text-xs text-slate-600 font-semibold">
-                    1-на-1 в Zoom • 45 минут
+                    Созвон 45–60 мин • Разбор 1-на-1
                   </span>
                 </div>
               </div>
 
               <p className="text-xs sm:text-[13px] text-slate-700 leading-relaxed font-normal mb-4">
-                Полная симуляция реального собеседования на английском с разбором стресс-вопросов американской комиссии.
+                Репетиция настоящего 20-минутного интервью на английском с разбором стресс-вопросов и детальной обратной связью на созвоне 45–60 мин.
               </p>
 
               <div className="pt-3.5 border-t border-emerald-500/15 flex items-center justify-end text-xs font-mono">
-                <span className="text-slate-900 font-bold text-xs sm:text-[13px]">1-на-1 в Zoom • 45 мин</span>
+                <span className="text-slate-900 font-bold text-xs sm:text-[13px]">Созвон 45–60 мин • 1-на-1</span>
               </div>
             </motion.div>
 

@@ -792,7 +792,7 @@ export function RevenueAnalyticsCharts({ stats }: RevenueAnalyticsChartsProps) {
                         </div>
                       </div>
                       <div className="text-right text-xs font-mono text-slate-400">
-                        Личный аудит + 45-мин интервью
+                        Личный аудит + созвон 45–60 мин
                       </div>
                     </div>
                   </div>

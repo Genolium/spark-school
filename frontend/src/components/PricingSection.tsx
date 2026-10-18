@@ -130,7 +130,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
                 {formatRub(pricing.accelerator_price)} ₽
               </div>
               <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-doc leading-relaxed mt-2 mb-4">
-                Меньше одного ужина в кафе или 2 часов с репетитором по английскому. Разовая инвестиция за полный цикл подготовки под ключ.
+                Сравнимо со стоимостью нескольких уроков с репетитором по английскому. Разовая инвестиция за полный цикл подготовки под ключ против риска упустить грант $20,000.
               </p>
             </div>
 
@@ -141,7 +141,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
               </div>
               <div className="flex items-center gap-2">
                 <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                <span>45-мин персональный Zoom-интервью 1-на-1</span>
+                <span>Симуляция 20-мин интервью на созвоне 45–60 мин с разбором</span>
               </div>
               <div className="flex items-center gap-2">
                 <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
@@ -328,7 +328,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
               </div>
               <div className="flex items-start gap-2.5 font-medium text-emerald-800 dark:text-emerald-300">
                 <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                <span>45-мин персональное Zoom-интервью 1-на-1 с финалистом SPARK 2026</span>
+                <span>Персональный созвон 45–60 мин: симуляция настоящего 20-мин интервью + детальный разбор ошибок</span>
               </div>
               <div className="flex items-start gap-2.5">
                 <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />

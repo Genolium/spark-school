@@ -147,7 +147,7 @@ export function PlatformFeatures() {
 
           <div className="mt-6 pt-4 border-t border-emerald-500/15 dark:border-white/10 flex items-center justify-between text-xs font-mono text-slate-600 dark:text-slate-300">
             <span>Живой разбор 1-на-1</span>
-            <span className="text-slate-900 dark:text-white font-medium">45 мин Zoom</span>
+            <span className="text-slate-900 dark:text-white font-medium">созвон 45–60 мин</span>
           </div>
         </motion.div>
 
