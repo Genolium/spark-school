@@ -23,7 +23,6 @@ export default function HomePage() {
   const [selectedTier, setSelectedTier] = useState<PricingTier>("accelerator");
 
   const handleOpenPayment = (tier: PricingTier = "accelerator") => {
-    setSelectedTier(tier);
     let refCode = "";
     if (typeof window !== "undefined") {
       try {
@@ -44,15 +43,8 @@ export default function HomePage() {
       startParam = `pay_${tier}_ref_${cleanRef}`;
     }
     const botUrl = `https://t.me/spark_prep_bot?start=${startParam}`;
-
-    // On mobile devices, open Telegram bot directly; on desktop, open full PaymentModal
     if (typeof window !== "undefined") {
-      const isMobile = window.innerWidth < 768 || /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-      if (isMobile) {
-        window.location.href = botUrl;
-      } else {
-        setIsPaymentOpen(true);
-      }
+      window.location.href = botUrl;
     }
   };
 
