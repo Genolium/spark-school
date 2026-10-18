@@ -360,7 +360,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
         : String(coursePricing.accelerator_price);
       setReceiptAmount(defaultAmount);
       const tierLabel = student.tier === "vip" ? "VIP" : student.tier === "basic" ? "Базовый" : "Акселератор";
-      setReceiptServiceName(`Информационно-консультационные услуги по подготовке к поступлению в ШАД (Тариф «${tierLabel}»)`);
+      setReceiptServiceName(`Информационно-консультационные услуги программы «так называемый SPARK 2027» (Тариф «${tierLabel}»)`);
       setReceiptSendTelegram(true);
     } else {
       setIssueReceiptTarget(null);
@@ -368,7 +368,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
       setReceiptUrl("");
       setReceiptNumber("");
       setReceiptAmount(String(coursePricing.accelerator_price));
-      setReceiptServiceName("Информационно-консультационные услуги по подготовке к поступлению в ШАД (Тариф «Акселератор»)");
+      setReceiptServiceName("Информационно-консультационные услуги программы «так называемый SPARK 2027» (Тариф «Акселератор»)");
       setReceiptSendTelegram(true);
     }
     setIsIssueModalOpen(true);
@@ -386,7 +386,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
       : String(coursePricing.accelerator_price);
     setReceiptAmount(defaultAmount);
     const tierLabel = student.tier === "vip" ? "VIP" : student.tier === "basic" ? "Базовый" : "Акселератор";
-    setReceiptServiceName(`Информационно-консультационные услуги по подготовке к поступлению в ШАД (Тариф «${tierLabel}»)`);
+    setReceiptServiceName(`Информационно-консультационные услуги программы «так называемый SPARK 2027» (Тариф «${tierLabel}»)`);
   };
 
   const handleConfirmIssueReceipt = async (e: React.FormEvent) => {
@@ -1408,7 +1408,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
                     type="text"
                     value={receiptServiceName}
                     onChange={(e) => setReceiptServiceName(e.target.value)}
-                    placeholder="Информационно-консультационные услуги по подготовке к поступлению в ШАД"
+                    placeholder="Информационно-консультационные услуги программы «так называемый SPARK 2027»"
                     className={`${inputCls} mt-1`}
                   />
                 </label>

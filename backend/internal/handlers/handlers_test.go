@@ -1008,7 +1008,7 @@ func TestAdminHandler_IssueReceipt_Mock(t *testing.T) {
 	r := gin.New()
 	r.POST("/admin/users/:id/issue-receipt", handler.IssueReceipt)
 
-	payload := `{"receipt_url":"https://lknpd.nalog.ru/api/v1/receipt/123/print","receipt_number":"CHK-2026-001","amount":6900,"service_name":"Обучение ШАД","send_telegram":true}`
+	payload := `{"receipt_url":"https://lknpd.nalog.ru/api/v1/receipt/123/print","receipt_number":"CHK-2026-001","amount":6900,"service_name":"Обучение SPARK 2027","send_telegram":true}`
 	req := httptest.NewRequest("POST", "/admin/users/1/issue-receipt", bytes.NewReader([]byte(payload)))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()

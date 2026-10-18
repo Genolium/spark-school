@@ -1809,7 +1809,7 @@ func (s *BotService) SendFiscalReceipt(telegramID int64, tier string, amount flo
 	}
 
 	if strings.TrimSpace(serviceName) == "" {
-		serviceName = fmt.Sprintf("Информационно-консультационные услуги по подготовке к поступлению в ШАД (Тариф %s)", tierDisplay)
+		serviceName = fmt.Sprintf("Информационно-консультационные услуги программы «так называемый SPARK 2027» (Тариф %s)", tierDisplay)
 	}
 
 	msk := time.FixedZone("MSK", 3*3600)
