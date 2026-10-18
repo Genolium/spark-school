@@ -100,9 +100,9 @@ func PaymentKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboardMark
 			vipPrice = int(pricing[0].VIPPrice)
 		}
 	}
-	basicText := fmt.Sprintf("⚡️ Базовый (%s ₽) — без куратора", formatPriceRub(basicPrice))
-	accText := fmt.Sprintf("🏛 Оплатить Акселератор (%s ₽) — СБП", formatPriceRub(accPrice))
-	vipText := fmt.Sprintf("👑 Оплатить VIP (%s ₽) — СБП", formatPriceRub(vipPrice))
+	basicText := fmt.Sprintf("1️⃣ Базовый (%s ₽) — без куратора", formatPriceRub(basicPrice))
+	accText := fmt.Sprintf("2️⃣ Акселератор (%s ₽) — СБП", formatPriceRub(accPrice))
+	vipText := fmt.Sprintf("3️⃣ VIP (%s ₽) — СБП", formatPriceRub(vipPrice))
 
 	return tu.InlineKeyboard(
 		tu.InlineKeyboardRow(
@@ -145,9 +145,9 @@ func PromoAppliedKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboar
 			vipPrice = base - (base*5)/100
 		}
 	}
-	basicText := fmt.Sprintf("⚡️ Базовый (%s ₽) — со скидкой 5%%", formatPriceRub(basicPrice))
-	accText := fmt.Sprintf("🏛 Оплатить Акселератор (%s ₽) — СБП", formatPriceRub(accPrice))
-	vipText := fmt.Sprintf("👑 Оплатить VIP (%s ₽) — СБП", formatPriceRub(vipPrice))
+	basicText := fmt.Sprintf("1️⃣ Базовый (%s ₽) — со скидкой 5%%", formatPriceRub(basicPrice))
+	accText := fmt.Sprintf("2️⃣ Акселератор (%s ₽) — СБП", formatPriceRub(accPrice))
+	vipText := fmt.Sprintf("3️⃣ VIP (%s ₽) — СБП", formatPriceRub(vipPrice))
 
 	return tu.InlineKeyboard(
 		tu.InlineKeyboardRow(
@@ -189,9 +189,9 @@ func YooKassaSelectTierKeyboard(hasPromo bool, pricing ...models.CoursePricing) 
 		accPrice = accPrice - (accPrice*5)/100
 		vipPrice = vipPrice - (vipPrice*5)/100
 	}
-	basicText := fmt.Sprintf("⚡️ Оплатить Базовый (%s ₽) — СБП", formatPriceRub(basicPrice))
-	accText := fmt.Sprintf("🏛 Оплатить Акселератор (%s ₽) — СБП", formatPriceRub(accPrice))
-	vipText := fmt.Sprintf("👑 Оплатить VIP (%s ₽) — СБП", formatPriceRub(vipPrice))
+	basicText := fmt.Sprintf("1️⃣ Оплатить Базовый (%s ₽) — СБП", formatPriceRub(basicPrice))
+	accText := fmt.Sprintf("2️⃣ Оплатить Акселератор (%s ₽) — СБП", formatPriceRub(accPrice))
+	vipText := fmt.Sprintf("3️⃣ Оплатить VIP (%s ₽) — СБП", formatPriceRub(vipPrice))
 	return tu.InlineKeyboard(
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton(basicText).WithCallbackData("pay_sbp_basic"),

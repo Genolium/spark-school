@@ -20,6 +20,7 @@ const (
 	EmojiCard        = "5380098557225222946" // 💳 Credit card / Payment
 	EmojiNum1        = "5348266445765632009" // 1️⃣ Number 1
 	EmojiNum2        = "5348034027905375724" // 2️⃣ Number 2
+	EmojiNum3        = "5348392090738908279" // 3️⃣ Number 3
 	EmojiPinRed      = "5386376601116098709" // 📍 Location pin
 	EmojiPinPush     = "5386429751336383258" // 📌 Pushpin
 	EmojiIdea        = "5386435274664326894" // 💡 Lightbulb

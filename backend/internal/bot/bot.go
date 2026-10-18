@@ -542,11 +542,10 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 
 	sparkle := TgEmoji(EmojiStarGreen, "✨")
 	clipGreen := TgEmoji(EmojiPaperclipGreen, "📎")
-	bullet := TgEmoji(EmojiStarBigGreen, "⭐")
 
-	lightning := TgEmoji(EmojiLightning, "⚡️")
 	num1 := TgEmoji(EmojiNum1, "1️⃣")
 	num2 := TgEmoji(EmojiNum2, "2️⃣")
+	num3 := TgEmoji(EmojiNum3, "3️⃣")
 	paperclip := TgEmoji(EmojiPaperclip, "📎")
 
 	pricing := s.getPricing()
@@ -573,9 +572,9 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 		text = fmt.Sprintf(`%s <b>Промокод успешно активирован! Скидка %d%%</b>
 
 <b>Стоимость со скидкой %d%%:</b>
-%s Базовый: <b>%s ₽</b> (скидка %s ₽) <i>[без обратной связи]</i>
-%s Акселератор: <b>%s ₽</b> (скидка %s ₽)
-%s VIP: <b>%s ₽</b> (скидка %s ₽)
+%s <b>Базовый:</b> <b>%s ₽</b> (скидка %s ₽) <i>[без обратной связи]</i>
+%s <b>Акселератор [Хит]:</b> <b>%s ₽</b> (скидка %s ₽)
+%s <b>VIP:</b> <b>%s ₽</b> (скидка %s ₽)
 
 🏛 <b>Прямой перевод по СБП (0%% без комиссии):</b>
 • Банк: <b>%s</b>
@@ -586,7 +585,7 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 %s <b>Как получить доступ:</b>
 1. Выберите тариф кнопкой ниже или переведите нужную сумму по СБП.
 2. <b>Отправьте скриншот чека прямо сюда в чат!</b>
-3. Бот проверит чек и сразу выдаст вам одноразовую ссылку в закрытый канал потока.`, sparkle, pct, pct, bullet, formatPriceRub(basicPrice), formatPriceRub(basicDiscount), bullet, formatPriceRub(accPrice), formatPriceRub(accDiscount), bullet, formatPriceRub(vipPrice), formatPriceRub(vipDiscount), bankName, clipGreen)
+3. Бот проверит чек и сразу выдаст вам одноразовую ссылку в закрытый канал потока.`, sparkle, pct, pct, num1, formatPriceRub(basicPrice), formatPriceRub(basicDiscount), num2, formatPriceRub(accPrice), formatPriceRub(accDiscount), num3, formatPriceRub(vipPrice), formatPriceRub(vipDiscount), bankName, clipGreen)
 		keyboard = PromoAppliedKeyboard(pricing)
 	} else {
 		basicPromoPrice := basicBase - (basicBase*5)/100
@@ -596,7 +595,7 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 		text = fmt.Sprintf(`%s <b>Бронирование места в проекте «так называемый SPARK»</b>
 
 <b>Тарифы участия:</b>
-⚡️ <b>Базовый:</b> %s ₽ (по промокоду: <b>%s ₽</b>) <i>[Без обратной связи]</i>
+%s <b>Базовый:</b> %s ₽ (по промокоду: <b>%s ₽</b>) <i>[без обратной связи]</i>
 %s <b>Акселератор [Хит]:</b> %s ₽ (по промокоду: <b>%s ₽</b>)
 %s <b>VIP:</b> %s ₽ (по промокоду: <b>%s ₽</b>) <i>[Строго ограниченное количество мест]</i>
 
@@ -609,7 +608,7 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 %s <b>Как получить доступ:</b>
 1. Выберите тариф кнопкой ниже или сделайте перевод по номеру телефона через СБП.
 2. <b>Отправьте скриншот чека прямо сюда в чат бота!</b>
-3. Бот зафиксирует платёж и сразу выдаст вам персональную ссылку в закрытый канал потока.`, lightning, formatPriceRub(basicBase), formatPriceRub(basicPromoPrice), num1, formatPriceRub(accBase), formatPriceRub(accPromoPrice), num2, formatPriceRub(vipBase), formatPriceRub(vipPromoPrice), bankName, paperclip)
+3. Бот зафиксирует платёж и сразу выдаст вам персональную ссылку в закрытый канал потока.`, sparkle, num1, formatPriceRub(basicBase), formatPriceRub(basicPromoPrice), num2, formatPriceRub(accBase), formatPriceRub(accPromoPrice), num3, formatPriceRub(vipBase), formatPriceRub(vipPromoPrice), bankName, paperclip)
 		keyboard = PaymentKeyboard(pricing)
 	}
 
@@ -677,6 +676,11 @@ func (s *BotService) handleSbpPayment(chatID telego.ChatID, from *telego.User, t
 		bankName = "БСПБ (Банк «Санкт-Петербург»)"
 	}
 
+	offerCondition := "услуга считается оказанной в полном объёме в момент предоставления доступа к закрытому каналу и материалам курса"
+	if tier == "accelerator" || tier == "vip" {
+		offerCondition = "услуга считается оказанной при добавлении в закрытый канал и одном раунде обратной связи"
+	}
+
 	sbpText := fmt.Sprintf(`🏛 <b>Оплата тарифа «%s» через СБП (0%% без комиссии)</b>
 
 💰 <b>Сумма к переводу: %s ₽</b>%s
@@ -692,9 +696,9 @@ func (s *BotService) handleSbpPayment(chatID telego.ChatID, from *telego.User, t
 2. <b>Отправьте скриншот чека прямо в этот чат бота!</b>
 3. Бот проверит чек и сразу выдаст вам персональную ссылку в закрытый канал потока.
 
-ℹ️ <i>Оплачивая участие, вы соглашаетесь с условиями <a href="https://so-called-spark.ru/offer">Публичной оферты</a> (услуга считается оказанной при добавлении в закрытый канал и одном раунде обратной связи) и <a href="https://so-called-spark.ru/privacy">Политики конфиденциальности</a>.</i>
+ℹ️ <i>Оплачивая участие, вы соглашаетесь с условиями <a href="https://so-called-spark.ru/offer">Публичной оферты</a> (%s) и <a href="https://so-called-spark.ru/privacy">Политики конфиденциальности</a>.</i>
 
-<i>При любых вопросах вы всегда можете написать так называемому Илю (@ilyan_vas).</i>`, tierTitle, formatPriceRub(price), discountText, bankName, strings.ToUpper(tier))
+<i>При любых вопросах вы всегда можете написать так называемому Илю (@ilyan_vas).</i>`, tierTitle, formatPriceRub(price), discountText, bankName, strings.ToUpper(tier), offerCondition)
 
 	kb := tu.InlineKeyboard(
 		tu.InlineKeyboardRow(
@@ -1039,9 +1043,9 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 	case "info_program":
 		star := TgEmoji(EmojiSparkleGreen, "✨")
 		spark := TgEmoji(EmojiStarGreen, "⭐")
-		lightning := TgEmoji(EmojiLightning, "⚡️")
 		num1 := TgEmoji(EmojiNum1, "1️⃣")
 		num2 := TgEmoji(EmojiNum2, "2️⃣")
+		num3 := TgEmoji(EmojiNum3, "3️⃣")
 		pricing := s.getPricing()
 
 		text := fmt.Sprintf(`%s <b>Программа сопровождения «так называемый SPARK»</b> %s
@@ -1058,9 +1062,9 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 %s <b>Базовый:</b> %s ₽ (%s ₽ по промокоду) <i>[без обратной связи]</i>
 %s <b>Акселератор [Хит]:</b> %s ₽ (%s ₽ по промокоду)
 %s <b>VIP:</b> %s ₽ (%s ₽ по промокоду)`, star, spark,
-			lightning, formatPriceRub(int(pricing.BasicPrice)), formatPriceRub(int(pricing.BasicPrice*0.95)),
-			num1, formatPriceRub(int(pricing.AcceleratorPrice)), formatPriceRub(int(pricing.AcceleratorPrice*0.95)),
-			num2, formatPriceRub(int(pricing.VIPPrice)), formatPriceRub(int(pricing.VIPPrice*0.95)))
+			num1, formatPriceRub(int(pricing.BasicPrice)), formatPriceRub(int(pricing.BasicPrice*0.95)),
+			num2, formatPriceRub(int(pricing.AcceleratorPrice)), formatPriceRub(int(pricing.AcceleratorPrice*0.95)),
+			num3, formatPriceRub(int(pricing.VIPPrice)), formatPriceRub(int(pricing.VIPPrice*0.95)))
 
 		btnPay := tu.InlineKeyboardButton(fmt.Sprintf("%s Купить курс", "💳")).WithCallbackData("action_payment")
 		btnPromo := tu.InlineKeyboardButton(fmt.Sprintf("%s Применить промокод -5%%", "🎟")).WithCallbackData("promo_enter")
