@@ -5,6 +5,7 @@ import { motion } from "framer-motion";
 import { Check, ArrowUpRight, ShieldCheck, CreditCard, Sparkles, Crown, TrendingUp } from "lucide-react";
 import { api, PlacesStats, CoursePricing } from "@/lib/api";
 import { DeadlineCountdown } from "./DeadlineCountdown";
+import { trackFunnelStep } from "@/lib/analytics";
 
 interface PricingSectionProps {
   onOpenPayment?: (tier?: "basic" | "accelerator" | "vip") => void;
@@ -264,7 +265,10 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
 
           <button
             type="button"
-            onClick={() => onOpenPayment?.("basic")}
+            onClick={() => {
+              trackFunnelStep("pricing_select_tier", { tier: "basic", price: basicPrice });
+              onOpenPayment?.("basic");
+            }}
             className="w-full py-3.5 px-4 rounded-2xl bento-pill hover:bg-emerald-500/15 border border-emerald-500/25 text-xs sm:text-sm font-mono font-bold text-slate-900 dark:text-white flex items-center justify-center gap-2 transition-all active:scale-95"
           >
             <span>Выбрать Базовый ({formatRub(basicPrice)} ₽)</span>
@@ -343,7 +347,10 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
 
           <button
             type="button"
-            onClick={() => onOpenPayment?.("accelerator")}
+            onClick={() => {
+              trackFunnelStep("pricing_select_tier", { tier: "accelerator", price: pricing.accelerator_price });
+              onOpenPayment?.("accelerator");
+            }}
             className="btn-primary-mono w-full py-4 text-sm font-bold flex items-center justify-center gap-2 group shadow-xl active:scale-95"
           >
             <span>Занять место за {formatRub(pricing.accelerator_price)} ₽</span>
@@ -412,7 +419,10 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
 
           <button
             type="button"
-            onClick={() => onOpenPayment?.("vip")}
+            onClick={() => {
+              trackFunnelStep("pricing_select_tier", { tier: "vip", price: pricing.vip_price });
+              onOpenPayment?.("vip");
+            }}
             className="w-full py-3.5 px-4 rounded-2xl bento-pill hover:bg-amber-500/15 border border-amber-500/30 text-xs sm:text-sm font-mono font-bold text-amber-700 dark:text-amber-300 flex items-center justify-center gap-2 transition-all active:scale-95"
           >
             <span>Выбрать VIP ({formatRub(pricing.vip_price)} ₽)</span>

@@ -185,13 +185,15 @@ func (s *BotService) sendDripStep1(chatID telego.ChatID, lead models.DripLead) {
 
 <i>В потоке действует строгий лимит мест на личные Zoom-интервью 1-на-1. Зафиксируй участие со скидкой прямо сейчас:</i>`, lightning, greeting, score, fire, basicPrice, basicPromo, accPrice, accPromo, vipPrice, vipPromo)
 
-	payBtnText := fmt.Sprintf("💳 Оплатить со скидкой (%s ₽)", accPromo)
 	kb := tu.InlineKeyboard(
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton(payBtnText).WithCallbackData("action_payment"),
+			tu.InlineKeyboardButton(fmt.Sprintf("⚡️ Оплатить Акселератор (%s ₽)", accPromo)).WithCallbackData("pay_drip_accelerator"),
 		),
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("💬 Задать вопрос так называемому Илю").WithURL("https://t.me/ilyan_vas"),
+			tu.InlineKeyboardButton(fmt.Sprintf("👑 Выбрать VIP (%s ₽)", vipPromo)).WithCallbackData("pay_drip_vip"),
+		),
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("💬 Написать куратору").WithURL("https://t.me/spark_prep_bot"),
 		),
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu"),
@@ -207,6 +209,10 @@ func (s *BotService) sendDripStep2(chatID telego.ChatID, lead models.DripLead) {
 	star := TgEmoji(EmojiStarGreen, "⭐")
 	books := TgEmoji(EmojiBooks, "📚")
 
+	pricing := s.getPricing()
+	accPromo := formatPriceRub(int(pricing.AcceleratorPrice * 0.95))
+	vipPromo := formatPriceRub(int(pricing.VIPPrice * 0.95))
+
 	text := fmt.Sprintf(`%s <b>Разбор кейса: Почему 90%% срезаются на эссе (и как написать хук)</b>
 
 Привет! Главная ошибка 9 из 10 кандидатов на грант в США — писать скучное академическое сочинение: <i>«Я с детства мечтал изучать науку...»</i>. 
@@ -221,17 +227,17 @@ func (s *BotService) sendDripStep2(chatID telego.ChatID, lead models.DripLead) {
 • Созвон 45–60 мин: симуляция 20-мин интервью 1-на-1 с разбором
 • Пошаговый визовый гайд J-1
 
-Забирай место в потоке, пока набор открыт:`, books, idea, star)
+Забирай место в потоке со скидкой 5%%:`, books, idea, star)
 
 	kb := tu.InlineKeyboard(
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("⚡️ Занять место в Акселераторе").WithCallbackData("action_payment"),
+			tu.InlineKeyboardButton(fmt.Sprintf("⚡️ Акселератор (%s ₽)", accPromo)).WithCallbackData("pay_drip_accelerator"),
 		),
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("👑 Выбрать VIP-менторинг").WithCallbackData("action_payment"),
+			tu.InlineKeyboardButton(fmt.Sprintf("👑 VIP-менторинг (%s ₽)", vipPromo)).WithCallbackData("pay_drip_vip"),
 		),
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("💬 Консультация с так называемым Илем").WithURL("https://t.me/ilyan_vas"),
+			tu.InlineKeyboardButton("💬 Консультация с куратором").WithURL("https://t.me/spark_prep_bot"),
 		),
 	)
 
@@ -246,6 +252,10 @@ func (s *BotService) sendDripStep3(chatID telego.ChatID, lead models.DripLead) {
 	if lead.FirstName != "" {
 		greeting = fmt.Sprintf("Привет, %s!", lead.FirstName)
 	}
+
+	pricing := s.getPricing()
+	accPromo := formatPriceRub(int(pricing.AcceleratorPrice * 0.95))
+	vipPromo := formatPriceRub(int(pricing.VIPPrice * 0.95))
 
 	text := fmt.Sprintf(`⏳ <b>Финальное напоминание: места в потоке SPARK закрываются</b>
 
@@ -262,10 +272,13 @@ func (s *BotService) sendDripStep3(chatID telego.ChatID, lead models.DripLead) {
 
 	kb := tu.InlineKeyboard(
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("⚡️ Занять последнее место (6 555 ₽)").WithCallbackData("action_payment"),
+			tu.InlineKeyboardButton(fmt.Sprintf("⚡️ Акселератор (%s ₽)", accPromo)).WithCallbackData("pay_drip_accelerator"),
 		),
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("💬 Написать так называемому Илю").WithURL("https://t.me/ilyan_vas"),
+			tu.InlineKeyboardButton(fmt.Sprintf("👑 Выбрать VIP (%s ₽)", vipPromo)).WithCallbackData("pay_drip_vip"),
+		),
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("💬 Написать куратору").WithURL("https://t.me/spark_prep_bot"),
 		),
 	)
 

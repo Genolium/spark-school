@@ -16,8 +16,15 @@
     "next": "14",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "sharp": "^0.33.5",
+    "sharp": "^0.35.5",
     "tailwind-merge": "^2.5.2"
+  },
+  "overrides": {
+    "sharp": "^0.35.5",
+    "postcss": "^8.5.29",
+    "braces": "^3.0.3",
+    "micromatch": "^4.0.8",
+    "postcss-selector-parser": "^7.1.7"
   },
   "devDependencies": {
     "@types/canvas-confetti": "^1.9.0",
@@ -25,7 +32,7 @@
     "@types/react": "^18.3.10",
     "@types/react-dom": "^18.3.0",
     "autoprefixer": "^10.4.20",
-    "postcss": "^8.4.47",
+    "postcss": "^8.5.29",
     "tailwindcss": "^3.4.13",
     "tailwindcss-animate": "^1.0.7",
     "typescript": "^5.6.2"

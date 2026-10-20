@@ -3,6 +3,7 @@
 import React from "react";
 import { motion } from "framer-motion";
 import { GraduationCap, Home, Plane, Wallet, CheckCircle2 } from "lucide-react";
+import { trackFunnelStep } from "@/lib/analytics";
 
 interface SocialProofStripProps {
   onOpenChances?: () => void;
@@ -102,7 +103,10 @@ export function SocialProofStrip({ onOpenChances }: SocialProofStripProps) {
               <div className="pt-2">
                 <button
                   type="button"
-                  onClick={onOpenChances}
+                  onClick={() => {
+                    trackFunnelStep("diagnostic_start", { source: "social_proof_strip" });
+                    onOpenChances();
+                  }}
                   className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bento-pill hover:bg-emerald-500/15 border border-emerald-500/30 text-xs sm:text-sm font-mono font-bold text-slate-900 dark:text-white flex items-center justify-center gap-2.5 transition-all shadow-sm hover:shadow active:scale-95 group"
                 >
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />

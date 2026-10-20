@@ -1,6 +1,7 @@
 package database
 
 import (
+	"fmt"
 	"log"
 	"strings"
 	"time"
@@ -104,6 +105,11 @@ func Init(cfg *config.Config) *gorm.DB {
 		&models.DripLead{},
 		&models.CoursePricing{},
 		&models.FiscalReceipt{},
+		&models.StudentSubmission{},
+		&models.StudentProgress{},
+		&models.CallBooking{},
+		&models.ProcessedTelegramUpdate{},
+		&models.AnalyticsEvent{},
 	}
 	for _, m := range modelsToMigrate {
 		if mErr := db.AutoMigrate(m); mErr != nil {
@@ -113,7 +119,6 @@ func Init(cfg *config.Config) *gorm.DB {
 
 	// Backfill existing active students with defaults if empty
 	db.Exec("UPDATE users SET tier = 'accelerator' WHERE tier IS NULL OR tier = ''")
-	db.Exec("UPDATE users SET paid_amount = 6900.00 WHERE has_access = true AND (paid_amount IS NULL OR paid_amount = 0)")
 
 	// Ensure basic_price and basic_old_price columns exist in course_pricings
 	db.Exec("ALTER TABLE IF EXISTS course_pricings ADD COLUMN IF NOT EXISTS basic_price NUMERIC(10,2) DEFAULT 3990.00;")
@@ -125,6 +130,12 @@ func Init(cfg *config.Config) *gorm.DB {
 	db.Exec("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS upsell_audit_sent BOOLEAN DEFAULT FALSE;")
 	db.Exec("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS upsell_audit_sent_at TIMESTAMP WITH TIME ZONE;")
 	db.Exec("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS has_audit_upsell BOOLEAN DEFAULT FALSE;")
+	db.Exec("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS audit_credits INT DEFAULT 0;")
+	db.Exec("UPDATE users SET audit_credits = 1 WHERE has_audit_upsell = true AND audit_credits = 0;")
+
+	// Enforce DB-level unique partial indexes to physically prevent double booking and multi-booking race conditions
+	db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_active_slot_key ON call_bookings (slot_key) WHERE status = 'confirmed' AND cancelled_at IS NULL;")
+	db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_active_user_booking ON call_bookings (telegram_id) WHERE status = 'confirmed' AND cancelled_at IS NULL;")
 
 	// Ensure receipt_url and receipt_number columns exist in users table
 	db.Exec("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS receipt_url VARCHAR(512);")
@@ -141,6 +152,9 @@ func Init(cfg *config.Config) *gorm.DB {
 		WHERE pr.telegram_id > 0 
 		  AND NOT EXISTS (SELECT 1 FROM users u WHERE u.telegram_id = pr.telegram_id)
 	`)
+
+	// Perform robust historical reconciliation into payment_transactions
+	ReconcileHistoricalSales(db)
 
 	// Clean up legacy LMS tables if they exist from prior schema
 	_ = db.Migrator().DropTable("user_progress", "lessons", "modules")
@@ -200,4 +214,82 @@ func SeedDefaultData(db *gorm.DB, cfg *config.Config) {
 	}
 
 	log.Println("Seeding complete.")
+}
+
+// ReconcileHistoricalSales reconciles and backfills historical sales into payment_transactions
+// using strict mathematical difference logic to prevent losing initial purchases when upgrades exist.
+func ReconcileHistoricalSales(db *gorm.DB) {
+	if db == nil {
+		return
+	}
+
+	// 1. Backfill all approved receipts first
+	var receipts []models.PaymentReceipt
+	db.Where("status = 'approved' AND amount > 0").Find(&receipts)
+	for _, pr := range receipts {
+		receiptPID := fmt.Sprintf("RECEIPT_%d", pr.ID)
+		var count int64
+		db.Model(&models.PaymentTransaction{}).Where("payment_id = ?", receiptPID).Count(&count)
+		if count == 0 {
+			tier := strings.ToLower(strings.TrimSpace(pr.Tier))
+			if tier == "" {
+				tier = "accelerator"
+			}
+			pt := models.PaymentTransaction{
+				PaymentID:  receiptPID,
+				TelegramID: pr.TelegramID,
+				Username:   pr.Username,
+				Amount:     pr.Amount,
+				Currency:   "RUB",
+				Tier:       tier,
+				Status:     "SUCCESS",
+				PayMethod:  "sbp_receipt",
+				CreatedAt:  pr.CreatedAt,
+			}
+			db.Create(&pt)
+		}
+	}
+
+	// 2. For every user with paid_amount > 0 (even if access was subsequently revoked):
+	var users []models.User
+	db.Where("paid_amount > 0 AND role != 'admin'").Find(&users)
+	for _, u := range users {
+		type SumResult struct {
+			Total float64
+		}
+		var sumRes SumResult
+		db.Model(&models.PaymentTransaction{}).
+			Select("COALESCE(SUM(amount), 0) as total").
+			Where("telegram_id = ? AND status = 'SUCCESS'", u.TelegramID).
+			Scan(&sumRes)
+
+		diff := u.PaidAmount - sumRes.Total
+		if diff > 0.01 {
+			histPID := fmt.Sprintf("HIST_USER_%d", u.ID)
+			var existing models.PaymentTransaction
+			if err := db.Where("payment_id = ?", histPID).First(&existing).Error; err != nil {
+				txTime := u.CreatedAt
+				if u.AccessGrantedAt != nil {
+					txTime = *u.AccessGrantedAt
+				}
+				tier := strings.ToLower(strings.TrimSpace(u.Tier))
+				if tier == "" {
+					tier = "accelerator"
+				}
+				pt := models.PaymentTransaction{
+					PaymentID:  histPID,
+					TelegramID: u.TelegramID,
+					Username:   u.Username,
+					Amount:     diff,
+					Currency:   "RUB",
+					Tier:       tier,
+					Status:     "SUCCESS",
+					PayMethod:  "historical_access",
+					PromoCode:  u.PromoCode,
+					CreatedAt:  txTime,
+				}
+				db.Create(&pt)
+			}
+		}
+	}
 }

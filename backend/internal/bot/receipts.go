@@ -147,12 +147,12 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) bool {
 	}
 
 	if u := s.syncTelegramUser(msg.From); u != nil {
-		if !isUpgrade {
+		if !u.HasAccess && !isUpgrade {
 			u.Tier = chosenTier
 		}
-		if session.PromoCode != "" {
+		if session.PromoCode != "" && u.PromoCode == "" {
 			u.PromoCode = session.PromoCode
-		} else if u.PromoCode == "" && (amount == 6555.0 || amount == 14155.0) {
+		} else if u.PromoCode == "" && (amount == 6555.0 || amount == 14155.0 || amount == 3790.0) {
 			u.PromoCode = "SPARK5"
 		}
 		s.db.Save(u)

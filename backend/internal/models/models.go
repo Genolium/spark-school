@@ -26,6 +26,7 @@ type User struct {
 	UpsellAuditSent   bool       `gorm:"default:false;index" json:"upsell_audit_sent"`
 	UpsellAuditSentAt *time.Time `json:"upsell_audit_sent_at,omitempty"`
 	HasAuditUpsell    bool       `gorm:"default:false;index" json:"has_audit_upsell"`
+	AuditCredits      int        `gorm:"default:0" json:"audit_credits"`
 	CreatedAt       time.Time  `json:"created_at"`
 	UpdatedAt       time.Time  `json:"updated_at"`
 
@@ -167,4 +168,64 @@ type FiscalReceipt struct {
 	SentToBot     bool       `gorm:"default:false" json:"sent_to_bot"`
 	SentAt        *time.Time `json:"sent_at,omitempty"`
 	CreatedAt     time.Time  `json:"created_at"`
+}
+
+// StudentSubmission tracks essays, resumes, and video pitches submitted for curator review.
+type StudentSubmission struct {
+	ID           uint       `gorm:"primaryKey" json:"id"`
+	UserID       uint       `gorm:"index;not null" json:"user_id"`
+	TelegramID   int64      `gorm:"index;not null" json:"telegram_id"`
+	Username     string     `gorm:"size:64" json:"username"`
+	WorkType     string     `gorm:"size:32;not null" json:"work_type"` // 'essay', 'resume', 'video', 'positioning'
+	Content      string     `gorm:"type:text;not null" json:"content"`   // Google Doc link or submitted text
+	Version      int        `gorm:"default:1" json:"version"`
+	Status       string     `gorm:"size:32;default:'pending';index" json:"status"` // 'pending', 'reviewing', 'reviewed', 'changes_requested'
+	CuratorNotes string     `gorm:"type:text" json:"curator_notes,omitempty"`
+	SubmittedAt  time.Time  `json:"submitted_at"`
+	ReviewedAt   *time.Time `json:"reviewed_at,omitempty"`
+}
+
+// StudentProgress tracks completion milestones across the 6-step preparation journey.
+type StudentProgress struct {
+	ID         uint      `gorm:"primaryKey" json:"id"`
+	TelegramID int64     `gorm:"uniqueIndex;not null" json:"telegram_id"`
+	Step1Done  bool      `gorm:"default:false" json:"step1_done"` // 1. Narrative Spine & Positioning
+	Step2Done  bool      `gorm:"default:false" json:"step2_done"` // 2. 1-Page US Resume (Action Verbs)
+	Step3Done  bool      `gorm:"default:false" json:"step3_done"` // 3. 500-Word Essay
+	Step4Done  bool      `gorm:"default:false" json:"step4_done"` // 4. Video Pitch (80-100s)
+	Step5Done  bool      `gorm:"default:false" json:"step5_done"` // 5. Academic Transcripts & TAL Check
+	Step6Done  bool      `gorm:"default:false" json:"step6_done"` // 6. 20-min Zoom Interview Simulation & DET
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+// CallBooking tracks scheduled Zoom consultation and simulation interviews.
+type CallBooking struct {
+	ID          uint       `gorm:"primaryKey" json:"id"`
+	UserID      uint       `gorm:"index;not null" json:"user_id"`
+	TelegramID  int64      `gorm:"index;not null" json:"telegram_id"`
+	Username    string     `gorm:"size:64" json:"username"`
+	SlotKey     string     `gorm:"size:64;not null;index" json:"slot_key"`
+	SlotTime    string     `gorm:"size:128;not null" json:"slot_time"`
+	CallType    string     `gorm:"size:64;default:'zoom_simulation'" json:"call_type"`
+	Status      string     `gorm:"size:32;default:'confirmed';index" json:"status"` // 'confirmed', 'completed', 'cancelled'
+	ZoomLink    string     `gorm:"size:255" json:"zoom_link"`
+	CreatedAt   time.Time  `json:"created_at"`
+	CancelledAt *time.Time `json:"cancelled_at,omitempty"`
+}
+
+// ProcessedTelegramUpdate stores deduplicated Telegram update IDs that have been successfully processed.
+type ProcessedTelegramUpdate struct {
+	UpdateID  int       `gorm:"primaryKey" json:"update_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// AnalyticsEvent stores full-funnel conversion events.
+type AnalyticsEvent struct {
+	ID        uint      `gorm:"primaryKey" json:"id"`
+	VisitorID string    `gorm:"size:64;index" json:"visitor_id,omitempty"`
+	Step      string    `gorm:"size:64;index;not null" json:"step"`
+	Metadata  string    `gorm:"type:text" json:"metadata,omitempty"`
+	IP        string    `gorm:"size:45" json:"ip,omitempty"`
+	UserAgent string    `gorm:"size:255" json:"user_agent,omitempty"`
+	CreatedAt time.Time `gorm:"index" json:"created_at"`
 }

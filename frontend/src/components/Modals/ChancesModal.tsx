@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Calculator, CheckCircle2, AlertTriangle, ArrowRight, RotateCcw, Send, Sparkles } from "lucide-react";
+import { trackFunnelStep } from "@/lib/analytics";
 
 interface ChancesModalProps {
   isOpen: boolean;
@@ -14,6 +15,12 @@ export function ChancesModal({ isOpen, onClose }: ChancesModalProps) {
   const [ageCitizenshipValid, setAgeCitizenshipValid] = useState<boolean | null>(null);
   const [universityYear, setUniversityYear] = useState<"1-2" | "3" | "senior" | null>(null);
   const [englishLevel, setEnglishLevel] = useState<"b1" | "b2" | "c1" | null>(null);
+
+  useEffect(() => {
+    if (isOpen) {
+      trackFunnelStep("diagnostic_start");
+    }
+  }, [isOpen]);
 
   const getScoreData = () => {
     switch (englishLevel) {
@@ -54,6 +61,18 @@ export function ChancesModal({ isOpen, onClose }: ChancesModalProps) {
 
   const scoreData = getScoreData();
 
+  React.useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    if (isOpen) {
+      window.addEventListener("keydown", handleKeyDown);
+    }
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [isOpen, onClose]);
+
   if (!isOpen) return null;
 
   return (
@@ -70,6 +89,9 @@ export function ChancesModal({ isOpen, onClose }: ChancesModalProps) {
 
         {/* Modal Window */}
         <motion.div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="chances-modal-title"
           initial={{ opacity: 0, scale: 0.95, y: 15 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 15 }}
@@ -95,7 +117,7 @@ export function ChancesModal({ isOpen, onClose }: ChancesModalProps) {
               <Calculator className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
               <span>Интерактивный экспресс-тест</span>
             </div>
-            <h2 className="font-editorial text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
+            <h2 id="chances-modal-title" className="font-editorial text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
               Оцени свои шансы на грант $20,000
             </h2>
             <p className="mt-1.5 text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-doc">
@@ -312,6 +334,7 @@ export function ChancesModal({ isOpen, onClose }: ChancesModalProps) {
                     type="button"
                     onClick={() => {
                       setEnglishLevel("b1");
+                      trackFunnelStep("diagnostic_complete", { level: "b1", score: 75, universityYear });
                       setStep(4);
                     }}
                     className="w-full p-4 rounded-2xl border border-slate-200 hover:border-emerald-500 bg-slate-50 hover:bg-emerald-50/70 dark:bg-white/5 dark:border-white/10 dark:hover:bg-emerald-500/10 text-slate-900 dark:text-white font-medium text-sm transition-all flex items-center justify-between group active:scale-95 cursor-pointer shadow-xs"
@@ -331,6 +354,7 @@ export function ChancesModal({ isOpen, onClose }: ChancesModalProps) {
                     type="button"
                     onClick={() => {
                       setEnglishLevel("b2");
+                      trackFunnelStep("diagnostic_complete", { level: "b2", score: 88, universityYear });
                       setStep(4);
                     }}
                     className="w-full p-4 rounded-2xl border border-slate-200 hover:border-teal-500 bg-slate-50 hover:bg-teal-50/70 dark:bg-white/5 dark:border-white/10 dark:hover:bg-teal-500/10 text-slate-900 dark:text-white font-medium text-sm transition-all flex items-center justify-between group active:scale-95 cursor-pointer shadow-xs"
@@ -350,6 +374,7 @@ export function ChancesModal({ isOpen, onClose }: ChancesModalProps) {
                     type="button"
                     onClick={() => {
                       setEnglishLevel("c1");
+                      trackFunnelStep("diagnostic_complete", { level: "c1", score: 96, universityYear });
                       setStep(4);
                     }}
                     className="w-full p-4 rounded-2xl border border-emerald-300 hover:border-emerald-600 bg-emerald-50/80 hover:bg-emerald-100/80 dark:bg-emerald-500/10 dark:border-emerald-500/30 dark:hover:bg-emerald-500/20 text-slate-900 dark:text-white font-medium text-sm transition-all flex items-center justify-between group active:scale-95 cursor-pointer shadow-xs"
@@ -431,9 +456,34 @@ export function ChancesModal({ isOpen, onClose }: ChancesModalProps) {
                   Ты проходишь базовые фильтры отбора!
                 </h3>
 
-                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-doc mb-6 leading-relaxed">
+                <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-doc mb-3 leading-relaxed">
                   {scoreData.description}
                 </p>
+
+                {/* Actionable Diagnostic Steps */}
+                <div className="mt-2 mb-5 text-left space-y-2">
+                  <div className="text-[11px] font-mono font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-1">
+                    Персональный план подготовки (3 ключевых шага):
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10">
+                    <div className="text-[11px] font-mono font-bold text-emerald-600 dark:text-emerald-400">1. Нарратив и TAL-безопасность</div>
+                    <div className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">
+                      Сквозная линия заявки: связь текущих проектов с целями программы без запрещенных тем списка Technology Alert List.
+                    </div>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10">
+                    <div className="text-[11px] font-mono font-bold text-teal-600 dark:text-teal-400">2. Американское резюме на 1 страницу</div>
+                    <div className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">
+                      Формат США с глаголами действия (Action Verbs) и измеримыми результатами вместо списка обязанностей.
+                    </div>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10">
+                    <div className="text-[11px] font-mono font-bold text-amber-600 dark:text-amber-400">3. Эссе на 500 слов и видеовизитка</div>
+                    <div className="text-[11px] text-slate-600 dark:text-slate-300 mt-0.5">
+                      Раскрытие темы столкновения мнений в академической среде и запись динамичного видеоответа на 80–100 секунд.
+                    </div>
+                  </div>
+                </div>
 
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
                   <a

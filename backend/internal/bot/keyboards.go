@@ -63,6 +63,10 @@ func MainMenuKeyboard(frontendURL string, options ...any) *telego.InlineKeyboard
 
 	rows = append(rows,
 		[]telego.InlineKeyboardButton{
+			tu.InlineKeyboardButton("📋 План подготовки").WithCallbackData("action_plan"),
+			tu.InlineKeyboardButton("🎙 Тренажёр интервью").WithCallbackData("action_interview"),
+		},
+		[]telego.InlineKeyboardButton{
 			tu.InlineKeyboardButton(buyText).WithCallbackData("action_payment"),
 			tu.InlineKeyboardButton("🎟 Промокод -5%").WithCallbackData("promo_enter"),
 		},
@@ -118,7 +122,7 @@ func PaymentKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboardMark
 			tu.InlineKeyboardButton("🎟 Применить промокод -5%").WithCallbackData("promo_enter"),
 		),
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("💬 Написать так называемому Илю").WithURL("https://t.me/ilyan_vas"),
+			tu.InlineKeyboardButton("💬 Поддержка куратора в Telegram").WithURL("https://t.me/spark_prep_bot"),
 		),
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu"),
@@ -160,7 +164,7 @@ func PromoAppliedKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboar
 			tu.InlineKeyboardButton(vipText).WithCallbackData("pay_sbp_vip"),
 		),
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("💬 Написать так называемому Илю в Telegram").WithURL("https://t.me/ilyan_vas"),
+			tu.InlineKeyboardButton("💬 Поддержка куратора в Telegram").WithURL("https://t.me/spark_prep_bot"),
 		),
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu"),

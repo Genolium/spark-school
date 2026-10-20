@@ -16,6 +16,8 @@ import { Footer } from "@/components/Footer";
 import { PaymentModal, PricingTier } from "@/components/Modals/PaymentModal";
 import { ChancesModal } from "@/components/Modals/ChancesModal";
 import { ReferralTracker } from "@/components/ReferralTracker";
+import { DemoLessonSection } from "@/components/DemoLessonSection";
+import { trackFunnelStep } from "@/lib/analytics";
 
 export default function HomePage() {
   const [isPaymentOpen, setIsPaymentOpen] = useState(false);
@@ -23,6 +25,7 @@ export default function HomePage() {
   const [selectedTier, setSelectedTier] = useState<PricingTier>("accelerator");
 
   const handleOpenPayment = (tier: PricingTier = "accelerator") => {
+    trackFunnelStep("bot_handoff", { tier });
     let refCode = "";
     if (typeof window !== "undefined") {
       try {
@@ -49,6 +52,7 @@ export default function HomePage() {
   };
 
   useEffect(() => {
+    trackFunnelStep("landing_view");
     const scrollToHash = () => {
       if (typeof window !== "undefined" && window.location.hash) {
         const id = window.location.hash.replace("#", "");
@@ -101,6 +105,12 @@ export default function HomePage() {
 
       {/* Screen 6: The Author (так называемый Иль Story & J-1 Experience) */}
       <AuthorSection />
+
+      {/* Screen 6.5: Demo Lesson & Curator Feedback Preview */}
+      <DemoLessonSection
+        onOpenDiagnostic={() => setIsChancesOpen(true)}
+        onSelectPricing={() => handleOpenPayment("accelerator")}
+      />
 
       {/* Screen 7: 3-Tier Pricing Matrix & Scarcity */}
       <PricingSection onOpenPayment={handleOpenPayment} />

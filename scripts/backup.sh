@@ -8,7 +8,23 @@ BACKUP_FILE="${BACKUP_DIR}/spark_db_${TIMESTAMP}.sql.gz"
 mkdir -p "${BACKUP_DIR}"
 
 echo "[$(date -Iseconds)] Starting PostgreSQL database backup..."
-PGPASSWORD="${POSTGRES_PASSWORD}" pg_dump -h "${POSTGRES_HOST:-postgres}" -U "${POSTGRES_USER:-spark_user}" -d "${POSTGRES_DB:-spark_db}" | gzip > "${BACKUP_FILE}"
+TMP_FILE="${BACKUP_DIR}/spark_db_${TIMESTAMP}.sql"
+PGPASSWORD="${POSTGRES_PASSWORD}" pg_dump -h "${POSTGRES_HOST:-postgres}" -U "${POSTGRES_USER:-spark_user}" -d "${POSTGRES_DB:-spark_db}" > "${TMP_FILE}"
+
+if [ ! -s "${TMP_FILE}" ]; then
+    echo "[$(date -Iseconds)] ERROR: pg_dump failed or generated an empty file!"
+    rm -f "${TMP_FILE}"
+    exit 1
+fi
+
+gzip -c "${TMP_FILE}" > "${BACKUP_FILE}"
+rm -f "${TMP_FILE}"
+
+if ! gzip -t "${BACKUP_FILE}"; then
+    echo "[$(date -Iseconds)] ERROR: gzip archive integrity test failed!"
+    rm -f "${BACKUP_FILE}"
+    exit 1
+fi
 
 FILE_SIZE=$(du -h "${BACKUP_FILE}" | cut -f1)
 echo "[$(date -Iseconds)] Backup created successfully: ${BACKUP_FILE} (${FILE_SIZE})"

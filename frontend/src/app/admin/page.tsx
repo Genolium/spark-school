@@ -102,7 +102,7 @@ export default function AdminPage() {
   const handleToggleAccess = async (
     userId: number,
     currentAccess: boolean,
-    extra?: { tier?: "accelerator" | "vip"; paid_amount?: number; promo_code?: string }
+    extra?: { tier?: "basic" | "accelerator" | "vip"; paid_amount?: number; promo_code?: string }
   ) => {
     const nextAccess = !currentAccess;
     setStudents((prev) =>

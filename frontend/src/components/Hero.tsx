@@ -5,6 +5,7 @@ import { BlurImage } from "./BlurImage";
 import { motion } from "framer-motion";
 import { ArrowUpRight, CheckCircle2, Video, FileText } from "lucide-react";
 import { api, PlacesStats, CoursePricing } from "@/lib/api";
+import { trackFunnelStep } from "@/lib/analytics";
 
 interface HeroProps {
   onOpenPayment?: () => void;
@@ -130,6 +131,7 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroPro
               <div className="mt-8 flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
                 <a
                   href="/#pricing"
+                  onClick={() => trackFunnelStep("pricing_select_tier", { source: "hero_cta" })}
                   className="btn-primary-mono px-8 py-4 text-sm sm:text-base flex items-center justify-center gap-2.5 active:scale-95 group shadow-2xl font-bold"
                 >
                   <span>Выбрать тариф от {formatRub(minPrice)} ₽</span>
@@ -138,7 +140,10 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroPro
 
                 <button
                   type="button"
-                  onClick={onOpenChances}
+                  onClick={() => {
+                    trackFunnelStep("diagnostic_start", { source: "hero_cta" });
+                    onOpenChances?.();
+                  }}
                   className="px-7 py-4 rounded-full text-xs sm:text-sm flex items-center justify-center gap-2.5 active:scale-95 transition-all font-semibold bg-white/20 hover:bg-white/30 text-white border border-white/35 backdrop-blur-xl shadow-xl group cursor-pointer"
                 >
                   <span>Рассчитать шансы</span>

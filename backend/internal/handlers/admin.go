@@ -117,6 +117,7 @@ type DailyStat struct {
 	Revenue           float64 `json:"revenue"`
 	Purchases         int     `json:"purchases"`
 	CumulativeRevenue float64 `json:"cumulative_revenue"`
+	BasicCount        int     `json:"basic_count"`
 	AcceleratorCount  int     `json:"accelerator_count"`
 	VIPCount          int     `json:"vip_count"`
 }
@@ -160,10 +161,8 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 	var pendingPayoutsSum float64
 	h.db.Model(&models.PayoutRequest{}).Where("status = 'pending'").Select("COALESCE(SUM(amount), 0)").Scan(&pendingPayoutsSum)
 
-	// Calculate accurate gross revenue: sum of paid_amount for all active students with access
+	// Calculate accurate gross revenue from actual financial transactions (payments and receipts)
 	var grossVolume float64
-	var activeUsers []models.User
-	h.db.Model(&models.User{}).Where("has_access = true AND role != ?", "admin").Find(&activeUsers)
 	pricing := models.GetCoursePricing(h.db)
 
 	msk := time.FixedZone("MSK", 3*3600)
@@ -204,85 +203,91 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 
 	var preMonthRevenue float64
 
+	// 1. Gather all actual confirmed financial operations
+	type TransactionRecord struct {
+		Amount    float64
+		Tier      string
+		CreatedAt time.Time
+		PromoCode string
+	}
+	var txRecords []TransactionRecord
+
+	var pts []models.PaymentTransaction
+	h.db.Where("status = 'SUCCESS'").Order("created_at ASC").Find(&pts)
+	for _, pt := range pts {
+		t := strings.ToLower(strings.TrimSpace(pt.Tier))
+		if t == "" {
+			t = "accelerator"
+		}
+		txRecords = append(txRecords, TransactionRecord{
+			Amount:    pt.Amount,
+			Tier:      t,
+			CreatedAt: pt.CreatedAt,
+			PromoCode: pt.PromoCode,
+		})
+	}
+
+	var activeUsers []models.User
+	h.db.Model(&models.User{}).Where("has_access = true AND role != ?", "admin").Find(&activeUsers)
+
+	var freeAccessCount int64
 	for _, u := range activeUsers {
-		var userPaid float64
-		if u.PaidAmount > 0 {
-			userPaid = u.PaidAmount
-		} else {
-			// Fallback based on tier
-			discountFactor := 1.0
-			if u.PromoCode != "" {
-				var promo models.PromoCode
-				pct := 5
-				if err := h.db.Where("UPPER(code) = ?", strings.ToUpper(u.PromoCode)).First(&promo).Error; err == nil && promo.DiscountPercent > 0 {
-					pct = promo.DiscountPercent
-				}
-				discountFactor = 1.0 - float64(pct)/100.0
-			}
-
-			if strings.ToLower(u.Tier) == "vip" {
-				userPaid = pricing.VIPPrice * discountFactor
-			} else if strings.ToLower(u.Tier) == "basic" {
-				userPaid = pricing.BasicPrice * discountFactor
-			} else {
-				userPaid = pricing.AcceleratorPrice * discountFactor
-			}
+		if u.PaidAmount <= 0 {
+			freeAccessCount++
 		}
+	}
 
-		grossVolume += userPaid
-
-		// Tier stats
-		if strings.ToLower(u.Tier) == "vip" {
+	for _, tx := range txRecords {
+		grossVolume += tx.Amount
+		switch tx.Tier {
+		case "vip":
 			vipCount++
-			vipRevenue += userPaid
-		} else if strings.ToLower(u.Tier) == "basic" {
+			vipRevenue += tx.Amount
+		case "basic":
 			basicCount++
-			basicRevenue += userPaid
-		} else {
+			basicRevenue += tx.Amount
+		default:
 			acceleratorCount++
-			acceleratorRevenue += userPaid
+			acceleratorRevenue += tx.Amount
 		}
 
-		// Promo stats
-		if u.PromoCode != "" {
+		if tx.PromoCode != "" {
 			promoUsageCount++
-			if strings.ToLower(u.Tier) == "vip" {
+			if tx.Tier == "vip" {
 				promoSavedAmount += pricing.VIPPrice * 0.05
-			} else if strings.ToLower(u.Tier) == "basic" {
+			} else if tx.Tier == "basic" {
 				promoSavedAmount += pricing.BasicPrice * 0.05
 			} else {
 				promoSavedAmount += pricing.AcceleratorPrice * 0.05
 			}
 		}
 
-		// Date grouping in MSK
-		payTime := u.CreatedAt.In(msk)
-		if u.AccessGrantedAt != nil {
-			payTime = u.AccessGrantedAt.In(msk)
-		}
-
-		if payTime.After(todayStart) || payTime.Equal(todayStart) {
-			todayRevenue += userPaid
+		opTime := tx.CreatedAt.In(msk)
+		if opTime.After(todayStart) || opTime.Equal(todayStart) {
+			todayRevenue += tx.Amount
 			todayPurchases++
 		}
-		if payTime.After(weekStart) || payTime.Equal(weekStart) {
-			weekRevenue += userPaid
+		if opTime.After(weekStart) || opTime.Equal(weekStart) {
+			weekRevenue += tx.Amount
 		}
-		if payTime.After(monthStart) || payTime.Equal(monthStart) {
-			monthRevenue += userPaid
+		if opTime.After(monthStart) || opTime.Equal(monthStart) {
+			monthRevenue += tx.Amount
 		}
 
-		dateKey := payTime.Format("2006-01-02")
+		dateKey := opTime.Format("2006-01-02")
 		if stat, ok := dailyMap[dateKey]; ok {
-			stat.Revenue += userPaid
+			stat.Revenue += tx.Amount
 			stat.Purchases++
-			if strings.ToLower(u.Tier) == "vip" {
+			switch tx.Tier {
+			case "vip":
 				stat.VIPCount++
-			} else {
+			case "basic":
+				stat.BasicCount++
+			default:
 				stat.AcceleratorCount++
 			}
-		} else if payTime.Before(monthStart) {
-			preMonthRevenue += userPaid
+		} else if opTime.Before(monthStart) {
+			preMonthRevenue += tx.Amount
 		}
 	}
 
@@ -297,8 +302,8 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 	}
 
 	averageOrderValue := 0.0
-	if activeStudents > 0 {
-		averageOrderValue = grossVolume / float64(activeStudents)
+	if len(txRecords) > 0 {
+		averageOrderValue = grossVolume / float64(len(txRecords))
 	}
 
 	conversionRate := 0.0
@@ -318,6 +323,7 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"gross_volume":          grossVolume,
 		"active_students":       activeStudents,
+		"free_access_count":     freeAccessCount,
 		"total_registered":      totalUsers,
 		"conversion_rate":       conversionRate,
 		"pending_payouts_count": pendingPayoutsCount,
@@ -960,29 +966,52 @@ func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 		}
 		if req.PaidAmount != nil {
 			user.PaidAmount = *req.PaidAmount
+		} else if req.HasAccess && user.PaidAmount == 0 {
+			pricing := models.GetCoursePricing(h.db)
+			tierLower := strings.ToLower(strings.TrimSpace(user.Tier))
+			switch tierLower {
+			case "vip":
+				if user.PromoCode != "" {
+					user.PaidAmount = pricing.VIPPrice * 0.95
+				} else {
+					user.PaidAmount = pricing.VIPPrice
+				}
+			case "basic":
+				if user.PromoCode != "" {
+					user.PaidAmount = pricing.BasicPrice * 0.95
+				} else {
+					user.PaidAmount = pricing.BasicPrice
+				}
+			default:
+				if user.PromoCode != "" {
+					user.PaidAmount = pricing.AcceleratorPrice * 0.95
+				} else {
+					user.PaidAmount = pricing.AcceleratorPrice
+				}
+			}
 		}
 		if req.HasAccess && user.AccessGrantedAt == nil {
 			now := time.Now()
 			user.AccessGrantedAt = &now
-			if user.PaidAmount == 0 {
-				pricing := models.GetCoursePricing(h.db)
-				if user.Tier == "vip" {
-					if user.PromoCode != "" {
-						user.PaidAmount = pricing.VIPPrice * 0.95
-					} else {
-						user.PaidAmount = pricing.VIPPrice
-					}
-				} else {
-					if user.PromoCode != "" {
-						user.PaidAmount = pricing.AcceleratorPrice * 0.95
-					} else {
-						user.PaidAmount = pricing.AcceleratorPrice
-					}
-				}
-			}
 		}
 		if err := tx.Save(&user).Error; err != nil {
 			return err
+		}
+
+		// Record manual paid activation in payment_transactions for unified financial stats
+		if req.HasAccess && !wasActive && user.PaidAmount > 0 {
+			tx.Create(&models.PaymentTransaction{
+				PaymentID:  fmt.Sprintf("MANUAL_%d_%d", user.ID, time.Now().Unix()),
+				TelegramID: user.TelegramID,
+				Username:   user.Username,
+				Amount:     user.PaidAmount,
+				Currency:   "RUB",
+				Tier:       user.Tier,
+				Status:     "SUCCESS",
+				PayMethod:  "admin_manual",
+				PromoCode:  user.PromoCode,
+				CreatedAt:  time.Now(),
+			})
 		}
 
 		// Only redeem promo and distribute commission on initial access activation

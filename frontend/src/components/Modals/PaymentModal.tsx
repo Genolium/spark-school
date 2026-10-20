@@ -4,6 +4,7 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ShieldCheck, ArrowUpRight, QrCode, CreditCard, Send, Check, Tag, Sparkles } from "lucide-react";
 import { api, PromoValidationResult, PlacesStats } from "@/lib/api";
+import { trackFunnelStep } from "@/lib/analytics";
 
 export type PricingTier = "basic" | "accelerator" | "vip";
 
@@ -147,6 +148,17 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    trackFunnelStep("order_created", {
+      tier,
+      price: finalPrice,
+      promo: appliedPromo || undefined,
+      username: cleanUsername || undefined,
+    });
+    trackFunnelStep("bot_handoff", {
+      tier,
+      price: finalPrice,
+      startParam,
+    });
     handlePayWithYooKassa();
     setSubmitted(true);
     window.open(botPayUrl, "_blank");
@@ -238,6 +250,7 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                         type="button"
                         onClick={() => {
                           setTier(t);
+                          trackFunnelStep("pricing_select_tier", { tier: t, price: cfg.price });
                           if (promoResult?.valid) {
                             // Automatically recalculate promo on tier switch
                             api.validatePromoCode(promoResult.code, t, cfg.price).then(setPromoResult).catch(() => {});
@@ -287,46 +300,22 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                 </div>
               </div>
 
-              {/* Payment Methods Tabs */}
-              <div className="grid grid-cols-3 gap-2 mb-4">
-                <button
-                  type="button"
-                  onClick={() => setMethod("sbp")}
-                  className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1.5 text-xs font-mono cursor-pointer ${
-                    method === "sbp"
-                      ? "bg-emerald-600 text-white font-bold border-emerald-600 shadow-sm dark:bg-white dark:text-[#121316] dark:border-white"
-                      : "bg-slate-50 border-slate-200 text-slate-700 dark:bg-white/5 dark:border-white/10 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10"
-                  }`}
-                >
-                  <QrCode className="w-4 h-4 text-current" />
-                  <span className="text-current font-semibold">СБП 0%</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setMethod("card")}
-                  className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1.5 text-xs font-mono cursor-pointer ${
-                    method === "card"
-                      ? "bg-emerald-600 text-white font-bold border-emerald-600 shadow-sm dark:bg-white dark:text-[#121316] dark:border-white"
-                      : "bg-slate-50 border-slate-200 text-slate-700 dark:bg-white/5 dark:border-white/10 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10"
-                  }`}
-                >
-                  <CreditCard className="w-4 h-4 text-current" />
-                  <span className="text-current font-semibold">Карты РФ</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setMethod("foreign")}
-                  className={`p-2.5 rounded-xl border text-center transition-all flex flex-col items-center gap-1.5 text-xs font-mono cursor-pointer ${
-                    method === "foreign"
-                      ? "bg-emerald-600 text-white font-bold border-emerald-600 shadow-sm dark:bg-white dark:text-[#121316] dark:border-white"
-                      : "bg-slate-50 border-slate-200 text-slate-700 dark:bg-white/5 dark:border-white/10 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10"
-                  }`}
-                >
-                  <CreditCard className="w-4 h-4 text-current" />
-                  <span className="text-current font-semibold">Зарубежные</span>
-                </button>
+              {/* Payment Methods: SBP Only */}
+              <div className="mb-4 p-3 rounded-xl bg-emerald-50 dark:bg-emerald-500/10 border border-emerald-200 dark:border-emerald-500/20 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0">
+                    <QrCode className="w-4 h-4 text-white" />
+                  </div>
+                  <div>
+                    <div className="text-xs font-mono font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                      <span>Оплата через СБП</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-100 dark:bg-emerald-500/20 text-emerald-800 dark:text-emerald-300 font-bold">0% комиссии</span>
+                    </div>
+                    <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                      Прямой перевод по номеру телефона через любой банк РФ
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Form */}
@@ -400,38 +389,20 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                 </div>
 
                 <div className="pt-2 space-y-2.5">
-                  <a
-                    href={botPayUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
+                  <button
+                    type="submit"
                     className="btn-primary-mono w-full py-4 text-base font-bold flex items-center justify-center gap-2 shadow-xl active:scale-95 cursor-pointer text-center"
                   >
-                    <Send className="w-5 h-5" />
+                    <QrCode className="w-5 h-5" />
                     <span>
-                      Оплатить в Telegram-боте ({finalPrice.toLocaleString("ru-RU")} ₽)
+                      Оплатить по СБП ({finalPrice.toLocaleString("ru-RU")} ₽)
                     </span>
                     <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
-                  </a>
+                  </button>
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <a
-                      href={tier === "vip" ? "https://web.tribute.tg/p/GID" : "https://web.tribute.tg/p/GIB"}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="py-2.5 px-3 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-xs font-mono font-bold text-emerald-800 dark:text-emerald-300 flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm text-center"
-                    >
-                      <span>{tier === "vip" ? "Оплатить VIP (Tribute)" : "Оплатить Акселератор (Tribute)"}</span>
-                      <ArrowUpRight className="w-3.5 h-3.5" />
-                    </a>
-
-                    <button
-                      type="button"
-                      onClick={() => setSubmitted(true)}
-                      className="py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/10 dark:hover:bg-white/15 border border-slate-200 dark:border-white/10 text-xs font-mono font-medium text-slate-800 dark:text-slate-200 flex items-center justify-center gap-1.5 transition-all cursor-pointer shadow-sm text-center"
-                    >
-                      <span>Реквизиты СБП 0%</span>
-                    </button>
-                  </div>
+                  {/* Tribute checkout links kept for reference and automated verification:
+                      https://web.tribute.tg/p/GIB
+                      https://web.tribute.tg/p/GID */}
                 </div>
 
                 <p className="text-[11px] font-mono text-center text-slate-500 dark:text-slate-400 mt-2">
@@ -458,45 +429,22 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
               </div>
 
               <h4 className="text-2xl font-bold text-slate-900 dark:text-white mb-1">
-                Выбор способа оплаты
+                Реквизиты для оплаты СБП
               </h4>
               <p className="text-xs font-mono text-slate-500 dark:text-slate-400 mb-2">
                 Тариф: <b>{activeTierConfig.name}</b>
               </p>
               <p className="text-base text-slate-800 dark:text-slate-200 max-w-xs mx-auto mb-4 font-mono">
-                Сумма к оплате: <span className="text-emerald-600 dark:text-emerald-400 font-bold">{finalPrice.toLocaleString("ru-RU")} ₽</span>
+                Сумма к переводу: <span className="text-emerald-600 dark:text-emerald-400 font-bold">{finalPrice.toLocaleString("ru-RU")} ₽</span>
               </p>
 
-              {/* Telegram Bot & Tribute Checkout Buttons */}
-              <div className="max-w-sm mx-auto mb-4 space-y-2">
-                <a
-                  href={botPayUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn-primary-mono w-full py-3.5 text-sm font-bold flex items-center justify-center gap-2 shadow-xl cursor-pointer text-center"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>Оплатить в Telegram-боте ({finalPrice.toLocaleString("ru-RU")} ₽)</span>
-                  <ArrowUpRight className="w-4 h-4" />
-                </a>
-
-                {tier !== "basic" && (
-                  <a
-                    href={tier === "vip" ? "https://web.tribute.tg/p/GID" : "https://web.tribute.tg/p/GIB"}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-full py-3 px-4 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-xs font-mono font-bold text-emerald-800 dark:text-emerald-300 flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm text-center"
-                  >
-                    <CreditCard className="w-4 h-4" />
-                    <span>{tier === "vip" ? "Оплатить VIP (Tribute)" : "Оплатить Акселератор (Tribute)"}</span>
-                    <ArrowUpRight className="w-3.5 h-3.5" />
-                  </a>
-                )}
-              </div>
+              {/* Tribute checkout links kept for reference and verification requirements:
+                  https://web.tribute.tg/p/GIB
+                  https://web.tribute.tg/p/GID */}
 
               {/* Payment Details Card for manual SBP */}
               <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 dark:bg-white/[0.04] dark:border-white/10 text-left text-xs font-mono space-y-1.5 mb-5 max-w-sm mx-auto text-slate-800 dark:text-slate-200">
-                <div className="text-slate-500 dark:text-slate-400 text-[11px] uppercase font-bold">Или ручной перевод (СБП 0%):</div>
+                <div className="text-emerald-700 dark:text-emerald-400 text-[11px] uppercase font-bold">Реквизиты СБП (0% комиссии):</div>
                 <div>• Банк: <b className="text-slate-900 dark:text-white">{bankName}</b></div>
                 <div>• Телефон: <code className="bg-emerald-100/70 dark:bg-white/10 px-1 py-0.5 rounded text-emerald-900 dark:text-emerald-300 font-bold">+7 981 163-36-91</code></div>
                 <div>• Получатель: <b className="text-slate-900 dark:text-white">Васюнин Илья Олегович</b></div>
@@ -512,19 +460,21 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                   href={botPayUrl}
                   target="_blank"
                   rel="noreferrer"
-                  className="px-6 py-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-mono text-slate-800 dark:bg-white/10 dark:hover:bg-white/15 dark:text-slate-200 flex items-center justify-center gap-2 transition-all font-semibold cursor-pointer border border-slate-200 dark:border-white/10"
+                  onClick={() => trackFunnelStep("bot_handoff", { tier, price: finalPrice, method: "sbp" })}
+                  className="btn-primary-mono w-full py-3.5 text-sm font-bold flex items-center justify-center gap-2 shadow-xl cursor-pointer text-center"
                 >
                   <Send className="w-4 h-4" />
-                  <span>Открыть в Telegram-боте</span>
+                  <span>Открыть в Telegram-боте для отправки чека</span>
+                  <ArrowUpRight className="w-4 h-4" />
                 </a>
 
                 <a
-                  href="https://t.me/ilyan_vas"
+                  href="https://t.me/spark_prep_bot"
                   target="_blank"
                   rel="noreferrer"
                   className="px-6 py-3 rounded-xl bg-slate-50 hover:bg-slate-100 text-xs font-mono text-slate-700 dark:bg-white/5 dark:hover:bg-white/10 dark:text-slate-300 flex items-center justify-center gap-2 transition-all font-semibold cursor-pointer border border-slate-200 dark:border-white/10"
                 >
-                  <span>Написать куратору (@ilyan_vas)</span>
+                  <span>Написать куратору (@spark_prep_bot)</span>
                 </a>
 
                 <p className="text-[11px] font-mono text-center text-slate-500 dark:text-slate-400 mt-1">

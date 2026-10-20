@@ -1,14 +1,19 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Calculator, CheckCircle2, AlertTriangle, ArrowRight, RotateCcw, Send, Sparkles } from "lucide-react";
+import { trackFunnelStep } from "@/lib/analytics";
 
 export function ChancesCalculator() {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [ageCitizenshipValid, setAgeCitizenshipValid] = useState<boolean | null>(null);
   const [universityYear, setUniversityYear] = useState<"1-2" | "3" | "senior" | null>(null);
   const [englishLevel, setEnglishLevel] = useState<"b1" | "b2" | "c1" | null>(null);
+
+  useEffect(() => {
+    trackFunnelStep("diagnostic_start");
+  }, []);
 
   const getScoreData = () => {
     switch (englishLevel) {
@@ -279,6 +284,7 @@ export function ChancesCalculator() {
                   type="button"
                   onClick={() => {
                     setEnglishLevel("b1");
+                    trackFunnelStep("diagnostic_complete", { level: "b1", score: 75, universityYear });
                     setStep(4);
                   }}
                   className="w-full p-4 rounded-2xl bento-card-dark border border-emerald-500/25 hover:border-emerald-500 bg-white/50 dark:bg-white/5 hover:bg-emerald-500/10 text-slate-900 dark:text-white font-medium text-sm transition-all flex items-center justify-between group active:scale-95"
@@ -298,6 +304,7 @@ export function ChancesCalculator() {
                   type="button"
                   onClick={() => {
                     setEnglishLevel("b2");
+                    trackFunnelStep("diagnostic_complete", { level: "b2", score: 88, universityYear });
                     setStep(4);
                   }}
                   className="w-full p-4 rounded-2xl bento-card-dark border border-emerald-500/35 hover:border-emerald-500 bg-emerald-500/[0.06] hover:bg-emerald-500/15 text-slate-900 dark:text-white font-medium text-sm transition-all flex items-center justify-between group active:scale-95"
@@ -317,6 +324,7 @@ export function ChancesCalculator() {
                   type="button"
                   onClick={() => {
                     setEnglishLevel("c1");
+                    trackFunnelStep("diagnostic_complete", { level: "c1", score: 96, universityYear });
                     setStep(4);
                   }}
                   className="w-full p-4 rounded-2xl bento-card-dark border border-emerald-500/40 hover:border-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/20 text-slate-900 dark:text-white font-medium text-sm transition-all flex items-center justify-between group active:scale-95"
@@ -395,12 +403,37 @@ export function ChancesCalculator() {
               </div>
 
               <h3 className="text-xl sm:text-2xl font-bold text-slate-900 dark:text-white mb-2">
-                Ты проходишь базовые фильтры отбора программы SPARK!
+                Ты проходишь базовые критерии отбора программы!
               </h3>
 
-              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-doc mb-6 leading-relaxed">
+              <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-doc mb-4 leading-relaxed">
                 {scoreData.description}
               </p>
+
+              {/* Actionable Diagnostic Steps */}
+              <div className="mt-2 mb-6 text-left space-y-2.5">
+                <div className="text-xs font-mono font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-1">
+                  Персональный план подготовки (3 ключевых шага):
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10">
+                  <div className="text-[11px] font-mono font-bold text-emerald-600 dark:text-emerald-400">1. Нарратив и TAL-безопасность</div>
+                  <div className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+                    Сквозная линия заявки: связь текущих проектов с целями программы без запрещенных тем списка Technology Alert List.
+                  </div>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10">
+                  <div className="text-[11px] font-mono font-bold text-teal-600 dark:text-teal-400">2. Американское резюме на 1 страницу</div>
+                  <div className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+                    Формат США с глаголами действия (Action Verbs) и измеримыми результатами вместо списка обязанностей.
+                  </div>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10">
+                  <div className="text-[11px] font-mono font-bold text-amber-600 dark:text-amber-400">3. Эссе на 500 слов и видеовизитка</div>
+                  <div className="text-xs text-slate-600 dark:text-slate-300 mt-0.5">
+                    Раскрытие темы столкновения мнений в академической среде и запись динамичного видеоответа на 80–100 секунд.
+                  </div>
+                </div>
+              </div>
 
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
                 <a

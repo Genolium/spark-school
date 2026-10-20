@@ -2,16 +2,20 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/mymmrac/telego"
+	"gorm.io/gorm"
 	"github.com/spark-school/backend/internal/auth"
 	"github.com/spark-school/backend/internal/bot"
 	"github.com/spark-school/backend/internal/config"
@@ -167,14 +171,90 @@ func main() {
 		api.POST("/promo/validate", promoHandler.Validate)
 		api.POST("/promo/redeem", promoHandler.Redeem)
 
-		// Telegram Bot Webhook endpoint (direct native Go integration, 15ms latency)
+		// Full-Funnel Analytics Ingestion
+		api.POST("/analytics/track", func(c *gin.Context) {
+			type AnalyticsTrackReq struct {
+				Step      string                 `json:"step" binding:"required"`
+				Timestamp string                 `json:"timestamp"`
+				Metadata  map[string]interface{} `json:"metadata"`
+			}
+			var req AnalyticsTrackReq
+			if err := c.ShouldBindJSON(&req); err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid analytics payload"})
+				return
+			}
+
+			metaJSON := ""
+			if req.Metadata != nil {
+				if b, err := json.Marshal(req.Metadata); err == nil {
+					metaJSON = string(b)
+				}
+			}
+
+			event := models.AnalyticsEvent{
+				Step:      req.Step,
+				Metadata:  metaJSON,
+				IP:        c.ClientIP(),
+				UserAgent: c.Request.UserAgent(),
+				CreatedAt: time.Now(),
+			}
+
+			if db != nil {
+				_ = db.Create(&event).Error
+			}
+
+			c.JSON(http.StatusOK, gin.H{"ok": true})
+		})
+
+		// Telegram Bot Webhook endpoint (direct native Go integration with source validation, LRU cache & post-execution DB deduplication)
+		updateDeduplicator := NewUpdateDeduplicator(db, 4096)
+
 		api.POST("/bot/webhook", func(c *gin.Context) {
+			if cfg.TelegramWebhookSecret != "" {
+				secret := c.GetHeader("X-Telegram-Bot-Api-Secret-Token")
+				if secret != cfg.TelegramWebhookSecret {
+					c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized: invalid secret token"})
+					return
+				}
+			} else if isProd {
+				c.JSON(http.StatusForbidden, gin.H{"error": "telegram webhook secret is not configured"})
+				return
+			}
+
 			var update telego.Update
 			if err := c.ShouldBindJSON(&update); err != nil {
 				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid payload"})
 				return
 			}
-			botService.ProcessUpdate(&update)
+
+			// Pre-execution atomic claim: locks update_id in-flight to prevent concurrent duplicate execution
+			claimed, release := updateDeduplicator.TryClaim(update.UpdateID)
+			if !claimed {
+				c.JSON(http.StatusOK, gin.H{"ok": true, "duplicate": true})
+				return
+			}
+
+			// Execute bot processing inside safe panic-guarded runner
+			var processErr error
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						processErr = fmt.Errorf("bot update processing panic: %v", r)
+						log.Printf("[Bot Webhook Panic] update_id=%d: %v", update.UpdateID, r)
+					}
+				}()
+				processErr = botService.ProcessUpdate(&update)
+			}()
+
+			// If execution failed or panicked, release in-flight lock without marking processed
+			if processErr != nil {
+				release(false)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error processing update"})
+				return
+			}
+
+			// ONLY record update_id as processed AFTER successful execution!
+			release(true)
 			c.JSON(http.StatusOK, gin.H{"ok": true})
 		})
 
@@ -244,4 +324,135 @@ func main() {
 	}
 
 	log.Println("Server exiting successfully.")
+}
+
+// UpdateDeduplicator provides thread-safe LRU in-memory deduplication with persistent database backing and in-flight claim locking.
+type UpdateDeduplicator struct {
+	mu       sync.Mutex
+	capacity int
+	order    []int
+	items    map[int]struct{}
+	inFlight map[int]time.Time
+	db       *gorm.DB
+}
+
+func NewUpdateDeduplicator(db *gorm.DB, capacity int) *UpdateDeduplicator {
+	return &UpdateDeduplicator{
+		capacity: capacity,
+		order:    make([]int, 0, capacity),
+		items:    make(map[int]struct{}, capacity),
+		inFlight: make(map[int]time.Time),
+		db:       db,
+	}
+}
+
+// TryClaim atomically checks if updateID is already processed or currently in-flight.
+// Returns claimed=true and a release callback if available.
+// If claimed=false, release is nil and the caller must reject processing.
+func (d *UpdateDeduplicator) TryClaim(updateID int) (bool, func(bool)) {
+	if updateID == 0 {
+		return true, func(bool) {}
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	// 1. Check in-memory processed items
+	if _, found := d.items[updateID]; found {
+		return false, nil
+	}
+
+	// 2. Check in-flight (with 5-minute timeout guard)
+	if startTime, ok := d.inFlight[updateID]; ok {
+		if time.Since(startTime) < 5*time.Minute {
+			return false, nil
+		}
+		delete(d.inFlight, updateID)
+	}
+
+	// 3. Check persistent database
+	if d.db != nil {
+		var record models.ProcessedTelegramUpdate
+		if err := d.db.Select("update_id").Where("update_id = ?", updateID).First(&record).Error; err == nil {
+			d.addToMemory(updateID)
+			return false, nil
+		}
+	}
+
+	// 4. Atomically claim update in-flight
+	d.inFlight[updateID] = time.Now()
+
+	var once sync.Once
+	release := func(success bool) {
+		once.Do(func() {
+			d.mu.Lock()
+			defer d.mu.Unlock()
+			delete(d.inFlight, updateID)
+			if success {
+				d.addToMemory(updateID)
+				if d.db != nil {
+					_ = d.db.Create(&models.ProcessedTelegramUpdate{
+						UpdateID:  updateID,
+						CreatedAt: time.Now(),
+					}).Error
+				}
+			}
+		})
+	}
+
+	return true, release
+}
+
+func (d *UpdateDeduplicator) IsProcessed(updateID int) bool {
+	if updateID == 0 {
+		return false
+	}
+	d.mu.Lock()
+	_, found := d.items[updateID]
+	_, inFlight := d.inFlight[updateID]
+	d.mu.Unlock()
+	if found || inFlight {
+		return true
+	}
+
+	if d.db != nil {
+		var record models.ProcessedTelegramUpdate
+		if err := d.db.Select("update_id").Where("update_id = ?", updateID).First(&record).Error; err == nil {
+			d.mu.Lock()
+			d.addToMemory(updateID)
+			d.mu.Unlock()
+			return true
+		}
+	}
+	return false
+}
+
+func (d *UpdateDeduplicator) addToMemory(updateID int) {
+	if _, exists := d.items[updateID]; exists {
+		return
+	}
+	if len(d.order) >= d.capacity {
+		oldest := d.order[0]
+		d.order = d.order[1:]
+		delete(d.items, oldest)
+	}
+	d.order = append(d.order, updateID)
+	d.items[updateID] = struct{}{}
+}
+
+func (d *UpdateDeduplicator) MarkProcessed(updateID int) {
+	if updateID == 0 {
+		return
+	}
+	d.mu.Lock()
+	delete(d.inFlight, updateID)
+	d.addToMemory(updateID)
+	d.mu.Unlock()
+
+	if d.db != nil {
+		_ = d.db.Create(&models.ProcessedTelegramUpdate{
+			UpdateID:  updateID,
+			CreatedAt: time.Now(),
+		}).Error
+	}
 }

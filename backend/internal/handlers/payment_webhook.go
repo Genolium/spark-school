@@ -197,6 +197,8 @@ func (h *PaymentWebhookHandler) HandleAntilopayWebhook(c *gin.Context) {
 		lower := strings.ToLower(part)
 		if lower == "vip" {
 			tier = "vip"
+		} else if lower == "basic" {
+			tier = "basic"
 		} else if lower == "accelerator" {
 			tier = "accelerator"
 		}

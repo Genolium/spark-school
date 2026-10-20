@@ -321,8 +321,11 @@ func (h *YooKassaHandler) HandleWebhook(c *gin.Context) {
 
 	if payload.Object.Metadata != nil {
 		m := payload.Object.Metadata
-		if t, ok := m["tier"]; ok && strings.ToLower(t) == "vip" {
-			tier = "vip"
+		if t, ok := m["tier"]; ok {
+			tLower := strings.ToLower(strings.TrimSpace(t))
+			if tLower == "vip" || tLower == "basic" || tLower == "accelerator" {
+				tier = tLower
+			}
 		}
 		if p, ok := m["promo_code"]; ok {
 			promoCode = strings.ToUpper(strings.TrimSpace(p))
@@ -339,6 +342,8 @@ func (h *YooKassaHandler) HandleWebhook(c *gin.Context) {
 
 	if amount >= MinVipPaymentThreshold {
 		tier = "vip"
+	} else if amount < 6000 && (tier == "basic" || strings.Contains(strings.ToLower(payload.Object.Description), "базов") || strings.Contains(strings.ToLower(payload.Object.Description), "basic")) {
+		tier = "basic"
 	}
 
 	// Concurrency & Idempotency Execution in DB Transaction

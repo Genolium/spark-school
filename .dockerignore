@@ -1,0 +1,8 @@
+.git
+.github
+node_modules
+.next
+deploy
+spark-deploy.zip
+*.log
+.DS_Store

@@ -88,6 +88,10 @@ const rootFiles = [
 ];
 rootFiles.forEach(f => copyFileSafe(f));
 
+// 2.1 Copy Deployment Scripts
+console.log('📜 Copying deployment scripts...');
+copyFileSafe('scripts/backup.sh');
+
 // (Do not copy .env to deploy folder - server keeps its own .env or uses .env.example)
 
 // 3. Copy Backend

@@ -15,7 +15,7 @@ import (
 
 // IsAdmin checks if Telegram user ID matches configured AdminTelegramID.
 func (s *BotService) IsAdmin(userID int64) bool {
-	if s.cfg == nil || s.cfg.AdminTelegramID == 0 {
+	if s.cfg == nil || s.cfg.AdminTelegramID <= 0 {
 		return false
 	}
 	return userID == s.cfg.AdminTelegramID

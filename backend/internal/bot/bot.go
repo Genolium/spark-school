@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"html"
 	"log"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf16"
@@ -144,16 +145,25 @@ func (s *BotService) Stop() {
 }
 
 // ProcessUpdate handles incoming updates directly (from Webhook or Long Polling).
-func (s *BotService) ProcessUpdate(update *telego.Update) {
+func (s *BotService) ProcessUpdate(update *telego.Update) error {
 	if update == nil {
-		return
+		return nil
 	}
+
+	var processErr error
+	defer func() {
+		if r := recover(); r != nil {
+			processErr = fmt.Errorf("bot processing panic: %v", r)
+		}
+	}()
 
 	if update.CallbackQuery != nil {
 		s.HandleCallbackQuery(update.CallbackQuery)
 	} else if update.Message != nil {
 		s.handleMessage(update.Message)
 	}
+
+	return processErr
 }
 
 // Start launches the bot polling worker if Long Polling is configured.
@@ -285,11 +295,13 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 				}
 			}
 
+			session.SelectedTier = tier
 			if u := s.syncTelegramUser(msg.From); u != nil {
-				if tier != "" {
+				// Do NOT overwrite user's paid tier if they already have access!
+				if !u.HasAccess && tier != "" {
 					u.Tier = tier
 				}
-				if withPromo && session.PromoCode != "" {
+				if withPromo && session.PromoCode != "" && u.PromoCode == "" {
 					u.PromoCode = session.PromoCode
 				}
 				s.db.Save(u)
@@ -418,10 +430,72 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 		return true
 	}
 
-	if strings.HasPrefix(text, "/status") {
-		s.sendStatusMessage(chatID, msg.From)
+	if strings.HasPrefix(text, "/status") || strings.HasPrefix(text, "/orders") {
+		s.SendOrdersHistory(chatID, msg.From)
 		return true
 	}
+
+	if strings.HasPrefix(text, "/plan") {
+		s.SendPreparationPlan(chatID, msg.From)
+		return true
+	}
+
+	if strings.HasPrefix(text, "/done_step") {
+		parts := strings.Fields(text)
+		stepNum := 1
+		if len(parts) > 1 {
+			if num, err := strconv.Atoi(parts[1]); err == nil {
+				stepNum = num
+			}
+		}
+		s.TogglePlanStep(chatID, msg.From, stepNum)
+		return true
+	}
+
+	// [Временно приостановлено: Сценарий 2 (Сдача работ на аудит) и Сценарий 3 (Запись на Zoom-созвон 1-на-1)]
+	/*
+	if strings.HasPrefix(text, "/submit_work") {
+		s.SubmitWork(chatID, msg.From, text)
+		return true
+	}
+
+	if strings.HasPrefix(text, "/book_call") {
+		s.BookCallDialog(chatID, msg.From, "")
+		return true
+	}
+	*/
+
+	if strings.HasPrefix(text, "/interview") {
+		s.SendInterviewTrainer(chatID)
+		return true
+	}
+
+	if strings.HasPrefix(text, "/queue") {
+		if msg.From != nil && s.IsAdmin(msg.From.ID) {
+			s.SendCuratorQueue(chatID)
+		} else {
+			m := tu.Message(chatID, "⛔️ Доступ ограничен. Команда доступна только куратору проекта.")
+			_, _ = s.bot.SendMessage(m)
+		}
+		return true
+	}
+
+	/*
+	if strings.HasPrefix(text, "/reviewed") {
+		s.HandleReviewedCommand(chatID, msg.From, text)
+		return true
+	}
+
+	if strings.HasPrefix(text, "/changes") {
+		s.HandleChangesCommand(chatID, msg.From, text)
+		return true
+	}
+
+	if strings.HasPrefix(text, "/cancel_call") {
+		s.CancelBooking(chatID, msg.From, 0)
+		return true
+	}
+	*/
 
 	if strings.HasPrefix(text, "/upgrade") {
 		s.sendUpgradeOptions(chatID, msg.From)
@@ -755,9 +829,9 @@ func (s *BotService) handleAuditUpsellPayment(chatID telego.ChatID, from *telego
 📎 <b>Как получить аудит:</b>
 1. Совершите перевод <b>1 900 ₽</b> через СБП в вашем банке.
 2. <b>Отправьте скриншот или PDF чека прямо в этот чат!</b>
-3. Так называемый Иль проверит платёж и сразу пришлёт инструкцию, куда прислать ссылку на черновик в Google Docs.
+3. Куратор проверит платёж и сразу подтвердит доступ к проверке черновика в Google Docs.
 
-<i>Разбор с правками готовится в течение 24–48 часов после получения текста. По всем вопросам: @ilyan_vas</i>`, bankName)
+<i>Разбор с правками готовится в течение 24–48 часов после получения текста. По всем вопросам: @spark_prep_bot</i>`, bankName)
 
 	kb := tu.InlineKeyboard(
 		tu.InlineKeyboardRow(
@@ -949,6 +1023,70 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 		})
 	}
 
+	// [Временно приостановлено: Сценарий 3 (Запись и отмена слотов созвона)]
+	/*
+	if strings.HasPrefix(data, "cancel_booking_") {
+		idStr := strings.TrimPrefix(data, "cancel_booking_")
+		idNum, _ := strconv.Atoi(idStr)
+		s.CancelBooking(chatID, &query.From, uint(idNum))
+		return true
+	}
+
+	if strings.HasPrefix(data, "book_slot_") {
+		slotKey := strings.TrimPrefix(data, "book_slot_")
+		s.BookCallDialog(chatID, &query.From, slotKey)
+		return true
+	}
+	*/
+
+	if data == "slot_already_taken" {
+		m := tu.Message(chatID, "🔒 Этот слот уже занят другим студентом. Пожалуйста, выберите другое свободное время.")
+		_, _ = s.bot.SendMessage(m)
+		s.BookCallDialog(chatID, &query.From, "")
+		return true
+	}
+
+	// Curator submission reviews from queue
+	if strings.HasPrefix(data, "sub_review_") {
+		if s.IsAdmin(query.From.ID) {
+			idStr := strings.TrimPrefix(data, "sub_review_")
+			idNum, _ := strconv.Atoi(idStr)
+			s.ProcessSubmissionReview(chatID, &query.From, uint(idNum), "Работа проверена и одобрена куратором.", true)
+		} else {
+			m := tu.Message(chatID, "⛔️ Доступ ограничен. Действие доступно только куратору проекта.")
+			_, _ = s.bot.SendMessage(m)
+		}
+		return true
+	}
+
+	if strings.HasPrefix(data, "sub_changes_") {
+		if s.IsAdmin(query.From.ID) {
+			idStr := strings.TrimPrefix(data, "sub_changes_")
+			idNum, _ := strconv.Atoi(idStr)
+			s.ProcessSubmissionReview(chatID, &query.From, uint(idNum), "Куратор рекомендует доработать материал по комментариям в документе.", false)
+		} else {
+			m := tu.Message(chatID, "⛔️ Доступ ограничен. Действие доступно только куратору проекта.")
+			_, _ = s.bot.SendMessage(m)
+		}
+		return true
+	}
+
+	// Guaranteed drip promo discount
+	if strings.HasPrefix(data, "pay_drip_") {
+		tier := strings.TrimPrefix(data, "pay_drip_")
+		session.PromoCode = "SPARK5"
+		session.DiscountPct = 5
+		if s.db != nil {
+			var u models.User
+			if err := s.db.Where("telegram_id = ?", query.From.ID).First(&u).Error; err == nil {
+				u.PromoCode = "SPARK5"
+				s.db.Save(&u)
+			}
+		}
+		s.handleSbpPayment(chatID, &query.From, tier)
+		return true
+	}
+
 	switch data {
 	case "action_menu":
 		session.State = StateDefault
@@ -956,8 +1094,66 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 		return true
 
 	case "action_status":
-		s.sendStatusMessage(chatID, &query.From)
+		s.SendOrdersHistory(chatID, &query.From)
 		return true
+
+	case "action_orders":
+		s.SendOrdersHistory(chatID, &query.From)
+		return true
+
+	case "action_plan":
+		s.SendPreparationPlan(chatID, &query.From)
+		return true
+
+	case "plan_toggle_1":
+		s.TogglePlanStep(chatID, &query.From, 1)
+		return true
+	case "plan_toggle_2":
+		s.TogglePlanStep(chatID, &query.From, 2)
+		return true
+	case "plan_toggle_3":
+		s.TogglePlanStep(chatID, &query.From, 3)
+		return true
+	case "plan_toggle_4":
+		s.TogglePlanStep(chatID, &query.From, 4)
+		return true
+	case "plan_toggle_5":
+		s.TogglePlanStep(chatID, &query.From, 5)
+		return true
+	case "plan_toggle_6":
+		s.TogglePlanStep(chatID, &query.From, 6)
+		return true
+
+	// [Временно приостановлено: Сценарий 2 (Сдача работ) и Сценарий 3 (Запись на Zoom-созвон 1-на-1)]
+	/*
+	case "action_submit_work_info":
+		s.SubmitWork(chatID, &query.From, "/submit_work")
+		return true
+
+	case "action_book_call":
+		s.BookCallDialog(chatID, &query.From, "")
+		return true
+
+	case "book_slot_tue_18":
+		s.BookCallDialog(chatID, &query.From, "Вторник, 18:00 МСК")
+		return true
+	case "book_slot_thu_1930":
+		s.BookCallDialog(chatID, &query.From, "Четверг, 19:30 МСК")
+		return true
+	case "book_slot_sat_14":
+		s.BookCallDialog(chatID, &query.From, "Суббота, 14:00 МСК")
+		return true
+	*/
+
+	case "action_interview":
+		s.SendInterviewTrainer(chatID)
+		return true
+
+	case "admin_queue":
+		if s.IsAdmin(query.From.ID) {
+			s.SendCuratorQueue(chatID)
+			return true
+		}
 
 	case "action_payment":
 		session.State = StateWaitingReceipt
@@ -1270,7 +1466,7 @@ func (s *BotService) sendAccessNotificationToStudent(studentTelegramID int64, st
 
 func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr string) {
 	adminID := query.From.ID
-	if s.cfg != nil && s.cfg.AdminTelegramID != 0 && adminID != s.cfg.AdminTelegramID {
+	if !s.IsAdmin(adminID) {
 		if s.bot != nil {
 			_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
 				CallbackQueryID: query.ID,
@@ -1315,18 +1511,20 @@ func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr s
 	if receipt.Status == "approved" {
 		log.Printf("[Bot Approval] Receipt #%d was already approved. Re-sending invite link to student %d...", receipt.ID, receipt.TelegramID)
 		sendErr := s.sendAccessNotificationToStudent(receipt.TelegramID, studentMsg, inviteLink)
-		if sendErr != nil {
-			_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
-				CallbackQueryID: query.ID,
-				Text:            fmt.Sprintf("❌ Ошибка отправки ссылки: %v", sendErr),
-				ShowAlert:       true,
-			})
-		} else {
-			_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
-				CallbackQueryID: query.ID,
-				Text:            "✅ Ссылка успешно отправлена студенту повторно!",
-				ShowAlert:       true,
-			})
+		if s.bot != nil && query != nil {
+			if sendErr != nil {
+				_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+					CallbackQueryID: query.ID,
+					Text:            fmt.Sprintf("❌ Ошибка отправки ссылки: %v", sendErr),
+					ShowAlert:       true,
+				})
+			} else {
+				_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+					CallbackQueryID: query.ID,
+					Text:            "✅ Ссылка успешно отправлена студенту повторно!",
+					ShowAlert:       true,
+				})
+			}
 		}
 		return
 	}
@@ -1343,8 +1541,9 @@ func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr s
 			now := time.Now()
 			student.AccessGrantedAt = &now
 		}
-		if strings.ToLower(receipt.Tier) == "audit_essay" {
+		if strings.ToLower(receipt.Tier) == "audit_essay" || strings.ToLower(receipt.Tier) == "audit" {
 			student.HasAuditUpsell = true
+			student.AuditCredits += 1
 		} else if receipt.Tier != "" {
 			student.Tier = receipt.Tier
 		}
@@ -1356,6 +1555,36 @@ func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr s
 		s.db.Save(&student)
 		_ = s.affiliateService.ProcessCoursePurchase(student.ID, receipt.Amount)
 
+		// Immediately create PaymentTransaction so real-time financial stats reflect the approval without server restart
+		receiptPID := fmt.Sprintf("RECEIPT_%d", receipt.ID)
+		var existingTx models.PaymentTransaction
+		if err := s.db.Where("payment_id = ?", receiptPID).First(&existingTx).Error; err != nil {
+			tier := strings.ToLower(strings.TrimSpace(receipt.Tier))
+			if tier == "" {
+				tier = "accelerator"
+			}
+			pt := models.PaymentTransaction{
+				PaymentID:  receiptPID,
+				TelegramID: receipt.TelegramID,
+				Username:   receipt.Username,
+				Amount:     receipt.Amount,
+				Currency:   "RUB",
+				Tier:       tier,
+				Status:     "SUCCESS",
+				PayMethod:  "sbp_receipt",
+				PromoCode:  student.PromoCode,
+				CreatedAt:  time.Now(),
+			}
+			s.db.Create(&pt)
+		}
+
+		// Record real-time payment_confirmed event
+		s.db.Create(&models.AnalyticsEvent{
+			Step:      "payment_confirmed",
+			Metadata:  fmt.Sprintf(`{"payment_id":"%s","tier":"%s","amount":%f,"telegram_id":%d}`, receiptPID, receipt.Tier, receipt.Amount, receipt.TelegramID),
+			CreatedAt: time.Now(),
+		})
+
 		// Increment promo code uses count in DB
 		if student.PromoCode != "" {
 			s.db.Model(&models.PromoCode{}).
@@ -1364,17 +1593,20 @@ func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr s
 		}
 	}
 
-	if strings.ToLower(receipt.Tier) == "audit_essay" {
+	if strings.ToLower(receipt.Tier) == "audit_essay" || strings.ToLower(receipt.Tier) == "audit" {
 		auditSuccessMsg := `🎉 <b>Оплата текстового аудита эссе успешно подтверждена!</b>
 
-Теперь ты можешь прислать ссылку на своё эссе в Google Docs (с правами комментирования) прямо в этот чат или написать так называемому Илю лично: @ilyan_vas.
+Теперь ты можешь отправить черновик эссе через команду:
+<code>/submit_work essay [ссылка на Google Docs]</code>
 
-Так называемый Иль проведёт подробный построчный аудит твоего эссе и подготовит разбор с правками в течение 24–48 часов.`
+Куратор проведёт подробный построчный аудит твоего эссе и подготовит разбор с правками в течение 24–48 часов.`
 		_ = s.SendNotification(receipt.TelegramID, auditSuccessMsg)
-		_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
-			CallbackQueryID: query.ID,
-			Text:            "✅ Текстовый аудит эссе успешно одобрен!",
-		})
+		if s.bot != nil && query != nil {
+			_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+				CallbackQueryID: query.ID,
+				Text:            "✅ Текстовый аудит эссе успешно одобрен!",
+			})
+		}
 	} else if wasActive {
 		tierTitle := "Акселератор"
 		if strings.ToLower(receipt.Tier) == "vip" {
@@ -1383,22 +1615,26 @@ func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr s
 		upgradeMsg := fmt.Sprintf(`🎉 <b>Поздравляем! Ваш тариф успешно повышен до %s!</b>
 
 Вам открыты все расширенные материалы и привилегии потока проекта «так называемый SPARK».
-По всем вопросам вы всегда можете написать так называемому Илю лично: @ilyan_vas`, tierTitle)
+По всем вопросам вы всегда можете обратиться к куратору через поддержку бота.`, tierTitle)
 		_ = s.SendNotification(receipt.TelegramID, upgradeMsg)
-		_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
-			CallbackQueryID: query.ID,
-			Text:            "✅ Апгрейд тарифа успешно подтверждён!",
-		})
+		if s.bot != nil && query != nil {
+			_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+				CallbackQueryID: query.ID,
+				Text:            "✅ Апгрейд тарифа успешно подтверждён!",
+			})
+		}
 	} else {
 		sendErr := s.sendAccessNotificationToStudent(receipt.TelegramID, studentMsg, inviteLink)
 		if sendErr != nil {
 			log.Printf("[Bot Approval] Failed delivering invite link to student %d: %v", receipt.TelegramID, sendErr)
-			_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
-				CallbackQueryID: query.ID,
-				Text:            fmt.Sprintf("⚠️ Чек одобрен, но ошибка отправки сообщения: %v", sendErr),
-				ShowAlert:       true,
-			})
-		} else {
+			if s.bot != nil && query != nil {
+				_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+					CallbackQueryID: query.ID,
+					Text:            fmt.Sprintf("⚠️ Чек одобрен, но ошибка отправки сообщения: %v", sendErr),
+					ShowAlert:       true,
+				})
+			}
+		} else if s.bot != nil && query != nil {
 			_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
 				CallbackQueryID: query.ID,
 				Text:            "✅ Доступ успешно выдан, ссылка отправлена студенту!",
@@ -1407,7 +1643,7 @@ func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr s
 	}
 
 	// Update Curator's Inline Buttons
-	if query.Message != nil {
+	if s.bot != nil && query != nil && query.Message != nil {
 		curatorChatID := tu.ID(query.Message.GetChat().ID)
 		msgID := query.Message.GetMessageID()
 		approvedKb := tu.InlineKeyboard(
@@ -1431,7 +1667,7 @@ func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr s
 
 func (s *BotService) processReceiptRejection(query *telego.CallbackQuery, idStr string) {
 	adminID := query.From.ID
-	if s.cfg != nil && s.cfg.AdminTelegramID != 0 && adminID != s.cfg.AdminTelegramID {
+	if !s.IsAdmin(adminID) {
 		if s.bot != nil {
 			_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
 				CallbackQueryID: query.ID,
@@ -1460,26 +1696,28 @@ func (s *BotService) processReceiptRejection(query *telego.CallbackQuery, idStr 
 • Неверная сумма перевода
 • Нечитаемый скриншот или отсутствие фискального подтверждения банка
 
-Пожалуйста, свяжитесь с так называемым Илем: @ilyan_vas`
+Пожалуйста, свяжитесь с куратором в поддержке: @spark_prep_bot`
 
-	btnHelp := tu.InlineKeyboardButton("Написать так называемому Илю").WithURL("https://t.me/ilyan_vas")
-	m := tu.Message(tu.ID(receipt.TelegramID), rejectMsg).WithParseMode(telego.ModeHTML).WithReplyMarkup(tu.InlineKeyboard(tu.InlineKeyboardRow(btnHelp)))
-	if _, err := s.bot.SendMessage(m); err != nil {
-		log.Printf("[Bot Rejection] SendMessage failed for student %d: %v. Retrying clean...", receipt.TelegramID, err)
-		cleanReject := StripTgEmoji(rejectMsg)
-		cleanM := tu.Message(tu.ID(receipt.TelegramID), cleanReject).WithParseMode(telego.ModeHTML).WithReplyMarkup(tu.InlineKeyboard(tu.InlineKeyboardRow(btnHelp)))
-		if _, cleanErr := s.bot.SendMessage(cleanM); cleanErr != nil {
-			plainM := tu.Message(tu.ID(receipt.TelegramID), cleanReject)
-			_, _ = s.bot.SendMessage(plainM)
+	btnHelp := tu.InlineKeyboardButton("💬 Написать куратору").WithURL("https://t.me/spark_prep_bot")
+	if s.bot != nil {
+		m := tu.Message(tu.ID(receipt.TelegramID), rejectMsg).WithParseMode(telego.ModeHTML).WithReplyMarkup(tu.InlineKeyboard(tu.InlineKeyboardRow(btnHelp)))
+		if _, err := s.bot.SendMessage(m); err != nil {
+			log.Printf("[Bot Rejection] SendMessage failed for student %d: %v. Retrying clean...", receipt.TelegramID, err)
+			cleanReject := StripTgEmoji(rejectMsg)
+			cleanM := tu.Message(tu.ID(receipt.TelegramID), cleanReject).WithParseMode(telego.ModeHTML).WithReplyMarkup(tu.InlineKeyboard(tu.InlineKeyboardRow(btnHelp)))
+			if _, cleanErr := s.bot.SendMessage(cleanM); cleanErr != nil {
+				plainM := tu.Message(tu.ID(receipt.TelegramID), cleanReject)
+				_, _ = s.bot.SendMessage(plainM)
+			}
 		}
+
+		_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
+			CallbackQueryID: query.ID,
+			Text:            "❌ Чек отклонён",
+		})
 	}
 
-	_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
-		CallbackQueryID: query.ID,
-		Text:            "❌ Чек отклонён",
-	})
-
-	if query.Message != nil {
+	if s.bot != nil && query.Message != nil {
 		curatorChatID := tu.ID(query.Message.GetChat().ID)
 		msgID := query.Message.GetMessageID()
 		rejectedKb := tu.InlineKeyboard()
@@ -1499,7 +1737,7 @@ func (s *BotService) processReceiptRejection(query *telego.CallbackQuery, idStr 
 
 func (s *BotService) processReceiptTierToggle(query *telego.CallbackQuery, idStr string, newTier string) {
 	adminID := query.From.ID
-	if s.cfg != nil && s.cfg.AdminTelegramID != 0 && adminID != s.cfg.AdminTelegramID {
+	if !s.IsAdmin(adminID) {
 		if s.bot != nil {
 			_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{
 				CallbackQueryID: query.ID,

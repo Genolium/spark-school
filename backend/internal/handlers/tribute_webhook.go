@@ -223,6 +223,8 @@ func (h *PaymentWebhookHandler) HandleTributeWebhook(c *gin.Context) {
 	lowerProduct := strings.ToLower(productName)
 	if amount >= MinVipPaymentThreshold || strings.Contains(lowerProduct, "vip") || strings.Contains(lowerProduct, "вип") {
 		tier = "vip"
+	} else if amount < 6000 && (strings.Contains(lowerProduct, "basic") || strings.Contains(lowerProduct, "базов")) {
+		tier = "basic"
 	}
 
 	// Fraud check: if amount is below minimum course price (e.g. attacker sends 1 ₽ or 50 ₽),

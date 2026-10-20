@@ -28,7 +28,9 @@ type Config struct {
 	YooKassaShopID     string
 	YooKassaSecretKey  string
 	TelegramBotUsername string
+	TelegramWebhookSecret string
 	DigestHour         int
+	ZoomMeetingURL     string
 }
 
 func Load() *Config {
@@ -63,7 +65,9 @@ func Load() *Config {
 		EnotShopID:         getEnv("ENOT_SHOP_ID", ""),
 		YooKassaShopID:     getEnv("YOOKASSA_SHOP_ID", "1491540"),
 		YooKassaSecretKey:  getEnv("YOOKASSA_SECRET_KEY", ""),
+		TelegramWebhookSecret: getEnv("TELEGRAM_WEBHOOK_SECRET", ""),
 		DigestHour:         digestHour,
+		ZoomMeetingURL:     getEnv("ZOOM_MEETING_URL", "https://us05web.zoom.us/j/spark2027"),
 	}
 }
 
