@@ -15,7 +15,10 @@ import (
 
 var DB *gorm.DB
 
-// Init establishes connection with PostgreSQL and runs migrations.
+// Init connects to PostgreSQL, applies the canonical Goose migration chain and
+// seeds idempotent reference data. Schema changes are never performed here:
+// if a migration fails, the process stops instead of running on a partial
+// schema (the previous behaviour was fail-open).
 func Init(cfg *config.Config) *gorm.DB {
 	var err error
 	var db *gorm.DB
@@ -44,129 +47,20 @@ func Init(cfg *config.Config) *gorm.DB {
 	sqlDB.SetMaxOpenConns(100)
 	sqlDB.SetConnMaxLifetime(time.Hour)
 
-	// Run Production Database Migrations via Goose
+	// Single canonical migration chain (embedded from internal/database/migrations).
 	if err := RunMigrations(sqlDB); err != nil {
-		log.Printf("[WARN] Goose migration failed (falling back to GORM AutoMigrate): %v", err)
+		log.Fatalf("Database migrations failed, refusing to start: %v", err)
 	}
-
-	// Direct DDL to guarantee critical tables exist immediately
-	db.Exec(`
-		CREATE TABLE IF NOT EXISTS drip_leads (
-			id BIGSERIAL PRIMARY KEY,
-			telegram_id BIGINT UNIQUE NOT NULL,
-			username VARCHAR(64),
-			first_name VARCHAR(128),
-			stage INT DEFAULT 0,
-			calculated_score INT DEFAULT 0,
-			next_trigger_at TIMESTAMP WITH TIME ZONE NOT NULL,
-			is_completed BOOLEAN DEFAULT FALSE,
-			created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-			updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-		);
-		CREATE INDEX IF NOT EXISTS idx_drip_leads_next_trigger_at ON drip_leads(next_trigger_at);
-		CREATE INDEX IF NOT EXISTS idx_drip_leads_is_completed ON drip_leads(is_completed);
-
-		CREATE TABLE IF NOT EXISTS payment_transactions (
-			id BIGSERIAL PRIMARY KEY,
-			payment_id VARCHAR(64) UNIQUE NOT NULL,
-			order_id VARCHAR(100),
-			telegram_id BIGINT,
-			username VARCHAR(64),
-			tier VARCHAR(32) DEFAULT 'accelerator',
-			amount NUMERIC(10, 2) NOT NULL,
-			original_amount NUMERIC(10, 2),
-			fee NUMERIC(10, 2),
-			status VARCHAR(32) NOT NULL,
-			currency VARCHAR(10) DEFAULT 'RUB',
-			pay_method VARCHAR(32),
-			product_name VARCHAR(128),
-			promo_code VARCHAR(32),
-			customer_email VARCHAR(128),
-			customer_phone VARCHAR(64),
-			raw_callback TEXT,
-			created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-			updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-		);
-		CREATE INDEX IF NOT EXISTS idx_payment_transactions_telegram_id ON payment_transactions(telegram_id);
-		CREATE INDEX IF NOT EXISTS idx_payment_transactions_order_id ON payment_transactions(order_id);
-	`)
-
-	// Run GORM Auto-Migrations per-model so single constraint warnings don't block subsequent models
-	modelsToMigrate := []any{
-		&models.User{},
-		&models.Referral{},
-		&models.AffiliateProfile{},
-		&models.ReferralTransaction{},
-		&models.PayoutRequest{},
-		&models.PromoCode{},
-		&models.PaymentReceipt{},
-		&models.OutboxEvent{},
-		&models.PaymentTransaction{},
-		&models.DripLead{},
-		&models.CoursePricing{},
-		&models.FiscalReceipt{},
-		&models.StudentSubmission{},
-		&models.StudentProgress{},
-		&models.CallBooking{},
-		&models.ProcessedTelegramUpdate{},
-		&models.AnalyticsEvent{},
-	}
-	for _, m := range modelsToMigrate {
-		if mErr := db.AutoMigrate(m); mErr != nil {
-			log.Printf("[Database AutoMigrate] Note on %T: %v", m, mErr)
-		}
-	}
-
-	// Backfill existing active students with defaults if empty
-	db.Exec("UPDATE users SET tier = 'accelerator' WHERE tier IS NULL OR tier = ''")
-
-	// Ensure basic_price and basic_old_price columns exist in course_pricings
-	db.Exec("ALTER TABLE IF EXISTS course_pricings ADD COLUMN IF NOT EXISTS basic_price NUMERIC(10,2) DEFAULT 3990.00;")
-	db.Exec("ALTER TABLE IF EXISTS course_pricings ADD COLUMN IF NOT EXISTS basic_old_price NUMERIC(10,2) DEFAULT 5900.00;")
-	db.Exec("UPDATE course_pricings SET basic_price = 3990.00 WHERE basic_price IS NULL OR basic_price <= 0;")
-	db.Exec("UPDATE course_pricings SET basic_old_price = 5900.00 WHERE basic_old_price IS NULL OR basic_old_price <= 0;")
-
-	// Ensure upsell audit columns exist in users table
-	db.Exec("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS upsell_audit_sent BOOLEAN DEFAULT FALSE;")
-	db.Exec("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS upsell_audit_sent_at TIMESTAMP WITH TIME ZONE;")
-	db.Exec("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS has_audit_upsell BOOLEAN DEFAULT FALSE;")
-	db.Exec("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS audit_credits INT DEFAULT 0;")
-	db.Exec("UPDATE users SET audit_credits = 1 WHERE has_audit_upsell = true AND audit_credits = 0;")
-
-	// Enforce DB-level unique partial indexes to physically prevent double booking and multi-booking race conditions
-	db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_active_slot_key ON call_bookings (slot_key) WHERE status = 'confirmed' AND cancelled_at IS NULL;")
-	db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_active_user_booking ON call_bookings (telegram_id) WHERE status = 'confirmed' AND cancelled_at IS NULL;")
-
-	// Ensure receipt_url and receipt_number columns exist in users table
-	db.Exec("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS receipt_url VARCHAR(512);")
-	db.Exec("ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS receipt_number VARCHAR(64);")
-
-	// Backfill users from payment_receipts if missing in users table
-	db.Exec(`
-		INSERT INTO users (telegram_id, username, first_name, role, has_access, tier, paid_amount, created_at)
-		SELECT DISTINCT pr.telegram_id, pr.username, COALESCE(NULLIF(pr.username, ''), 'Студент'), 'student', 
-		       (pr.status = 'approved'), pr.tier, 
-		       CASE WHEN pr.status = 'approved' THEN pr.amount ELSE 0 END, 
-		       pr.created_at
-		FROM payment_receipts pr
-		WHERE pr.telegram_id > 0 
-		  AND NOT EXISTS (SELECT 1 FROM users u WHERE u.telegram_id = pr.telegram_id)
-	`)
-
-	// Perform robust historical reconciliation into payment_transactions
-	ReconcileHistoricalSales(db)
-
-	// Clean up legacy LMS tables if they exist from prior schema
-	_ = db.Migrator().DropTable("user_progress", "lessons", "modules")
 
 	DB = db
+	ReconcileHistoricalSalesOnce(db)
 	SeedDefaultData(db, cfg)
 	return db
 }
 
-// SeedDefaultData seeds the admin user if defined.
+// SeedDefaultData seeds the admin user, pricing and promo codes. Every insert
+// is idempotent; it does not change schema.
 func SeedDefaultData(db *gorm.DB, cfg *config.Config) {
-
 	// Seed Admin user if defined
 	if cfg.AdminTelegramID != 0 {
 		var admin models.User
@@ -216,6 +110,26 @@ func SeedDefaultData(db *gorm.DB, cfg *config.Config) {
 	log.Println("Seeding complete.")
 }
 
+// ReconcileHistoricalSalesOnce runs the legacy revenue reconciliation at most
+// once per installation. The marker lives in app_meta (created by migration
+// 00004); if the process crashes mid-run, the next start retries because all
+// inserts are idempotent.
+func ReconcileHistoricalSalesOnce(db *gorm.DB) {
+	if db == nil {
+		return
+	}
+	const key = "historical_reconciliation_v1"
+	var value string
+	err := db.Raw("SELECT value FROM app_meta WHERE key = ?", key).Scan(&value).Error
+	if err == nil && value == "done" {
+		return
+	}
+	// Claim the marker without blocking concurrent starts.
+	_ = db.Exec("INSERT INTO app_meta (key, value, updated_at) VALUES (?, ?, NOW()) ON CONFLICT (key) DO NOTHING", key, "running").Error
+	ReconcileHistoricalSales(db)
+	_ = db.Exec("UPDATE app_meta SET value = ?, updated_at = NOW() WHERE key = ?", "done", key).Error
+}
+
 // ReconcileHistoricalSales reconciles and backfills historical sales into payment_transactions
 // using strict mathematical difference logic to prevent losing initial purchases when upgrades exist.
 func ReconcileHistoricalSales(db *gorm.DB) {
@@ -244,6 +158,7 @@ func ReconcileHistoricalSales(db *gorm.DB) {
 				Tier:       tier,
 				Status:     "SUCCESS",
 				PayMethod:  "sbp_receipt",
+				Source:     "sbp_receipt",
 				CreatedAt:  pr.CreatedAt,
 			}
 			db.Create(&pt)
@@ -285,6 +200,7 @@ func ReconcileHistoricalSales(db *gorm.DB) {
 					Tier:       tier,
 					Status:     "SUCCESS",
 					PayMethod:  "historical_access",
+					Source:     "historical",
 					PromoCode:  u.PromoCode,
 					CreatedAt:  txTime,
 				}

@@ -28,14 +28,12 @@ func testDB(t *testing.T) *gorm.DB {
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL is not set; skipping PostgreSQL integration test")
 	}
+	prepareSchema(t, dsn)
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
 	if err != nil {
 		t.Fatalf("connect postgres: %v", err)
-	}
-	if err := db.Exec("DROP SCHEMA public CASCADE; CREATE SCHEMA public;").Error; err != nil {
-		t.Fatalf("reset schema: %v", err)
 	}
 	if err := db.AutoMigrate(
 		&models.User{},
@@ -64,13 +62,13 @@ func newService(db *gorm.DB) *Service {
 func pendingReceipt(t *testing.T, db *gorm.DB, telegramID int64, tier string, amount float64) models.PaymentReceipt {
 	t.Helper()
 	receipt := models.PaymentReceipt{
-		FileHash:  fmt.Sprintf("hash-%d-%d", telegramID, time.Now().UnixNano()),
+		FileHash:   fmt.Sprintf("hash-%d-%d", telegramID, time.Now().UnixNano()),
 		TelegramID: telegramID,
-		Username:  "student",
-		Tier:      tier,
-		Amount:    amount,
-		Status:    "pending",
-		CreatedAt: time.Now(),
+		Username:   "student",
+		Tier:       tier,
+		Amount:     amount,
+		Status:     "pending",
+		CreatedAt:  time.Now(),
 	}
 	if err := db.Create(&receipt).Error; err != nil {
 		t.Fatalf("create receipt: %v", err)

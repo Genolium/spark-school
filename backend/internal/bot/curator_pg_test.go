@@ -23,12 +23,10 @@ func curatorTestDB(t *testing.T) *gorm.DB {
 	if dsn == "" {
 		t.Skip("TEST_DATABASE_URL is not set; skipping PostgreSQL integration test")
 	}
+	prepareSchema(t, dsn)
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
 	if err != nil {
 		t.Fatalf("connect postgres: %v", err)
-	}
-	if err := db.Exec("DROP SCHEMA public CASCADE; CREATE SCHEMA public;").Error; err != nil {
-		t.Fatalf("reset schema: %v", err)
 	}
 	if err := db.AutoMigrate(
 		&models.User{},
