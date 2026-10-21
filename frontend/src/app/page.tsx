@@ -17,6 +17,7 @@ import { ChancesModal } from "@/components/Modals/ChancesModal";
 import { ReferralTracker } from "@/components/ReferralTracker";
 import { RecoveryBanner } from "@/components/RecoveryBanner";
 import { DemoLessonSection } from "@/components/DemoLessonSection";
+import { StudentReviews } from "@/components/StudentReviews";
 import { trackFunnelStep, getAttributionToken } from "@/lib/analytics";
 import { syncServerExperiments } from "@/lib/experiments";
 
@@ -114,6 +115,9 @@ export default function HomePage() {
 
       {/* Screen 6.5: Demo Lesson & Curator Feedback Preview */}
       <DemoLessonSection />
+
+      {/* Screen 6.7: Student testimonials */}
+      <StudentReviews />
 
       {/* Screen 7: 3-Tier Pricing Matrix & Scarcity */}
       <PricingSection onOpenPayment={handleOpenPayment} />
