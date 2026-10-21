@@ -1,0 +1,20 @@
+// API base URL and auth token helpers.
+
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
+
+// Helper to get admin JWT token from local storage
+export function getAdminToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("spark_admin_token");
+}
+
+// Helper to get unified auth token (student or admin)
+export function getAuthToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return (
+    localStorage.getItem("spark_token") ||
+    localStorage.getItem("spark_admin_token") ||
+    null
+  );
+}
+

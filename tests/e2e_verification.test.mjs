@@ -268,9 +268,11 @@ describe('Tier 2: Boundary & Corner Cases', () => {
     assert.equal(isPrivateChat(null), false, 'Null chat must be rejected');
 
     // 2. Code check: inspect backend/internal/bot/bot.go
-    const botGoPath = path.join(ROOT, 'backend', 'internal', 'bot', 'bot.go');
-    assert.ok(fs.existsSync(botGoPath), 'bot.go must exist');
-    const botGoContent = fs.readFileSync(botGoPath, 'utf8');
+    const botDir = path.join(ROOT, 'backend', 'internal', 'bot');
+    const botGoContent = fs.readdirSync(botDir)
+      .filter((file) => file.endsWith('.go') && !file.endsWith('_test.go'))
+      .map((file) => fs.readFileSync(path.join(botDir, file), 'utf8'))
+      .join('\n');
 
     const hasGoChatFilter = /msg\.Chat\.Type\s*!=\s*"private"|chat\.type\s*===\s*["']private["']/i.test(botGoContent);
     assert.ok(hasGoChatFilter, 'Private chat filter must be enforced in Go bot');
