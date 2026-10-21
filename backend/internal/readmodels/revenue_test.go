@@ -36,6 +36,8 @@ func TestPostgres_RevenueRollup(t *testing.T) {
 	db.Create(&models.PaymentTransaction{PaymentID: "r1", Tier: "vip", Amount: 14900, AmountKopecks: 1490000, Status: "SUCCESS", Source: "tribute", PromoCode: "SPARK5", CreatedAt: now})
 	db.Create(&models.PaymentTransaction{PaymentID: "r2", Tier: "vip", Amount: 14900, AmountKopecks: 1490000, Status: "SUCCESS", Source: "tribute", PromoCode: "SPARK5", CreatedAt: now})
 	db.Create(&models.PaymentTransaction{PaymentID: "r3", Tier: "basic", Amount: 3990, AmountKopecks: 399000, Status: "FAIL", CreatedAt: now})
+	// Legacy reconciliation rows only had rubles; the rollup must still count them.
+	db.Create(&models.PaymentTransaction{PaymentID: "legacy", Tier: "vip", Amount: 6900, AmountKopecks: 0, Status: "SUCCESS", Source: "tribute", PromoCode: "SPARK5", CreatedAt: now})
 
 	worker := NewRevenueWorker(db)
 	if err := worker.Refresh(context.Background()); err != nil {
@@ -46,7 +48,7 @@ func TestPostgres_RevenueRollup(t *testing.T) {
 	if len(rows) != 1 {
 		t.Fatalf("expected one rollup row, got %d", len(rows))
 	}
-	if rows[0].Purchases != 2 || rows[0].RevenueKopecks != 2980000 || rows[0].Tier != "vip" {
+	if rows[0].Purchases != 3 || rows[0].RevenueKopecks != 3670000 || rows[0].Tier != "vip" {
 		t.Fatalf("unexpected rollup: %+v", rows[0])
 	}
 }

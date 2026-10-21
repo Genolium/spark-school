@@ -18,6 +18,7 @@ const pairs = [
   ['/affiliate/payout', '/affiliate/payout'],
   ['/promo/validate', '/promo/validate'],
   ['/analytics/track', '/analytics/track'],
+  ['/diagnostic', '/diagnostic'],
   ['/analytics/experiments', '/analytics/experiments'],
   ['/client-errors', '/client-errors'],
   ['/payments/yookassa/create', '/payments/yookassa/create'],

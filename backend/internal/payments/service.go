@@ -397,6 +397,7 @@ func (s *Service) applyConfirmation(tx *gorm.DB, in ConfirmInput, result *Result
 		Source:           in.Source,
 		Tier:             in.Tier,
 		PromoCode:        in.PromoCode,
+		PaymentID:        in.PaymentID,
 		Metadata:         string(metadata),
 		CreatedAt:        time.Now(),
 	}).Error; err != nil {

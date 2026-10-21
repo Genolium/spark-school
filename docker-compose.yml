@@ -117,6 +117,8 @@ services:
       args:
         - NEXT_PUBLIC_API_URL=https://${DOMAIN:-so-called-spark.ru}/api/v1
         - NEXT_PUBLIC_BOT_USERNAME=${NEXT_PUBLIC_BOT_USERNAME:-spark_prep_bot}
+        - NEXT_PUBLIC_KINESCOPE_LESSON1_ID=${KINESCOPE_LESSON1_ID:-}
+        - NEXT_PUBLIC_KINESCOPE_LESSON2_ID=${KINESCOPE_LESSON2_ID:-}
     container_name: spark_frontend
     restart: unless-stopped
     ports:

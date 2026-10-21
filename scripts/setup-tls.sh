@@ -6,6 +6,7 @@ set -eu
 DOMAIN="${DOMAIN:-${1:-}}"
 EMAIL="${LETSENCRYPT_EMAIL:-${2:-}}"
 INCLUDE_WWW="${INCLUDE_WWW:-0}"
+UPSTREAM_PORT="${PORT_HTTP:-38080}"
 
 if [ "$(id -u)" -ne 0 ]; then
     echo "run as root (sudo)" >&2
@@ -34,7 +35,7 @@ echo "[tls] requesting certificate for $DOMAIN..."
 certbot certonly --nginx $CERT_ARGS --non-interactive --agree-tos -m "$EMAIL" --keep-until-expiring
 
 TARGET="/etc/nginx/sites-available/spark.conf"
-sed -e "s|__DOMAIN__|$DOMAIN|g" -e "s|__WWW__|$WWW|g" ./scripts/nginx-spark.conf.template > "$TARGET"
+sed -e "s|__DOMAIN__|$DOMAIN|g" -e "s|__WWW__|$WWW|g" -e "s|__UPSTREAM_PORT__|$UPSTREAM_PORT|g" ./scripts/nginx-spark.conf.template > "$TARGET"
 ln -sf "$TARGET" /etc/nginx/sites-enabled/spark.conf
 nginx -t
 systemctl reload nginx

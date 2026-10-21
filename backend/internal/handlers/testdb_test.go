@@ -34,6 +34,7 @@ func setupHandlerDB(t *testing.T) *gorm.DB {
 		&models.OutboxEvent{},
 		&models.AnalyticsEvent{},
 		&models.AdminAuditLog{},
+		&models.Diagnostic{},
 		&models.ExperimentAssignment{},
 		&models.CallBooking{},
 		&models.StudentSubmission{},

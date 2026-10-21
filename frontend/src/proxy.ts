@@ -2,8 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 
 // Per-request nonce CSP. Next.js applies the nonce to its own scripts when
 // the CSP header is present on the request.
-export function middleware(request: NextRequest) {
-  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+export function proxy(request: NextRequest) {
+  // Use a cryptographically random per-request value as the CSP nonce.
+  const nonce = crypto.randomUUID().replace(/-/g, "");
   const isDev = process.env.NODE_ENV !== "production";
   const connect = [
     "'self'",
@@ -26,7 +27,7 @@ export function middleware(request: NextRequest) {
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
     "font-src 'self' data: https://fonts.gstatic.com",
     "img-src 'self' data: https:",
-    "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://telegram.org https://oauth.telegram.org https://yookassa.ru https://*.yookassa.ru",
+    "frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://telegram.org https://oauth.telegram.org https://yookassa.ru https://*.yookassa.ru https://kinescope.io https://*.kinescope.io",
     "frame-ancestors 'self'",
     "form-action 'self' https://yookassa.ru https://*.yookassa.ru",
     `connect-src ${connect.join(" ")}`,

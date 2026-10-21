@@ -78,11 +78,6 @@ func NewBotService(cfg *config.Config, db *gorm.DB) *BotService {
 	// Start daily curator digest cron worker
 	go s.startDigestWorker()
 
-	// Zoom reminders are part of the paused learning workflow.
-	if zoomToolsEnabled {
-		go s.startReminderWorker()
-	}
-
 	return s
 }
 
@@ -164,7 +159,7 @@ func (s *BotService) Start() {
 }
 
 // studentStatusDetails renders the student's current program state: progress,
-// audit balance, pending work deadlines and the nearest Zoom call.
+// audit balance and pending work deadlines.
 func (s *BotService) studentStatusDetails(user *models.User) string {
 	if s.db == nil || user == nil {
 		return ""
@@ -206,11 +201,6 @@ func (s *BotService) studentStatusDetails(user *models.User) string {
 		}
 	}
 
-	var booking models.CallBooking
-	if err := s.db.Where("telegram_id = ? AND status = ? AND cancelled_at IS NULL", user.TelegramID, "confirmed").
-		Order("slot_key ASC").First(&booking).Error; err == nil {
-		sb.WriteString(fmt.Sprintf("\n📅 <b>Ближайший Zoom:</b> %s", booking.SlotTime))
-	}
 	return sb.String()
 }
 

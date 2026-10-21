@@ -3,7 +3,6 @@ package bot
 import (
 	"context"
 	"fmt"
-	"sync"
 	"testing"
 	"time"
 
@@ -29,7 +28,6 @@ func setupTestBot(t *testing.T) (*BotService, *gorm.DB) {
 
 	err = db.AutoMigrate(
 		&models.User{},
-		&models.CallBooking{},
 		&models.StudentSubmission{},
 		&models.PaymentTransaction{},
 		&models.PaymentReceipt{},
@@ -40,13 +38,11 @@ func setupTestBot(t *testing.T) (*BotService, *gorm.DB) {
 		&models.ReferralTransaction{},
 		&models.OutboxEvent{},
 		&models.PaymentOrder{},
+		&models.Diagnostic{},
 	)
 	if err != nil {
 		t.Fatalf("failed to automigrate models: %v", err)
 	}
-
-	db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_active_slot_key ON call_bookings (slot_key) WHERE status = 'confirmed' AND cancelled_at IS NULL;")
-	db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_active_user_booking ON call_bookings (telegram_id) WHERE status = 'confirmed' AND cancelled_at IS NULL;")
 
 	affService := services.NewAffiliateService(db)
 	botService := &BotService{
@@ -57,45 +53,6 @@ func setupTestBot(t *testing.T) (*BotService, *gorm.DB) {
 	}
 
 	return botService, db
-}
-
-func TestCuratorTools_UpcomingSlots(t *testing.T) {
-	now := time.Date(2026, 10, 20, 10, 0, 0, 0, time.UTC)
-	slots := getUpcomingSlots(now)
-
-	if len(slots) == 0 {
-		t.Fatalf("expected at least 1 upcoming slot, got 0")
-	}
-
-	for i, sl := range slots {
-		if sl.Key == "" {
-			t.Errorf("slot %d: empty key", i)
-		}
-		if sl.Display == "" {
-			t.Errorf("slot %d: empty display", i)
-		}
-		if !sl.Time.After(now.Add(2 * time.Hour)) {
-			t.Errorf("slot %d: time %v should be at least 2h after %v", i, sl.Time, now)
-		}
-	}
-}
-
-func TestCuratorTools_InterviewQuestions(t *testing.T) {
-	if len(interviewQuestions) == 0 {
-		t.Fatalf("expected interview questions list to be populated")
-	}
-
-	for i, q := range interviewQuestions {
-		if q.Question == "" {
-			t.Errorf("question %d: empty question text", i)
-		}
-		if q.Context == "" {
-			t.Errorf("question %d: empty context", i)
-		}
-		if q.Tip == "" {
-			t.Errorf("question %d: empty tip", i)
-		}
-	}
 }
 
 func TestCuratorTools_GetSafeInviteLink(t *testing.T) {
@@ -115,122 +72,6 @@ func TestCuratorTools_GetSafeInviteLink(t *testing.T) {
 	linkEmpty := bot2.GetSafeInviteLink(context.Background())
 	if linkEmpty != "" {
 		t.Errorf("expected empty string when no link or channel configured, got %q", linkEmpty)
-	}
-}
-
-func TestCuratorTools_ConcurrentBooking_RaceCondition(t *testing.T) {
-	bot, db := setupTestBot(t)
-
-	user1 := models.User{TelegramID: 1001, Username: "alex_acc", Tier: "accelerator", HasAccess: true}
-	user2 := models.User{TelegramID: 1002, Username: "misha_vip", Tier: "vip", HasAccess: true}
-	db.Create(&user1)
-	db.Create(&user2)
-
-	slots := getUpcomingSlots(time.Now())
-	if len(slots) == 0 {
-		t.Fatalf("no upcoming slots found")
-	}
-	targetSlot := slots[0].Key
-
-	var wg sync.WaitGroup
-	workers := 10
-
-	for i := 0; i < workers; i++ {
-		wg.Add(1)
-		go func(idx int) {
-			defer wg.Done()
-			var u models.User
-			if idx%2 == 0 {
-				u = user1
-			} else {
-				u = user2
-			}
-			bot.BookCallDialog(tu.ID(u.TelegramID), &telego.User{ID: u.TelegramID, Username: u.Username}, targetSlot)
-		}(i)
-	}
-
-	wg.Wait()
-
-	var bookings []models.CallBooking
-	db.Where("slot_key = ? AND status = ? AND cancelled_at IS NULL", targetSlot, "confirmed").Find(&bookings)
-	if len(bookings) != 1 {
-		t.Fatalf("expected exactly 1 confirmed booking for slot %s, got %d", targetSlot, len(bookings))
-	}
-}
-
-func TestCuratorTools_UserActiveBookingConflict(t *testing.T) {
-	bot, db := setupTestBot(t)
-
-	user := models.User{TelegramID: 1003, Username: "conflict_user", Tier: "accelerator", HasAccess: true}
-	db.Create(&user)
-
-	slots := getUpcomingSlots(time.Now())
-	if len(slots) < 2 {
-		t.Fatalf("need at least 2 upcoming slots")
-	}
-
-	slotA := slots[0].Key
-	slotB := slots[1].Key
-
-	// First booking must succeed
-	bot.BookCallDialog(tu.ID(user.TelegramID), &telego.User{ID: user.TelegramID, Username: user.Username}, slotA)
-
-	var bookingsA []models.CallBooking
-	db.Where("telegram_id = ? AND slot_key = ? AND status = 'confirmed'", user.TelegramID, slotA).Find(&bookingsA)
-	if len(bookingsA) != 1 {
-		t.Fatalf("expected 1 confirmed booking for slot A, got %d", len(bookingsA))
-	}
-
-	// Second booking attempt on different slot must be blocked
-	bot.BookCallDialog(tu.ID(user.TelegramID), &telego.User{ID: user.TelegramID, Username: user.Username}, slotB)
-
-	var allUserBookings []models.CallBooking
-	db.Where("telegram_id = ? AND status = 'confirmed' AND cancelled_at IS NULL", user.TelegramID).Find(&allUserBookings)
-	if len(allUserBookings) != 1 {
-		t.Fatalf("expected user to maintain only 1 active booking, got %d", len(allUserBookings))
-	}
-	if allUserBookings[0].SlotKey != slotA {
-		t.Errorf("expected active booking to remain on slot A, got %s", allUserBookings[0].SlotKey)
-	}
-}
-
-func TestCuratorTools_CancelBooking_FreesSlot(t *testing.T) {
-	bot, db := setupTestBot(t)
-
-	user1 := models.User{TelegramID: 1004, Username: "canceller", Tier: "accelerator", HasAccess: true}
-	user2 := models.User{TelegramID: 1005, Username: "successor", Tier: "vip", HasAccess: true}
-	db.Create(&user1)
-	db.Create(&user2)
-
-	slots := getUpcomingSlots(time.Now())
-	targetSlot := slots[0].Key
-
-	// User 1 books slot
-	bot.BookCallDialog(tu.ID(user1.TelegramID), &telego.User{ID: user1.TelegramID, Username: user1.Username}, targetSlot)
-
-	// User 2 tries to book same slot -> should fail
-	bot.BookCallDialog(tu.ID(user2.TelegramID), &telego.User{ID: user2.TelegramID, Username: user2.Username}, targetSlot)
-	var u2Bookings []models.CallBooking
-	db.Where("telegram_id = ? AND status = 'confirmed'", user2.TelegramID).Find(&u2Bookings)
-	if len(u2Bookings) != 0 {
-		t.Fatalf("expected user 2 booking to be rejected while slot is taken")
-	}
-
-	// User 1 cancels booking
-	bot.CancelBooking(tu.ID(user1.TelegramID), &telego.User{ID: user1.TelegramID, Username: user1.Username}, 0)
-
-	var cancelled []models.CallBooking
-	db.Where("telegram_id = ? AND status = 'cancelled'", user1.TelegramID).Find(&cancelled)
-	if len(cancelled) != 1 {
-		t.Fatalf("expected user 1 booking to be cancelled")
-	}
-
-	// User 2 now books the freed slot -> should succeed!
-	bot.BookCallDialog(tu.ID(user2.TelegramID), &telego.User{ID: user2.TelegramID, Username: user2.Username}, targetSlot)
-	var u2Confirmed []models.CallBooking
-	db.Where("telegram_id = ? AND status = 'confirmed' AND cancelled_at IS NULL", user2.TelegramID).Find(&u2Confirmed)
-	if len(u2Confirmed) != 1 {
-		t.Fatalf("expected user 2 to successfully book freed slot, got %d", len(u2Confirmed))
 	}
 }
 

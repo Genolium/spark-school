@@ -57,6 +57,9 @@ func TestReconcileHistoricalSales_PureUser(t *testing.T) {
 	if txs[0].Amount != 6900.0 {
 		t.Errorf("expected transaction amount 6900.0, got %f", txs[0].Amount)
 	}
+	if txs[0].AmountKopecks != 690000 {
+		t.Errorf("expected transaction amount_kopecks 690000, got %d", txs[0].AmountKopecks)
+	}
 	if txs[0].Status != "SUCCESS" {
 		t.Errorf("expected transaction status SUCCESS, got %s", txs[0].Status)
 	}

@@ -67,6 +67,10 @@ func (s *BotService) handleMessage(msg *telego.Message) error {
 			param = parts[1]
 		}
 
+		if token := diagnosticTokenFromStart(param); token != "" {
+			return s.handleDiagnosticPlan(chatID, msg.From, token)
+		}
+
 		if param == "pay_audit" || param == "upsell_audit" || param == "audit" || strings.HasPrefix(param, "pay_audit") {
 			s.handleAuditUpsellPayment(chatID, msg.From)
 			return nil
@@ -300,23 +304,13 @@ func (s *BotService) handleMessage(msg *telego.Message) error {
 		return nil
 	}
 
-	// [Временно приостановлено: Сценарий 2 (Сдача работ на аудит) и Сценарий 3 (Запись на Zoom-созвон 1-на-1)]
+	// [Временно приостановлено: Сценарий 2 (Сдача работ на аудит)]
 	/*
 		if strings.HasPrefix(text, "/submit_work") {
 			return s.SubmitWork(chatID, msg.From, text)
 			return nil
 		}
-
-		if strings.HasPrefix(text, "/book_call") {
-			s.BookCallDialog(chatID, msg.From, "")
-			return nil
-		}
 	*/
-
-	if strings.HasPrefix(text, "/interview") {
-		s.SendInterviewTrainer(chatID)
-		return nil
-	}
 
 	if strings.HasPrefix(text, "/queue") {
 		if !learningToolsEnabled {
@@ -339,11 +333,6 @@ func (s *BotService) handleMessage(msg *telego.Message) error {
 
 		if strings.HasPrefix(text, "/changes") {
 			return s.HandleChangesCommand(chatID, msg.From, text)
-			return nil
-		}
-
-		if strings.HasPrefix(text, "/cancel_call") {
-			s.CancelBooking(chatID, msg.From, 0)
 			return nil
 		}
 	*/

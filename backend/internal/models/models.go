@@ -324,6 +324,9 @@ type BackupHeartbeat struct {
 	SizeBytes     int64     `json:"size_bytes,omitempty"`
 }
 
+// TableName matches the table created by migration 00008 and scripts/backup.sh.
+func (BackupHeartbeat) TableName() string { return "backup_heartbeat" }
+
 // RevokedToken is a JWT ID that must no longer be accepted.
 type RevokedToken struct {
 	JTI       string    `gorm:"primaryKey;size:64" json:"jti"`
@@ -374,4 +377,20 @@ type SchedulerLease struct {
 	Name      string    `gorm:"primaryKey;size:64" json:"name"`
 	Owner     string    `gorm:"size:128" json:"owner"`
 	ExpiresAt time.Time `gorm:"index" json:"expires_at"`
+}
+
+// Diagnostic stores a completed landing diagnostic and its public token.
+type Diagnostic struct {
+	ID               uint       `gorm:"primaryKey" json:"id"`
+	Token            string     `gorm:"uniqueIndex;size:32;not null" json:"token"`
+	VisitorID        string     `gorm:"size:64;index" json:"visitor_id,omitempty"`
+	AttributionToken string     `gorm:"size:64;index" json:"attribution_token,omitempty"`
+	TelegramID       int64      `gorm:"index" json:"telegram_id,omitempty"`
+	AgeCitizenship   bool       `json:"age_citizenship"`
+	UniversityYear   string     `gorm:"size:32" json:"university_year"`
+	EnglishLevel     string     `gorm:"size:16" json:"english_level"`
+	Score            int        `json:"score"`
+	Source           string     `gorm:"size:64" json:"source,omitempty"`
+	LinkedAt         *time.Time `json:"linked_at,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
 }

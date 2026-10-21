@@ -64,29 +64,6 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) error {
 		})
 	}
 
-	// [Временно приостановлено: Сценарий 3 (Запись и отмена слотов созвона)]
-	/*
-		if strings.HasPrefix(data, "cancel_booking_") {
-			idStr := strings.TrimPrefix(data, "cancel_booking_")
-			idNum, _ := strconv.Atoi(idStr)
-			s.CancelBooking(chatID, &query.From, uint(idNum))
-			return nil
-		}
-
-		if strings.HasPrefix(data, "book_slot_") {
-			slotKey := strings.TrimPrefix(data, "book_slot_")
-			s.BookCallDialog(chatID, &query.From, slotKey)
-			return nil
-		}
-	*/
-
-	if data == "slot_already_taken" {
-		m := tu.Message(chatID, "🔒 Этот слот уже занят другим студентом. Пожалуйста, выберите другое свободное время.")
-		_, _ = s.bot.SendMessage(m)
-		s.BookCallDialog(chatID, &query.From, "")
-		return nil
-	}
-
 	// Curator submission reviews from queue
 	if strings.HasPrefix(data, "sub_review_") || strings.HasPrefix(data, "sub_changes_") {
 		if !learningToolsEnabled {
@@ -156,30 +133,12 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) error {
 		}
 		return nil
 
-	// [Временно приостановлено: Сценарий 2 (Сдача работ) и Сценарий 3 (Запись на Zoom-созвон 1-на-1)]
+	// [Временно приостановлено: Сценарий 2 (Сдача работ)]
 	/*
 		case "action_submit_work_info":
 			return s.SubmitWork(chatID, &query.From, "/submit_work")
 			return nil
-
-		case "action_book_call":
-			s.BookCallDialog(chatID, &query.From, "")
-			return nil
-
-		case "book_slot_tue_18":
-			s.BookCallDialog(chatID, &query.From, "Вторник, 18:00 МСК")
-			return nil
-		case "book_slot_thu_1930":
-			s.BookCallDialog(chatID, &query.From, "Четверг, 19:30 МСК")
-			return nil
-		case "book_slot_sat_14":
-			s.BookCallDialog(chatID, &query.From, "Суббота, 14:00 МСК")
-			return nil
 	*/
-
-	case "action_interview":
-		s.SendInterviewTrainer(chatID)
-		return nil
 
 	case "admin_queue":
 		if !learningToolsEnabled {

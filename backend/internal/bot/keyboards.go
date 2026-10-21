@@ -68,9 +68,6 @@ func MainMenuKeyboard(frontendURL string, options ...any) *telego.InlineKeyboard
 
 	rows = append(rows,
 		[]telego.InlineKeyboardButton{
-			tu.InlineKeyboardButton("🎙 Тренажёр интервью").WithCallbackData("action_interview"),
-		},
-		[]telego.InlineKeyboardButton{
 			tu.InlineKeyboardButton(buyText).WithCallbackData("action_payment"),
 			tu.InlineKeyboardButton("🎟 Промокод -5%").WithCallbackData("promo_enter"),
 		},

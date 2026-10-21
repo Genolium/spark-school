@@ -32,18 +32,11 @@ func curatorTestDB(t *testing.T) *gorm.DB {
 		&models.User{},
 		&models.StudentSubmission{},
 		&models.OutboxEvent{},
-		&models.CallBooking{},
 	); err != nil {
 		t.Fatalf("migrate: %v", err)
 	}
 	if err := db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_submission_version ON student_submissions(telegram_id, work_type, version)").Error; err != nil {
 		t.Fatalf("unique submission version: %v", err)
-	}
-	if err := db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_active_slot_key ON call_bookings(slot_key) WHERE status = 'confirmed' AND cancelled_at IS NULL").Error; err != nil {
-		t.Fatalf("active slot index: %v", err)
-	}
-	if err := db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_active_user_booking ON call_bookings(telegram_id) WHERE status = 'confirmed' AND cancelled_at IS NULL").Error; err != nil {
-		t.Fatalf("active user booking index: %v", err)
 	}
 	return db
 }
@@ -201,99 +194,4 @@ func acceleratorStudent(t *testing.T, db *gorm.DB, id int64) models.User {
 		t.Fatalf("create accelerator: %v", err)
 	}
 	return u
-}
-
-func TestPostgres_Booking_SameSlotOnce(t *testing.T) {
-	db := curatorTestDB(t)
-	a := acceleratorStudent(t, db, 21001)
-	b := acceleratorStudent(t, db, 21002)
-	service := &BotService{db: db, cfg: &config.Config{}}
-	slot := getUpcomingSlots(time.Now())[0]
-
-	var wg sync.WaitGroup
-	for _, user := range []models.User{a, b} {
-		wg.Add(1)
-		go func(u models.User) {
-			defer wg.Done()
-			service.BookCallDialog(tuID(u.TelegramID), &telego.User{ID: u.TelegramID, Username: u.Username}, slot.Key)
-		}(user)
-	}
-	wg.Wait()
-
-	var count int64
-	db.Model(&models.CallBooking{}).Where("slot_key = ? AND status = 'confirmed' AND cancelled_at IS NULL", slot.Key).Count(&count)
-	if count != 1 {
-		t.Fatalf("expected exactly one booking for the slot, got %d", count)
-	}
-}
-
-func TestPostgres_Booking_OneActivePerUser(t *testing.T) {
-	db := curatorTestDB(t)
-	u := acceleratorStudent(t, db, 22001)
-	service := &BotService{db: db, cfg: &config.Config{}}
-	slots := getUpcomingSlots(time.Now())
-	if len(slots) < 2 {
-		t.Skip("not enough upcoming slots")
-	}
-
-	var wg sync.WaitGroup
-	for _, slot := range slots[:2] {
-		wg.Add(1)
-		go func(key string) {
-			defer wg.Done()
-			service.BookCallDialog(tuID(u.TelegramID), &telego.User{ID: u.TelegramID, Username: u.Username}, key)
-		}(slot.Key)
-	}
-	wg.Wait()
-
-	var count int64
-	db.Model(&models.CallBooking{}).Where("telegram_id = ? AND status = 'confirmed' AND cancelled_at IS NULL", u.TelegramID).Count(&count)
-	if count != 1 {
-		t.Fatalf("expected exactly one active booking per user, got %d", count)
-	}
-}
-
-func TestPostgres_Booking_RepeatedCallbackIsIdempotent(t *testing.T) {
-	db := curatorTestDB(t)
-	u := acceleratorStudent(t, db, 23001)
-	service := &BotService{db: db, cfg: &config.Config{}}
-	slot := getUpcomingSlots(time.Now())[0]
-	from := &telego.User{ID: u.TelegramID, Username: u.Username}
-
-	service.BookCallDialog(tuID(u.TelegramID), from, slot.Key)
-	service.BookCallDialog(tuID(u.TelegramID), from, slot.Key)
-
-	var count int64
-	db.Model(&models.CallBooking{}).Where("telegram_id = ?", u.TelegramID).Count(&count)
-	if count != 1 {
-		t.Fatalf("repeated booking callback created %d rows", count)
-	}
-}
-
-func TestPostgres_Booking_CancelIsConditional(t *testing.T) {
-	db := curatorTestDB(t)
-	u := acceleratorStudent(t, db, 24001)
-	service := &BotService{db: db, cfg: &config.Config{}}
-	slot := getUpcomingSlots(time.Now())[0]
-	from := &telego.User{ID: u.TelegramID, Username: u.Username}
-	service.BookCallDialog(tuID(u.TelegramID), from, slot.Key)
-
-	var booking models.CallBooking
-	db.Where("telegram_id = ?", u.TelegramID).First(&booking)
-	service.CancelBooking(tuID(u.TelegramID), from, booking.ID)
-	service.CancelBooking(tuID(u.TelegramID), from, booking.ID)
-
-	var cancelled int64
-	db.Model(&models.CallBooking{}).Where("id = ? AND status = 'cancelled'", booking.ID).Count(&cancelled)
-	if cancelled != 1 {
-		t.Fatalf("expected cancelled booking, got %d", cancelled)
-	}
-	// The slot must be reusable after cancellation.
-	other := acceleratorStudent(t, db, 24002)
-	service.BookCallDialog(tuID(other.TelegramID), &telego.User{ID: other.TelegramID, Username: other.Username}, slot.Key)
-	var active int64
-	db.Model(&models.CallBooking{}).Where("slot_key = ? AND status = 'confirmed' AND cancelled_at IS NULL", slot.Key).Count(&active)
-	if active != 1 {
-		t.Fatalf("expected slot to be reusable, got %d active", active)
-	}
 }

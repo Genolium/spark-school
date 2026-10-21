@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/spark-school/backend/internal/config"
+	"github.com/spark-school/backend/internal/money"
 	"github.com/spark-school/backend/internal/models"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -18,7 +19,7 @@ var DB *gorm.DB
 
 // RequiredSchemaVersion is the migration version a process needs before it is
 // considered ready to serve traffic.
-const RequiredSchemaVersion int64 = 13
+const RequiredSchemaVersion int64 = 16
 
 // MigrationVersion returns the latest applied Goose version.
 func MigrationVersion(db *gorm.DB) (int64, error) {
@@ -192,11 +193,12 @@ func ReconcileHistoricalSales(db *gorm.DB) {
 				tier = "accelerator"
 			}
 			pt := models.PaymentTransaction{
-				PaymentID:  receiptPID,
-				TelegramID: pr.TelegramID,
-				Username:   pr.Username,
-				Amount:     pr.Amount,
-				Currency:   "RUB",
+				PaymentID:     receiptPID,
+				TelegramID:    pr.TelegramID,
+				Username:      pr.Username,
+				Amount:        pr.Amount,
+				AmountKopecks: int64(money.FromRubles(pr.Amount)),
+				Currency:      "RUB",
 				Tier:       tier,
 				Status:     "SUCCESS",
 				PayMethod:  "sbp_receipt",
@@ -234,11 +236,12 @@ func ReconcileHistoricalSales(db *gorm.DB) {
 					tier = "accelerator"
 				}
 				pt := models.PaymentTransaction{
-					PaymentID:  histPID,
-					TelegramID: u.TelegramID,
-					Username:   u.Username,
-					Amount:     diff,
-					Currency:   "RUB",
+					PaymentID:     histPID,
+					TelegramID:    u.TelegramID,
+					Username:      u.Username,
+					Amount:        diff,
+					AmountKopecks: int64(money.FromRubles(diff)),
+					Currency:      "RUB",
 					Tier:       tier,
 					Status:     "SUCCESS",
 					PayMethod:  "historical_access",

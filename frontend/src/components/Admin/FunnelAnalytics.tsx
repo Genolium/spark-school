@@ -7,6 +7,7 @@ const STEP_LABELS: Record<string, string> = {
   landing_view: "Визит лендинга",
   diagnostic_start: "Начало диагностики",
   diagnostic_complete: "Диагностика завершена",
+  diagnostic_plan_created: "План создан",
   pricing_select_tier: "Выбор тарифа",
   bot_handoff: "Переход в Telegram",
   bot_lead: "Лид в боте",

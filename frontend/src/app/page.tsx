@@ -113,10 +113,7 @@ export default function HomePage() {
       <AuthorSection />
 
       {/* Screen 6.5: Demo Lesson & Curator Feedback Preview */}
-      <DemoLessonSection
-        onOpenDiagnostic={() => setIsChancesOpen(true)}
-        onSelectPricing={() => handleOpenPayment("accelerator")}
-      />
+      <DemoLessonSection />
 
       {/* Screen 7: 3-Tier Pricing Matrix & Scarcity */}
       <PricingSection onOpenPayment={handleOpenPayment} />

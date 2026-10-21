@@ -37,6 +37,7 @@ var funnelOrder = []string{
 	"landing_view",
 	"diagnostic_start",
 	"diagnostic_complete",
+	"diagnostic_plan_created",
 	"pricing_select_tier",
 	"bot_handoff",
 	"bot_lead",

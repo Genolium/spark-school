@@ -31,7 +31,7 @@ func TestMonitor_AlertsAndCooldown(t *testing.T) {
 	db := testMonitorDB(t)
 	now := time.Now()
 	db.Create(&models.OutboxEvent{EventType: "telegram_notification", Payload: "{}", Status: "failed", CreatedAt: now})
-	db.Create(&models.PaymentTransaction{PaymentID: "missing-event", Status: "SUCCESS", Amount: 6900, AmountKopecks: 690000, CreatedAt: now})
+	db.Create(&models.PaymentTransaction{PaymentID: "missing-event", Status: "SUCCESS", Amount: 6900, AmountKopecks: 690000, CreatedAt: now.Add(-20 * time.Minute)})
 	db.Create(&models.BackupHeartbeat{ID: 1, LastSuccessAt: now.Add(-30 * time.Hour)})
 	metrics := security.NewMetrics()
 	metrics.RecordWebhook5xx()

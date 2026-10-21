@@ -15,6 +15,7 @@ CHECKS = [
     ("/admin", 200, None),
     ("/offer", 200, None),
     ("/privacy", 200, None),
+    ("/plan/invalidtoken", 200, None),
     ("/partner", 200, BASE + "/"),
     ("/terms", 200, BASE + "/offer"),
     ("/robots.txt", 200, None),

@@ -110,6 +110,7 @@ func main() {
 	promoHandler := handlers.NewPromoHandler(db)
 	pricingHandler := handlers.NewPricingHandler(db)
 	studentHandler := handlers.NewStudentHandler(db, cfg)
+	diagnosticHandler := handlers.NewDiagnosticHandler(db, cfg)
 	statsHandler := handlers.NewStatsHandler(db)
 	receiptHandler := handlers.NewReceiptHandler(db, func(receipt *models.PaymentReceipt) error {
 		if cfg.AdminTelegramID != 0 {
@@ -256,6 +257,8 @@ func main() {
 		// metadata, no PII and an explicit error when persistence fails.
 		analyticsLimiter := limit(60, 1*time.Minute, "analytics", "Слишком много событий аналитики.")
 		api.POST("/analytics/track", analyticsLimiter, handlers.TrackAnalytics(db))
+		api.POST("/diagnostic", analyticsLimiter, diagnosticHandler.Create)
+		api.GET("/diagnostic/:token", diagnosticHandler.Get)
 		api.POST("/client-errors", limit(20, 1*time.Minute, "client_errors", "Слишком много сообщений об ошибках."), handlers.ClientError)
 		api.POST("/analytics/experiments", analyticsLimiter, handlers.AssignExperiments(db))
 

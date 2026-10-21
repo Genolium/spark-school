@@ -110,7 +110,9 @@ func (m *Monitor) CheckOnce(ctx context.Context) []string {
 
 	var missingConfirmations int64
 	err := m.db.Model(&models.PaymentTransaction{}).
-		Where("status = 'SUCCESS' AND created_at >= ?", now.AddDate(0, 0, -7)).
+		Where("status = 'SUCCESS' AND created_at >= ? AND created_at < ?", now.AddDate(0, 0, -7), now.Add(-15*time.Minute)).
+		Where("COALESCE(pay_method, '') NOT IN ?", []string{"admin_manual", "historical_access"}).
+		Where("COALESCE(source, '') NOT IN ?", []string{"manual", "historical"}).
 		Where("NOT EXISTS (SELECT 1 FROM analytics_events ae WHERE ae.payment_id = payment_transactions.payment_id AND ae.step = 'payment_confirmed')").
 		Count(&missingConfirmations).Error
 	if err != nil {

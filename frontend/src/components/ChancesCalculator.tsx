@@ -4,16 +4,36 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Calculator, CheckCircle2, AlertTriangle, ArrowRight, RotateCcw, Send, Sparkles } from "lucide-react";
 import { trackFunnelStep } from "@/lib/analytics";
+import { createDiagnostic, DiagnosticResult } from "@/lib/diagnostic";
 
 export function ChancesCalculator() {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [ageCitizenshipValid, setAgeCitizenshipValid] = useState<boolean | null>(null);
   const [universityYear, setUniversityYear] = useState<"1-2" | "3" | "senior" | null>(null);
   const [englishLevel, setEnglishLevel] = useState<"b1" | "b2" | "c1" | null>(null);
+  const [plan, setPlan] = useState<DiagnosticResult | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
 
   useEffect(() => {
     trackFunnelStep("diagnostic_start");
   }, []);
+
+  const completeDiagnostic = (level: "b1" | "b2" | "c1") => {
+    setEnglishLevel(level);
+    const score = level === "c1" ? 96 : level === "b2" ? 88 : 75;
+    trackFunnelStep("diagnostic_complete", { level, score, universityYear });
+    setStep(4);
+    setPlanLoading(true);
+    createDiagnostic({
+      age_citizenship: ageCitizenshipValid !== false,
+      university_year: universityYear || "3",
+      english_level: level,
+      source: "calculator",
+    }).then((result) => {
+      setPlan(result);
+      setPlanLoading(false);
+    }).catch(() => setPlanLoading(false));
+  };
 
   const getScoreData = () => {
     switch (englishLevel) {
@@ -283,9 +303,7 @@ export function ChancesCalculator() {
                 <button
                   type="button"
                   onClick={() => {
-                    setEnglishLevel("b1");
-                    trackFunnelStep("diagnostic_complete", { level: "b1", score: 75, universityYear });
-                    setStep(4);
+                    completeDiagnostic("b1");
                   }}
                   className="w-full p-4 rounded-2xl bento-card-dark border border-emerald-500/25 hover:border-emerald-500 bg-white/50 dark:bg-white/5 hover:bg-emerald-500/10 text-slate-900 dark:text-white font-medium text-sm transition-all flex items-center justify-between group active:scale-95"
                 >
@@ -303,9 +321,7 @@ export function ChancesCalculator() {
                 <button
                   type="button"
                   onClick={() => {
-                    setEnglishLevel("b2");
-                    trackFunnelStep("diagnostic_complete", { level: "b2", score: 88, universityYear });
-                    setStep(4);
+                    completeDiagnostic("b2");
                   }}
                   className="w-full p-4 rounded-2xl bento-card-dark border border-emerald-500/35 hover:border-emerald-500 bg-emerald-500/[0.06] hover:bg-emerald-500/15 text-slate-900 dark:text-white font-medium text-sm transition-all flex items-center justify-between group active:scale-95"
                 >
@@ -323,9 +339,7 @@ export function ChancesCalculator() {
                 <button
                   type="button"
                   onClick={() => {
-                    setEnglishLevel("c1");
-                    trackFunnelStep("diagnostic_complete", { level: "c1", score: 96, universityYear });
-                    setStep(4);
+                    completeDiagnostic("c1");
                   }}
                   className="w-full p-4 rounded-2xl bento-card-dark border border-emerald-500/40 hover:border-emerald-500 bg-emerald-500/10 hover:bg-emerald-500/20 text-slate-900 dark:text-white font-medium text-sm transition-all flex items-center justify-between group active:scale-95"
                 >
@@ -437,14 +451,19 @@ export function ChancesCalculator() {
 
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
                 <a
-                  href={`https://t.me/spark_prep_bot?start=calc_${englishLevel || "b1"}_${scoreData.percent}`}
+                  href={plan?.telegram_url || `https://t.me/spark_prep_bot?start=calc_${englishLevel || "b1"}_${scoreData.percent}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn-primary-mono w-full sm:w-auto px-6 py-3.5 text-xs sm:text-sm font-bold flex items-center justify-center gap-2 group shadow-xl"
                 >
                   <Send className="w-4 h-4" />
-                  <span>Разобрать заявку с так называемым Илем в Telegram ➔</span>
+                  <span>{planLoading ? "Готовим план…" : plan ? "Получить персональный план в Telegram ➔" : "Разобрать заявку с Илем в Telegram ➔"}</span>
                 </a>
+                {plan && (
+                  <a href={plan.plan_url} className="text-xs font-mono text-emerald-700 dark:text-emerald-300 underline">
+                    Открыть план на сайте
+                  </a>
+                )}
 
                 <button
                   type="button"

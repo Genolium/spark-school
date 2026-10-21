@@ -84,7 +84,7 @@ func (w *RevenueWorker) Refresh(ctx context.Context) error {
 			       COALESCE(source, ''),
 			       COALESCE(promo_code, ''),
 			       COUNT(*),
-			       COALESCE(SUM(amount_kopecks), 0),
+			       COALESCE(SUM(COALESCE(NULLIF(amount_kopecks, 0), ROUND(amount * 100)::bigint)), 0),
 			       NOW()
 			FROM payment_transactions
 			WHERE status = 'SUCCESS'

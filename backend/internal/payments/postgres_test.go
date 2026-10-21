@@ -146,6 +146,11 @@ func TestPostgres_ParallelReceiptApproval(t *testing.T) {
 	if analytics != 1 {
 		t.Fatalf("expected exactly one payment_confirmed event, got %d", analytics)
 	}
+	var event models.AnalyticsEvent
+	db.Where("step = ?", "payment_confirmed").First(&event)
+	if want := fmt.Sprintf("RECEIPT_%d", receipt.ID); event.PaymentID != want {
+		t.Fatalf("expected payment_confirmed.payment_id=%q, got %q", want, event.PaymentID)
+	}
 }
 
 func TestPostgres_RepeatedGatewayPayment(t *testing.T) {
