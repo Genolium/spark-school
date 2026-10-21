@@ -131,13 +131,13 @@ func TestPostgres_UpdateClaim_LeaseExpiryAndFailedRetry(t *testing.T) {
 	}
 }
 
-func TestHandleUpdate_PanicBecomesError(t *testing.T) {
+func TestHandleUpdate_MalformedMessageReturnsError(t *testing.T) {
 	service := &BotService{}
 	update := &telego.Update{UpdateID: 1, Message: &telego.Message{Chat: telego.Chat{ID: 10, Type: "private"}}}
-	// Message.From is nil; the handler dereferences it, simulating a panic in
-	// third-party parsing code. HandleUpdate must return an error, not nil.
+	// A private message without a sender is malformed. It must be reported as
+	// an error rather than silently treated as success.
 	err := service.HandleUpdate(context.Background(), update)
 	if err == nil {
-		t.Fatal("recovered panic must be returned as an error")
+		t.Fatal("malformed message must be returned as an error")
 	}
 }

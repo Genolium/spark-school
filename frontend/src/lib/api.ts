@@ -1,4 +1,4 @@
-// Client API service with transparent local mock fallback for offline and preview testing
+// Client API service. Failures are surfaced as empty/error states, never fake data.
 
 export interface UserProfile {
   id: number;
@@ -135,70 +135,6 @@ export interface CoursePricing {
   updated_at?: string;
 }
 
-export function generateMockDailyStats(targetGross: number = 289800): DailyRevenueStat[] {
-  const stats: DailyRevenueStat[] = [];
-  const now = new Date();
-  const ruMonths = ["янв", "фев", "мар", "апр", "май", "июн", "июл", "авг", "сен", "окт", "ноя", "дек"];
-
-  const pattern = [
-    { dayOffset: 29, rev: 0, p: 0, acc: 0, vip: 0 },
-    { dayOffset: 28, rev: 6555, p: 1, acc: 1, vip: 0 },
-    { dayOffset: 27, rev: 0, p: 0, acc: 0, vip: 0 },
-    { dayOffset: 26, rev: 14155, p: 1, acc: 0, vip: 1 },
-    { dayOffset: 25, rev: 6900, p: 1, acc: 1, vip: 0 },
-    { dayOffset: 24, rev: 13110, p: 2, acc: 2, vip: 0 },
-    { dayOffset: 23, rev: 0, p: 0, acc: 0, vip: 0 },
-    { dayOffset: 22, rev: 6555, p: 1, acc: 1, vip: 0 },
-    { dayOffset: 21, rev: 21055, p: 2, acc: 1, vip: 1 },
-    { dayOffset: 20, rev: 6900, p: 1, acc: 1, vip: 0 },
-    { dayOffset: 19, rev: 0, p: 0, acc: 0, vip: 0 },
-    { dayOffset: 18, rev: 13455, p: 2, acc: 2, vip: 0 },
-    { dayOffset: 17, rev: 6555, p: 1, acc: 1, vip: 0 },
-    { dayOffset: 16, rev: 14900, p: 1, acc: 0, vip: 1 },
-    { dayOffset: 15, rev: 6900, p: 1, acc: 1, vip: 0 },
-    { dayOffset: 14, rev: 13110, p: 2, acc: 2, vip: 0 },
-    { dayOffset: 13, rev: 0, p: 0, acc: 0, vip: 0 },
-    { dayOffset: 12, rev: 6555, p: 1, acc: 1, vip: 0 },
-    { dayOffset: 11, rev: 14155, p: 1, acc: 0, vip: 1 },
-    { dayOffset: 10, rev: 13455, p: 2, acc: 2, vip: 0 },
-    { dayOffset: 9, rev: 6900, p: 1, acc: 1, vip: 0 },
-    { dayOffset: 8, rev: 0, p: 0, acc: 0, vip: 0 },
-    { dayOffset: 7, rev: 13110, p: 2, acc: 2, vip: 0 },
-    { dayOffset: 6, rev: 6555, p: 1, acc: 1, vip: 0 },
-    { dayOffset: 5, rev: 21055, p: 2, acc: 1, vip: 1 },
-    { dayOffset: 4, rev: 6900, p: 1, acc: 1, vip: 0 },
-    { dayOffset: 3, rev: 13455, p: 2, acc: 2, vip: 0 },
-    { dayOffset: 2, rev: 14155, p: 1, acc: 0, vip: 1 },
-    { dayOffset: 1, rev: 13110, p: 2, acc: 2, vip: 0 },
-    { dayOffset: 0, rev: 13455, p: 2, acc: 2, vip: 0 },
-  ];
-
-  // Scale revenues proportionally to targetGross
-  const rawSum = pattern.reduce((s, x) => s + x.rev, 0);
-  const factor = rawSum > 0 ? targetGross / rawSum : 1;
-
-  let cumulative = 0;
-  for (const item of pattern) {
-    const d = new Date(now);
-    d.setDate(d.getDate() - item.dayOffset);
-    const dateStr = d.toISOString().split("T")[0];
-    const label = `${String(d.getDate()).padStart(2, "0")} ${ruMonths[d.getMonth()]}`;
-    const scaledRev = item.rev > 0 ? Math.round(item.rev * factor) : 0;
-    cumulative += scaledRev;
-    stats.push({
-      date: dateStr,
-      date_label: label,
-      revenue: scaledRev,
-      purchases: item.p,
-      cumulative_revenue: cumulative,
-      accelerator_count: item.acc,
-      vip_count: item.vip,
-    });
-  }
-
-  return stats;
-}
-
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
 
 // Helper to get admin JWT token from local storage
@@ -237,6 +173,16 @@ export interface ExperimentMetric {
   significant: boolean;
   min_sample_reached: boolean;
   required_sample_per_variant: number;
+}
+
+export interface DeadOutboxEvent {
+  id: number;
+  event_type: string;
+  status: string;
+  retry_count: number;
+  max_retries: number;
+  last_error?: string;
+  created_at: string;
 }
 
 export interface FunnelData {
@@ -362,6 +308,13 @@ export const api = {
   // Admin Logout
   adminLogout() {
     if (typeof window !== "undefined") {
+      const token = getAdminToken();
+      // Best-effort server-side revocation; local state is cleared regardless.
+      void fetch(`${API_BASE}/admin/logout`, {
+        method: "POST",
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        credentials: "include",
+      }).catch(() => {});
       localStorage.removeItem("spark_admin_token");
       localStorage.removeItem("spark_admin_user");
       sessionStorage.removeItem("spark_admin_unlocked");
@@ -980,4 +933,33 @@ export const api = {
   },
 
 
+
+  async getDeadOutbox(): Promise<DeadOutboxEvent[] | null> {
+    const token = getAdminToken();
+    try {
+      const res = await fetch(`${API_BASE}/admin/outbox/dead`, {
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        credentials: "include",
+      });
+      if (!res.ok) return null;
+      const json = await res.json();
+      return (json.events || []) as DeadOutboxEvent[];
+    } catch {
+      return null;
+    }
+  },
+
+  async retryOutbox(id: number): Promise<boolean> {
+    const token = getAdminToken();
+    try {
+      const res = await fetch(`${API_BASE}/admin/outbox/${id}/retry`, {
+        method: "POST",
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        credentials: "include",
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
 };

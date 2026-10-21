@@ -11,6 +11,7 @@ import { PromosTable } from "@/components/Admin/PromosTable";
 import { PricingSettingsTable } from "@/components/Admin/PricingSettingsTable";
 import { RevenueAnalyticsCharts } from "@/components/Admin/RevenueAnalyticsCharts";
 import { FunnelAnalytics } from "@/components/Admin/FunnelAnalytics";
+import { OutboxDeadLetter } from "@/components/Admin/OutboxDeadLetter";
 import { ExperimentsReport } from "@/components/Admin/ExperimentsReport";
 import { api, AdminStats, UserProfile, PayoutRequest, PromoCode } from "@/lib/api";
 import {
@@ -287,6 +288,7 @@ export default function AdminPage() {
               <div>
                 <FunnelAnalytics />
                 <ExperimentsReport />
+                <OutboxDeadLetter />
                 <FinancialStats stats={stats} />
                 <RevenueAnalyticsCharts stats={stats} />
               </div>

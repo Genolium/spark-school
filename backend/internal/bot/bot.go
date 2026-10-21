@@ -189,7 +189,7 @@ func (s *BotService) startQueueWorker() {
 					_, err = s.bot.SendMessage(m)
 				}
 			} else if item.telegramID != 0 {
-				log.Printf("[Bot Notification Mock] to %d: %s", item.telegramID, item.message)
+				log.Printf("[Bot Notification Mock] to %d (len=%d)", item.telegramID, len(item.message))
 			}
 
 			if item.respChan != nil {
@@ -285,8 +285,16 @@ func (s *BotService) handleMessage(msg *telego.Message) error {
 	if msg == nil {
 		return nil
 	}
+	if msg.From == nil {
+		return fmt.Errorf("telegram message has no sender")
+	}
 
-	log.Printf("[Bot Inbound] chat_id=%d, type=%s, from=%s, text=%q", msg.Chat.ID, msg.Chat.Type, msg.From.FirstName, msg.Text)
+	fromID := int64(0)
+	if msg.From != nil {
+		fromID = msg.From.ID
+	}
+	// Never log message text or names: they contain personal data.
+	log.Printf("[Bot Inbound] chat_id=%d, type=%s, from_id=%d, text_len=%d", msg.Chat.ID, msg.Chat.Type, fromID, len(msg.Text))
 
 	// Private Chat Filter (R5): strictly ignore group, supergroup, channel messages
 	if msg.Chat.Type != "private" || msg.Chat.ID <= 0 {
@@ -524,7 +532,7 @@ func (s *BotService) handleMessage(msg *telego.Message) error {
 				}
 			}
 		} else {
-			log.Printf("[Bot /emoji] No custom emoji entities found in msg. Text=%q, EntitiesCount=%d", msg.Text, len(msg.Entities))
+			log.Printf("[Bot /emoji] No custom emoji entities found. EntitiesCount=%d", len(msg.Entities))
 			reply := `ℹ️ <b>Как узнать Custom Emoji ID:</b>
 
 Отправьте команду <code>/emoji</code> вместе с эмодзи из вашего пака прямо в одном сообщении, например:
@@ -2083,7 +2091,7 @@ func (s *BotService) SendNotification(telegramID int64, message string) error {
 	}
 
 	if s.bot == nil {
-		log.Printf("[Bot Notification Mock] to %d: %s", telegramID, message)
+		log.Printf("[Bot Notification Mock] to %d (len=%d)", telegramID, len(message))
 		return nil
 	}
 
@@ -2183,7 +2191,7 @@ func (s *BotService) SendFiscalReceipt(telegramID int64, tier string, amount flo
 	kb = tu.InlineKeyboard(rows...)
 
 	if s.bot == nil {
-		log.Printf("[Bot Fiscal Receipt Mock] to %d (amount: %.2f, url: %s): %s", telegramID, amount, receiptURL, msg)
+		log.Printf("[Bot Fiscal Receipt Mock] to %d (amount: %.2f, len=%d)", telegramID, amount, len(msg))
 		return nil
 	}
 

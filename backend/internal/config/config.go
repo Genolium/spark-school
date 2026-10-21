@@ -40,6 +40,7 @@ type Config struct {
 	ZoomMeetingURL         string
 	TrustedProxies         []string
 	AnalyticsRetentionDays int
+	SentryDSN              string
 }
 
 // Known insecure production defaults that must never be used.
@@ -96,6 +97,7 @@ func Load() *Config {
 		ZoomMeetingURL:         getEnv("ZOOM_MEETING_URL", ""),
 		TrustedProxies:         parseList(getEnv("TRUSTED_PROXIES", "127.0.0.1,::1")),
 		AnalyticsRetentionDays: parseIntEnv("ANALYTICS_RETENTION_DAYS", 180),
+		SentryDSN:              strings.TrimSpace(os.Getenv("SENTRY_DSN")),
 	}
 }
 

@@ -84,13 +84,16 @@ const rootFiles = [
   'seed.sql',
   '.env.example',
   'README.md',
-  'MAIN.MD'
+  'MAIN.MD',
+  'STAGING.md',
+  'PITR.md'
 ];
 rootFiles.forEach(f => copyFileSafe(f));
 
 // 2.1 Copy Deployment Scripts
 console.log('📜 Copying deployment scripts...');
 copyFileSafe('scripts/backup.sh');
+copyFileSafe('scripts/restore-drill.sh');
 
 // (Do not copy .env to deploy folder - server keeps its own .env or uses .env.example)
 

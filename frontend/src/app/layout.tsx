@@ -278,10 +278,10 @@ const jsonLd = {
   ]
 };
 
-import { AuthProvider } from "@/context/AuthContext";
 import { ThemeProvider } from "@/context/ThemeContext";
 import { ReferralTracker } from "@/components/ReferralTracker";
 import { YandexMetrikaTracker } from "@/components/YandexMetrikaTracker";
+import { ErrorReporter } from "@/components/ErrorReporter";
 
 export default function RootLayout({
   children,
@@ -352,11 +352,10 @@ export default function RootLayout({
         </noscript>
         {/* /Yandex.Metrika counter */}
         <ThemeProvider>
-          <AuthProvider>
-            <ReferralTracker />
-            <YandexMetrikaTracker />
-            {children}
-          </AuthProvider>
+          <ReferralTracker />
+          <YandexMetrikaTracker />
+          <ErrorReporter />
+          {children}
         </ThemeProvider>
       </body>
     </html>

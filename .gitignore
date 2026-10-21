@@ -82,3 +82,6 @@ dist/
 build/
 *.mp4
 *.zip
+# Python
+__pycache__/
+*.pyc

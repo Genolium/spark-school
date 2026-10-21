@@ -111,6 +111,19 @@ go run ./cmd/server
 Отдельной анкеты, очереди онбординга и автоматических напоминаний студенту нет:
 дальнейшая коммуникация идёт с личного аккаунта.
 
+## 🧪 CI, ошибки и staging
+
+- `.github/workflows/ci.yml` запускает Go race tests на PostgreSQL, frontend
+  build, npm audit, e2e/contract tests, Playwright smoke и Docker build.
+- `.github/workflows/uptime.yml` каждые 15 минут проверяет `/health/ready`
+  снаружи и пишет в Telegram при сбое.
+- `SENTRY_DSN` включает Sentry на backend; ошибки браузера отправляются на
+  `/api/v1/client-errors` и попадают в Sentry без cookies и значений форм.
+- Dead-letter outbox виден в админке, событие можно повторить вручную.
+- `STAGING.md` описывает отдельный staging-контур.
+- `PITR.md` и `scripts/restore-drill.sh` — восстановление и регулярные учения.
+- `tests/load/public-api.js` — k6-нагрузочный сценарий для staging.
+
 ## 🩺 Мониторинг и приватность
 
 Backend раз в минуту проверяет и присылает алерты администратору в Telegram:

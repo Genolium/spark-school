@@ -129,7 +129,7 @@ func (h *PaymentWebhookHandler) HandleAntilopayWebhook(c *gin.Context) {
 	}
 
 	rawBodyStr := string(bodyBytes)
-	log.Printf("[ANTILOPAY] Callback received (%d bytes): %s", len(bodyBytes), rawBodyStr)
+	log.Printf("[ANTILOPAY] Callback received (%d bytes)", len(bodyBytes))
 
 	// If empty body (e.g. initial health check ping), respond with 200 OK immediately
 	if len(bodyBytes) == 0 {

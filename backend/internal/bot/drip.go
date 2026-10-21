@@ -302,7 +302,7 @@ func (s *BotService) sendDripStep3(chatID telego.ChatID, lead models.DripLead) {
 
 func (s *BotService) sendDripMessageWithFallback(chatID telego.ChatID, text string, kb *telego.InlineKeyboardMarkup) {
 	if s.bot == nil {
-		log.Printf("[Bot Mock] Drip message to %v: %s", chatID, StripTgEmoji(text))
+		log.Printf("[Bot Mock] Drip message to %v (len=%d)", chatID, len(text))
 		return
 	}
 	m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)

@@ -10,6 +10,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/getsentry/sentry-go"
+	sentrygin "github.com/getsentry/sentry-go/gin"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/mymmrac/telego"
@@ -41,6 +43,20 @@ func main() {
 	isProd := cfg.IsProduction()
 	if isProd {
 		gin.SetMode(gin.ReleaseMode)
+	}
+
+	if cfg.SentryDSN != "" {
+		if err := sentry.Init(sentry.ClientOptions{
+			Dsn:              cfg.SentryDSN,
+			Environment:      cfg.Env,
+			TracesSampleRate: 0.05,
+			SendDefaultPII:   false,
+		}); err != nil {
+			log.Printf("[Sentry] initialization failed: %v", err)
+		} else {
+			defer sentry.Flush(2 * time.Second)
+			log.Println("[Sentry] error tracking enabled")
+		}
 	}
 
 	// Connect Database
@@ -114,6 +130,9 @@ func main() {
 	router.Use(gin.Recovery())
 
 	// Security Middleware: Headers & Body Payload Limit (2MB) - applied globally to ALL routes
+	if cfg.SentryDSN != "" {
+		router.Use(sentrygin.New(sentrygin.Options{Repanic: true}))
+	}
 	router.Use(security.SecurityHeadersMiddleware())
 	router.Use(security.MaxBodySizeMiddleware(2 * 1024 * 1024))
 
@@ -133,8 +152,13 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 
+	// Shared PostgreSQL rate limiting: limits apply across all backend instances.
+	limit := func(n int, window time.Duration, prefix, message string) gin.HandlerFunc {
+		return security.DatabaseRateLimitMiddleware(db, n, window, prefix, message)
+	}
+
 	// Webhook Rate Limiter (60 req/min) to prevent DoS floods on payment gateways
-	webhookLimiter := security.RateLimitMiddleware(60, 1*time.Minute, "Превышен лимит запросов к платежному шлюзу. Пожалуйста, подождите.")
+	webhookLimiter := limit(60, 1*time.Minute, "webhook", "Превышен лимит запросов к платежному шлюзу. Пожалуйста, подождите.")
 
 	// Top-level direct webhook routes (matches reverse proxy for /api/payments/*)
 	router.Any("/api/payments/webhook", security.WebhookMetricsMiddleware(metrics), webhookLimiter, paymentWebhookHandler.HandleAntilopayWebhook)
@@ -162,7 +186,7 @@ func main() {
 
 	// API v1 Routes with general Rate Limiting (120 req/min per IP)
 	api := router.Group("/api/v1")
-	api.Use(security.RateLimitMiddleware(120, 1*time.Minute, "Превышен лимит запросов к API. Пожалуйста, подождите."))
+	api.Use(limit(120, 1*time.Minute, "api", "Превышен лимит запросов к API. Пожалуйста, подождите."))
 	{
 		// Legacy liveness alias (does not touch the database).
 		api.GET("/health", func(c *gin.Context) {
@@ -198,12 +222,12 @@ func main() {
 		api.GET("/pricing", pricingHandler.GetPricing)
 
 		// Public Receipts: Anti-fraud receipt submission & deduplication check
-		receiptLimiter := security.RateLimitMiddleware(30, 1*time.Minute, "Слишком много запросов проверки чеков. Пожалуйста, подождите.")
+		receiptLimiter := limit(30, 1*time.Minute, "receipt", "Слишком много запросов проверки чеков. Пожалуйста, подождите.")
 		api.POST("/receipts/verify", receiptLimiter, receiptHandler.VerifyOrSubmit)
 
 		// Public Auth with brute-force protection
 		authGroup := api.Group("/auth")
-		authLimiter := security.RateLimitMiddleware(20, 1*time.Minute, "Слишком много попыток авторизации. Пожалуйста, подождите 60 секунд.")
+		authLimiter := limit(20, 1*time.Minute, "auth", "Слишком много попыток авторизации. Пожалуйста, подождите 60 секунд.")
 		{
 			authGroup.POST("/telegram-widget", authLimiter, authHandler.TelegramWidgetLogin)
 			authGroup.GET("/me", auth.AuthMiddleware(cfg.JWTSecret), authHandler.GetMe)
@@ -212,7 +236,7 @@ func main() {
 		// Affiliate API
 		affGroup := api.Group("/affiliate")
 		affGroup.Use(auth.AuthMiddleware(cfg.JWTSecret))
-		payoutLimiter := security.RateLimitMiddleware(10, 5*time.Minute, "Слишком много запросов на вывод средств. Пожалуйста, подождите перед повторной отправкой.")
+		payoutLimiter := limit(10, 5*time.Minute, "payout", "Слишком много запросов на вывод средств. Пожалуйста, подождите перед повторной отправкой.")
 		{
 			affGroup.GET("/stats", affiliateHandler.GetStats)
 			affGroup.POST("/payout", payoutLimiter, affiliateHandler.SubmitPayout)
@@ -224,8 +248,9 @@ func main() {
 
 		// Full-funnel analytics ingestion: whitelisted steps, bounded
 		// metadata, no PII and an explicit error when persistence fails.
-		analyticsLimiter := security.RateLimitMiddleware(60, 1*time.Minute, "Слишком много событий аналитики.")
+		analyticsLimiter := limit(60, 1*time.Minute, "analytics", "Слишком много событий аналитики.")
 		api.POST("/analytics/track", analyticsLimiter, handlers.TrackAnalytics(db))
+		api.POST("/client-errors", limit(20, 1*time.Minute, "client_errors", "Слишком много сообщений об ошибках."), handlers.ClientError)
 		api.POST("/analytics/experiments", analyticsLimiter, handlers.AssignExperiments(db))
 
 		// Telegram Bot Webhook endpoint. Authentication, a persistent
@@ -285,8 +310,8 @@ func main() {
 		api.Any("/payments/tribute", security.WebhookMetricsMiddleware(metrics), paymentWebhookHandler.HandleTributeWebhook)
 
 		// YooKassa Payment Endpoints with strict per-IP rate limiting
-		yooKassaCreateLimiter := security.RateLimitMiddleware(20, 1*time.Minute, "Слишком много запросов на создание платежа. Пожалуйста, подождите 60 секунд.")
-		yooKassaWebhookLimiter := security.RateLimitMiddleware(60, 1*time.Minute, "Превышен лимит запросов к вебхуку.")
+		yooKassaCreateLimiter := limit(20, 1*time.Minute, "yookassa_create", "Слишком много запросов на создание платежа. Пожалуйста, подождите 60 секунд.")
+		yooKassaWebhookLimiter := limit(60, 1*time.Minute, "yookassa_webhook", "Превышен лимит запросов к вебхуку.")
 		api.POST("/payments/yookassa/create", yooKassaCreateLimiter, yooKassaHandler.CreateCheckout)
 		api.Any("/payments/yookassa", security.WebhookMetricsMiddleware(metrics), yooKassaWebhookLimiter, yooKassaHandler.HandleWebhook)
 
@@ -301,6 +326,8 @@ func main() {
 		{
 			adminGroup.POST("/logout", adminHandler.Logout)
 			adminGroup.GET("/audit-log", adminHandler.ListAuditLog)
+			adminGroup.GET("/outbox/dead", adminHandler.ListDeadOutbox)
+			adminGroup.POST("/outbox/:id/retry", adminHandler.RetryOutbox)
 			adminGroup.GET("/stats", adminHandler.GetStats)
 			adminGroup.GET("/analytics/funnel", handlers.GetFunnel(db))
 			adminGroup.GET("/analytics/experiments", handlers.GetExperiments(db))
