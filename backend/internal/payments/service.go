@@ -297,6 +297,18 @@ func (s *Service) applyConfirmation(tx *gorm.DB, in ConfirmInput, result *Result
 		return err
 	}
 	result.UserID = user.ID
+	if in.VisitorID == "" {
+		in.VisitorID = user.VisitorID
+	}
+	if in.AttributionToken == "" {
+		in.AttributionToken = user.AttributionToken
+	}
+	if in.VisitorID != "" || in.AttributionToken != "" {
+		_ = tx.Model(&models.PaymentTransaction{}).Where("payment_id = ?", in.PaymentID).Updates(map[string]interface{}{
+			"visitor_id":        in.VisitorID,
+			"attribution_token": in.AttributionToken,
+		}).Error
+	}
 
 	// 4. Grant exactly the purchased entitlement.
 	now := time.Now()
@@ -363,10 +375,14 @@ func (s *Service) applyConfirmation(tx *gorm.DB, in ConfirmInput, result *Result
 		"promo_code":        in.PromoCode,
 	})
 	if err := tx.Create(&models.AnalyticsEvent{
-		VisitorID: firstNonEmpty(in.VisitorID, user.VisitorID),
-		Step:      "payment_confirmed",
-		Metadata:  string(metadata),
-		CreatedAt: time.Now(),
+		VisitorID:        firstNonEmpty(in.VisitorID, user.VisitorID),
+		AttributionToken: firstNonEmpty(in.AttributionToken, user.AttributionToken),
+		Step:             "payment_confirmed",
+		Source:           in.Source,
+		Tier:             in.Tier,
+		PromoCode:        in.PromoCode,
+		Metadata:         string(metadata),
+		CreatedAt:        time.Now(),
 	}).Error; err != nil {
 		return err
 	}

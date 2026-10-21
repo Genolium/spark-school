@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"log"
 	"net/http"
 	"os"
@@ -129,15 +128,48 @@ func main() {
 	router.Any("/api/payments/yookassa", webhookLimiter, yooKassaHandler.HandleWebhook)
 	router.Any("/payments/yookassa", webhookLimiter, yooKassaHandler.HandleWebhook)
 
+	// Kubernetes/Compose probe endpoints (also reachable directly, not only through Caddy).
+	router.GET("/health/live", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "time": time.Now().Format(time.RFC3339)})
+	})
+	router.GET("/health/ready", func(c *gin.Context) {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+		defer cancel()
+		version, err := database.Ready(ctx, db)
+		if err != nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready", "migration_version": version, "error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ready", "migration_version": version, "time": time.Now().Format(time.RFC3339)})
+	})
+
 	// API v1 Routes with general Rate Limiting (120 req/min per IP)
 	api := router.Group("/api/v1")
 	api.Use(security.RateLimitMiddleware(120, 1*time.Minute, "Превышен лимит запросов к API. Пожалуйста, подождите."))
 	{
-		// Healthcheck
+		// Legacy liveness alias (does not touch the database).
 		api.GET("/health", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"status": "ok", "time": time.Now().Format(time.RFC3339)})
+		})
+		api.GET("/health/live", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{"status": "ok", "time": time.Now().Format(time.RFC3339)})
+		})
+		api.GET("/health/ready", func(c *gin.Context) {
+			ctx, cancel := context.WithTimeout(c.Request.Context(), 3*time.Second)
+			defer cancel()
+			version, err := database.Ready(ctx, db)
+			if err != nil {
+				c.JSON(http.StatusServiceUnavailable, gin.H{
+					"status":            "not_ready",
+					"migration_version": version,
+					"error":             err.Error(),
+				})
+				return
+			}
 			c.JSON(http.StatusOK, gin.H{
-				"status": "ok",
-				"time":   time.Now().Format(time.RFC3339),
+				"status":            "ready",
+				"migration_version": version,
+				"time":              time.Now().Format(time.RFC3339),
 			})
 		})
 
@@ -172,40 +204,10 @@ func main() {
 		api.POST("/promo/validate", promoHandler.Validate)
 		api.POST("/promo/redeem", promoHandler.Redeem)
 
-		// Full-Funnel Analytics Ingestion
-		api.POST("/analytics/track", func(c *gin.Context) {
-			type AnalyticsTrackReq struct {
-				Step      string                 `json:"step" binding:"required"`
-				Timestamp string                 `json:"timestamp"`
-				Metadata  map[string]interface{} `json:"metadata"`
-			}
-			var req AnalyticsTrackReq
-			if err := c.ShouldBindJSON(&req); err != nil {
-				c.JSON(http.StatusBadRequest, gin.H{"error": "invalid analytics payload"})
-				return
-			}
-
-			metaJSON := ""
-			if req.Metadata != nil {
-				if b, err := json.Marshal(req.Metadata); err == nil {
-					metaJSON = string(b)
-				}
-			}
-
-			event := models.AnalyticsEvent{
-				Step:      req.Step,
-				Metadata:  metaJSON,
-				IP:        c.ClientIP(),
-				UserAgent: c.Request.UserAgent(),
-				CreatedAt: time.Now(),
-			}
-
-			if db != nil {
-				_ = db.Create(&event).Error
-			}
-
-			c.JSON(http.StatusOK, gin.H{"ok": true})
-		})
+		// Full-funnel analytics ingestion: whitelisted steps, bounded
+		// metadata, no PII and an explicit error when persistence fails.
+		analyticsLimiter := security.RateLimitMiddleware(60, 1*time.Minute, "Слишком много событий аналитики.")
+		api.POST("/analytics/track", analyticsLimiter, handlers.TrackAnalytics(db))
 
 		// Telegram Bot Webhook endpoint. Authentication, a persistent
 		// claim/lease and idempotent business operations protect against
@@ -278,6 +280,7 @@ func main() {
 		adminGroup.Use(auth.AdminMiddleware(cfg.JWTSecret))
 		{
 			adminGroup.GET("/stats", adminHandler.GetStats)
+			adminGroup.GET("/analytics/funnel", handlers.GetFunnel(db))
 			adminGroup.GET("/users", adminHandler.ListUsers)
 			adminGroup.POST("/users", adminHandler.CreateUser)
 			adminGroup.PUT("/users/:id", adminHandler.UpdateUser)
@@ -324,6 +327,7 @@ func main() {
 		log.Fatalf("Server forced to shutdown: %v", err)
 	}
 
+	botService.Stop()
 	log.Println("Server exiting successfully.")
 }
 

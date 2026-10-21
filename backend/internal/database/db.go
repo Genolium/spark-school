@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -14,6 +15,44 @@ import (
 )
 
 var DB *gorm.DB
+
+// RequiredSchemaVersion is the migration version a process needs before it is
+// considered ready to serve traffic.
+const RequiredSchemaVersion int64 = 5
+
+// MigrationVersion returns the latest applied Goose version.
+func MigrationVersion(db *gorm.DB) (int64, error) {
+	if db == nil {
+		return 0, fmt.Errorf("database is nil")
+	}
+	var version int64
+	if err := db.Raw("SELECT COALESCE(MAX(version_id), 0) FROM goose_db_version").Scan(&version).Error; err != nil {
+		return 0, err
+	}
+	return version, nil
+}
+
+// Ready verifies that PostgreSQL is reachable and the schema is fully migrated.
+func Ready(ctx context.Context, db *gorm.DB) (int64, error) {
+	if db == nil {
+		return 0, fmt.Errorf("database is nil")
+	}
+	sqlDB, err := db.DB()
+	if err != nil {
+		return 0, err
+	}
+	if err := sqlDB.PingContext(ctx); err != nil {
+		return 0, fmt.Errorf("postgres ping failed: %w", err)
+	}
+	version, err := MigrationVersion(db)
+	if err != nil {
+		return 0, fmt.Errorf("migration version check failed: %w", err)
+	}
+	if version < RequiredSchemaVersion {
+		return version, fmt.Errorf("schema version %d is older than required %d", version, RequiredSchemaVersion)
+	}
+	return version, nil
+}
 
 // Init connects to PostgreSQL, applies the canonical Goose migration chain and
 // seeds idempotent reference data. Schema changes are never performed here:

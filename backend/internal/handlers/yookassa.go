@@ -185,6 +185,16 @@ func (h *YooKassaHandler) CreateCheckout(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "checkout could not be created"})
 		return
 	}
+	_ = h.db.Create(&models.AnalyticsEvent{
+		VisitorID:        visitorID,
+		AttributionToken: attributionToken,
+		Step:             "order_created",
+		Source:           "web",
+		Tier:             tier,
+		PromoCode:        cleanPromo,
+		Metadata:         fmt.Sprintf(`{"order_id":%q,"telegram_id":%d,"amount":%f}`, orderID, telegramID, order.Amount),
+		CreatedAt:        time.Now(),
+	}).Error
 
 	metadata := map[string]string{
 		"tier":              tier,

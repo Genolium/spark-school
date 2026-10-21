@@ -13,18 +13,15 @@ import { PricingSection } from "@/components/PricingSection";
 import { QualificationSection } from "@/components/QualificationSection";
 import { FaqSection } from "@/components/FaqSection";
 import { Footer } from "@/components/Footer";
-import { PaymentModal, PricingTier } from "@/components/Modals/PaymentModal";
 import { ChancesModal } from "@/components/Modals/ChancesModal";
 import { ReferralTracker } from "@/components/ReferralTracker";
 import { DemoLessonSection } from "@/components/DemoLessonSection";
-import { trackFunnelStep } from "@/lib/analytics";
+import { trackFunnelStep, getAttributionToken } from "@/lib/analytics";
 
 export default function HomePage() {
-  const [isPaymentOpen, setIsPaymentOpen] = useState(false);
   const [isChancesOpen, setIsChancesOpen] = useState(false);
-  const [selectedTier, setSelectedTier] = useState<PricingTier>("accelerator");
 
-  const handleOpenPayment = (tier: PricingTier = "accelerator") => {
+  const handleOpenPayment = (tier: "basic" | "accelerator" | "vip" = "accelerator") => {
     trackFunnelStep("bot_handoff", { tier });
     let refCode = "";
     if (typeof window !== "undefined") {
@@ -41,11 +38,16 @@ export default function HomePage() {
       }
     }
     const cleanRef = refCode.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 16);
+    const attributionToken = getAttributionToken();
     let startParam = `pay_${tier}`;
-    if (cleanRef) {
-      startParam = `pay_${tier}_ref_${cleanRef}`;
+    if (attributionToken) {
+      startParam += `_a_${attributionToken}`;
     }
-    const botUrl = `https://t.me/spark_prep_bot?start=${startParam}`;
+    if (cleanRef) {
+      startParam += `_ref_${cleanRef}`;
+    }
+    // Telegram start parameters are limited to 64 characters.
+    const botUrl = `https://t.me/spark_prep_bot?start=${startParam.slice(0, 64)}`;
     if (typeof window !== "undefined") {
       window.location.href = botUrl;
     }
@@ -130,12 +132,8 @@ export default function HomePage() {
         onClose={() => setIsChancesOpen(false)}
       />
 
-      {/* Payment Checkout Modal with Multi-Tier Support */}
-      <PaymentModal
-        isOpen={isPaymentOpen}
-        onClose={() => setIsPaymentOpen(false)}
-        initialTier={selectedTier}
-      />
+      {/* Canonical checkout: direct Telegram deep link with attribution token.
+          The unused web PaymentModal is intentionally not mounted. */}
     </main>
   );
 }

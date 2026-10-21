@@ -10,6 +10,7 @@ import { PayoutsTable } from "@/components/Admin/PayoutsTable";
 import { PromosTable } from "@/components/Admin/PromosTable";
 import { PricingSettingsTable } from "@/components/Admin/PricingSettingsTable";
 import { RevenueAnalyticsCharts } from "@/components/Admin/RevenueAnalyticsCharts";
+import { FunnelAnalytics } from "@/components/Admin/FunnelAnalytics";
 import { api, AdminStats, UserProfile, PayoutRequest, PromoCode } from "@/lib/api";
 import {
   ShieldCheck,
@@ -274,6 +275,7 @@ export default function AdminPage() {
             {/* Tab 2: Full Revenue Analytics */}
             {activeTab === "analytics" && (
               <div>
+                <FunnelAnalytics />
                 <FinancialStats stats={stats} />
                 <RevenueAnalyticsCharts stats={stats} />
               </div>

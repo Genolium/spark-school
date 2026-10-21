@@ -199,7 +199,7 @@ export function generateMockDailyStats(targetGross: number = 289800): DailyReven
   return stats;
 }
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
+export const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
 
 // Helper to get admin JWT token from local storage
 export function getAdminToken(): string | null {
@@ -215,6 +215,18 @@ export function getAuthToken(): string | null {
     localStorage.getItem("spark_admin_token") ||
     null
   );
+}
+
+export interface FunnelStepMetric {
+  step: string;
+  count: number;
+  conversion_from_previous: number;
+}
+
+export interface FunnelData {
+  filters: { from: string; to: string; source: string; campaign: string; tier: string; promo: string };
+  steps: FunnelStepMetric[];
+  payments: { count: number; revenue: number; average: number; source: string };
 }
 
 export const api = {
@@ -908,6 +920,31 @@ export const api = {
       return { success: false, error: json.error || "Не удалось создать платёж в ЮKassa" };
     } catch (e: any) {
       return { success: false, error: e?.message || "Ошибка подключения к платёжному шлюзу" };
+    }
+  },
+
+  async getFunnel(filters: {
+    from?: string;
+    to?: string;
+    source?: string;
+    campaign?: string;
+    tier?: string;
+    promo?: string;
+  } = {}): Promise<FunnelData | null> {
+    const token = getAdminToken();
+    const params = new URLSearchParams();
+    for (const [key, value] of Object.entries(filters)) {
+      if (value) params.set(key, value);
+    }
+    try {
+      const res = await fetch(`${API_BASE}/admin/analytics/funnel?${params.toString()}`, {
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        credentials: "include",
+      });
+      if (!res.ok) return null;
+      return (await res.json()) as FunnelData;
+    } catch {
+      return null;
     }
   },
 };

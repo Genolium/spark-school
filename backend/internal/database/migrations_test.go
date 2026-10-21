@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"os"
 	"testing"
@@ -45,8 +46,8 @@ func TestPostgresMigrations_EmptyDatabaseAndRerun(t *testing.T) {
 	if err := sqlDB.QueryRow("SELECT MAX(version_id) FROM goose_db_version").Scan(&version); err != nil {
 		t.Fatalf("goose version: %v", err)
 	}
-	if version < 4 {
-		t.Fatalf("expected at least migration 4, got %d", version)
+	if version < 5 {
+		t.Fatalf("expected at least migration 5, got %d", version)
 	}
 
 	for _, table := range []string{
@@ -156,5 +157,23 @@ func TestPostgresMigrations_UpgradeOldSchemaWithDuplicates(t *testing.T) {
 	}
 	if columns != 4 {
 		t.Fatalf("expected payment_transactions new columns, got %d", columns)
+	}
+}
+
+func TestPostgresMigrations_ReadinessChecksVersion(t *testing.T) {
+	sqlDB := migrationTestSQLDB(t)
+	if err := RunMigrations(sqlDB); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	db, err := gorm.Open(postgres.Open(os.Getenv("TEST_DATABASE_URL")), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	version, err := Ready(context.Background(), db)
+	if err != nil {
+		t.Fatalf("expected ready database: %v", err)
+	}
+	if version < RequiredSchemaVersion {
+		t.Fatalf("expected version >= %d, got %d", RequiredSchemaVersion, version)
 	}
 }

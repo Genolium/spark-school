@@ -91,6 +91,62 @@ func (s *BotService) getSession(chatID int64) *UserSession {
 	return s.sessions.Get(chatID)
 }
 
+func sanitizeAttributionToken(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if idx := strings.Index(raw, "_"); idx != -1 {
+		raw = raw[:idx]
+	}
+	if len(raw) > 32 {
+		raw = raw[:32]
+	}
+	for _, r := range raw {
+		ok := (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_'
+		if !ok {
+			return ""
+		}
+	}
+	return raw
+}
+
+// attributeLead links an anonymous landing visitor to a Telegram user using the
+// short token that travelled in the /start parameter. It also records the
+// server-side bot_lead step, which a browser cannot fabricate.
+func (s *BotService) attributeLead(from *telego.User, token string) error {
+	if s.db == nil || from == nil || token == "" {
+		return nil
+	}
+	var user models.User
+	if err := s.db.Where("telegram_id = ?", from.ID).First(&user).Error; err != nil {
+		return err
+	}
+	if user.AttributionToken != "" {
+		return nil
+	}
+	var landing models.AnalyticsEvent
+	err := s.db.Where("attribution_token = ? AND visitor_id <> ''", token).Order("created_at DESC").First(&landing).Error
+	visitorID := ""
+	if err == nil {
+		visitorID = landing.VisitorID
+	}
+	if err := s.db.Model(&models.User{}).Where("id = ?", user.ID).Updates(map[string]interface{}{
+		"attribution_token": token,
+		"visitor_id":        visitorID,
+	}).Error; err != nil {
+		return err
+	}
+	meta := fmt.Sprintf(`{"telegram_id":%d,"attribution_token":%q}`, from.ID, token)
+	return s.db.Create(&models.AnalyticsEvent{
+		VisitorID:        visitorID,
+		AttributionToken: token,
+		Step:             "bot_lead",
+		Source:           landing.Source,
+		Campaign:         landing.Campaign,
+		Tier:             user.Tier,
+		Metadata:         meta,
+		CreatedAt:        time.Now(),
+	}).Error
+}
+
 func extractTelegramLink(text string) string {
 	for _, line := range strings.Split(text, "\n") {
 		trimmed := strings.TrimSpace(line)
@@ -282,7 +338,14 @@ func (s *BotService) handleMessage(msg *telego.Message) error {
 			}
 			session.SelectedTier = tier
 
-			// 2. Extract referral or promo code
+			// 2. Extract the short landing attribution token.
+			attrToken := ""
+			if idx := strings.Index(payload, "_a_"); idx != -1 {
+				attrToken = sanitizeAttributionToken(payload[idx+len("_a_"):])
+				payload = payload[:idx]
+			}
+
+			// 3. Extract referral or promo code
 			refCode := ""
 			username := payload
 			if idx := strings.Index(payload, "_ref_"); idx != -1 {
@@ -323,6 +386,11 @@ func (s *BotService) handleMessage(msg *telego.Message) error {
 					u.PromoCode = session.PromoCode
 				}
 				s.db.Save(u)
+			}
+			if attrToken != "" {
+				if err := s.attributeLead(msg.From, attrToken); err != nil {
+					log.Printf("[Analytics] failed to attribute bot lead: %v", err)
+				}
 			}
 
 			s.sendPaymentDetails(chatID, msg.From, withPromo)

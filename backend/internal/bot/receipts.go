@@ -146,6 +146,20 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) error {
 		_, _ = s.bot.SendMessage(m)
 		return nil
 	}
+	// Server-side order creation event, linked to the anonymous visitor.
+	if u := s.syncTelegramUser(msg.From); u != nil {
+		metadata := fmt.Sprintf(`{"order_id":"RECEIPT_%d","telegram_id":%d,"amount":%f,"tier":%q}`, receipt.ID, receipt.TelegramID, receipt.Amount, chosenTier)
+		_ = s.db.Create(&models.AnalyticsEvent{
+			VisitorID:        u.VisitorID,
+			AttributionToken: u.AttributionToken,
+			Step:             "order_created",
+			Source:           "telegram",
+			Tier:             chosenTier,
+			PromoCode:        session.PromoCode,
+			Metadata:         metadata,
+			CreatedAt:        time.Now(),
+		}).Error
+	}
 
 	if u := s.syncTelegramUser(msg.From); u != nil {
 		if !u.HasAccess && !isUpgrade {

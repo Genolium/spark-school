@@ -259,11 +259,16 @@ type ProcessedTelegramUpdate struct {
 
 // AnalyticsEvent stores full-funnel conversion events.
 type AnalyticsEvent struct {
-	ID        uint      `gorm:"primaryKey" json:"id"`
-	VisitorID string    `gorm:"size:64;index" json:"visitor_id,omitempty"`
-	Step      string    `gorm:"size:64;index;not null" json:"step"`
-	Metadata  string    `gorm:"type:text" json:"metadata,omitempty"`
-	IP        string    `gorm:"size:45" json:"ip,omitempty"`
-	UserAgent string    `gorm:"size:255" json:"user_agent,omitempty"`
-	CreatedAt time.Time `gorm:"index" json:"created_at"`
+	ID               uint      `gorm:"primaryKey" json:"id"`
+	VisitorID        string    `gorm:"size:64;index" json:"visitor_id,omitempty"`
+	AttributionToken string    `gorm:"size:64;index" json:"attribution_token,omitempty"`
+	Step             string    `gorm:"size:64;index;not null" json:"step"`
+	Source           string    `gorm:"size:64;index" json:"source,omitempty"`
+	Campaign         string    `gorm:"size:80;index" json:"campaign,omitempty"`
+	Tier             string    `gorm:"size:32;index" json:"tier,omitempty"`
+	PromoCode        string    `gorm:"size:32;index" json:"promo_code,omitempty"`
+	Metadata         string    `gorm:"type:text" json:"metadata,omitempty"`
+	IP               string    `gorm:"size:45" json:"ip,omitempty"`
+	UserAgent        string    `gorm:"size:255" json:"user_agent,omitempty"`
+	CreatedAt        time.Time `gorm:"index" json:"created_at"`
 }
