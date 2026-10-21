@@ -50,11 +50,14 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
 
   // Aggregated analytics calculation. Revenue comes only from the payment
   // ledger returned by the backend; never estimate it from activations.
-  const totalUses = promos.reduce((sum, p) => sum + (p.uses_count || 0), 0);
+  const totalActivations = promos.reduce(
+    (sum, p) => sum + (p.activation_count ?? p.students?.length ?? 0),
+    0
+  );
   const totalPaidUses = promos.reduce((sum, p) => sum + (p.paid_uses || 0), 0);
   const totalRevenue = promos.reduce((sum, p) => sum + (p.total_revenue || 0), 0);
   const totalRewards = promos.reduce(
-    (sum, p) => sum + (p.uses_count || 0) * (p.reward_amount || 0),
+    (sum, p) => sum + (p.paid_uses || 0) * (p.reward_amount || 0),
     0
   );
   const activeCount = promos.filter((p) => p.is_active).length;
@@ -168,7 +171,7 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
             </div>
           </div>
           <div className="mt-3 text-2xl font-bold font-mono text-slate-900 dark:text-white">
-            {totalUses} <span className="text-sm font-normal text-slate-400">раз</span>
+            {totalActivations} <span className="text-sm font-normal text-slate-400">раз</span>
           </div>
           <p className="text-[11px] font-mono text-slate-500 mt-1">
             Оплачено с промокодом: {totalPaidUses}
@@ -278,7 +281,7 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
               <th className="py-3 px-4">Код скидки</th>
               <th className="py-3 px-4">Скидка студенту</th>
               <th className="py-3 px-4">Амбассадор / Партнёр</th>
-              <th className="py-3 px-4">Использований</th>
+              <th className="py-3 px-4">Оплат / активаций</th>
               <th className="py-3 px-4">Привлечённая выручка</th>
               <th className="py-3 px-4">Комиссия партнёру</th>
               <th className="py-3 px-4">Студенты</th>
@@ -300,8 +303,9 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
                 const discountedPrice = coursePricing.accelerator_price - discountRub;
 
                 const promoRevenue = promo.total_revenue || 0;
-                const partnerEarnings = (promo.uses_count || 0) * (promo.reward_amount || 0);
-                const studentsCount = promo.students?.length || 0;
+                const paidUses = promo.paid_uses || 0;
+                const partnerEarnings = paidUses * (promo.reward_amount || 0);
+                const studentsCount = promo.activation_count ?? promo.students?.length ?? 0;
 
                 return (
                   <tr key={promo.id} className="hover:bg-slate-50 dark:hover:bg-white/[0.02] transition-colors">
@@ -340,10 +344,13 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
                       )}
                     </td>
 
-                    {/* Uses Count */}
+                    {/* Paid uses vs activations */}
                     <td className="py-3.5 px-4">
                       <span className="px-2 py-0.5 rounded-full bg-slate-100 dark:bg-white/5 border border-slate-200 dark:border-white/10 font-bold text-slate-800 dark:text-white">
-                        {promo.uses_count}
+                        {paidUses}
+                      </span>
+                      <span className="block text-[10px] text-slate-400 mt-1">
+                        активаций: {studentsCount}
                       </span>
                     </td>
 
@@ -358,7 +365,7 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
                         {partnerEarnings.toLocaleString("ru-RU")} ₽
                       </span>
                       <span className="text-[10px] text-slate-400 block">
-                        ({promo.reward_amount.toLocaleString("ru-RU")} ₽ / чел)
+                        ({promo.reward_amount.toLocaleString("ru-RU")} ₽ / оплата)
                       </span>
                     </td>
 
@@ -371,8 +378,8 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
                         >
                           {studentsCount} чел. ↗
                         </button>
-                      ) : promo.uses_count > 0 ? (
-                        <span className="text-slate-400 text-[11px]">{promo.uses_count} чел.</span>
+                      ) : studentsCount > 0 ? (
+                        <span className="text-slate-400 text-[11px]">{studentsCount} чел.</span>
                       ) : (
                         <span className="text-slate-400 text-[11px]">—</span>
                       )}
@@ -457,7 +464,13 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
               <div className="flex justify-between items-center p-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10">
                 <span>Всего активаций:</span>
                 <span className="font-bold text-slate-900 dark:text-white">
-                  {studentsModalPromo.uses_count} раз
+                  {studentsModalPromo.activation_count ?? studentsModalPromo.students?.length ?? 0} раз
+                </span>
+              </div>
+              <div className="flex justify-between items-center p-3 rounded-xl bg-slate-50 dark:bg-white/5 border border-slate-200 dark:border-white/10">
+                <span>Оплачено с промокодом:</span>
+                <span className="font-bold text-slate-900 dark:text-white">
+                  {studentsModalPromo.paid_uses ?? 0} раз
                 </span>
               </div>
             </div>

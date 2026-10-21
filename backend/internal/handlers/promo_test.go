@@ -50,6 +50,13 @@ func TestPromoList_RevenueComesFromPaymentLedger(t *testing.T) {
 	}).Error; err != nil {
 		t.Fatal(err)
 	}
+	// A second activation without a payment must not count as paid use.
+	if err := db.Create(&models.User{
+		TelegramID: 102, Username: "not_paid", PromoCode: "SPARK5",
+		PaidAmount: 0, Tier: "accelerator", HasAccess: false,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
 	if err := db.Create(&models.PaymentTransaction{
 		PaymentID: "RECEIPT_1", TelegramID: 101, Amount: 6555, AmountKopecks: 655500,
 		PromoCode: "SPARK5", Status: "SUCCESS", Tier: "accelerator",
@@ -86,6 +93,9 @@ func TestPromoList_RevenueComesFromPaymentLedger(t *testing.T) {
 	}
 	if result[0].PaidUses != 1 {
 		t.Fatalf("expected one paid promo use, got %d", result[0].PaidUses)
+	}
+	if result[0].ActivationCount != 2 {
+		t.Fatalf("expected two promo activations, got %d", result[0].ActivationCount)
 	}
 }
 

@@ -173,9 +173,10 @@ func (h *PromoHandler) Create(c *gin.Context) {
 
 type PromoWithStats struct {
 	models.PromoCode
-	TotalRevenue float64  `json:"total_revenue"`
-	PaidUses     int64    `json:"paid_uses"`
-	Students     []string `json:"students"`
+	TotalRevenue    float64  `json:"total_revenue"`
+	PaidUses        int64    `json:"paid_uses"`
+	ActivationCount int64    `json:"activation_count"`
+	Students        []string `json:"students"`
 }
 
 // List returns all registered promo codes with detailed usage and revenue stats for the admin panel.
@@ -232,6 +233,7 @@ func (h *PromoHandler) List(c *gin.Context) {
 					studentDesc += fmt.Sprintf(" (ID: %d)", s.TelegramID)
 				}
 				result[i].Students = append(result[i].Students, studentDesc)
+				result[i].ActivationCount++
 			}
 		}
 	}

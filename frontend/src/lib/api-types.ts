@@ -105,6 +105,7 @@ export interface PromoCode {
   created_at: string;
   total_revenue?: number;
   paid_uses?: number;
+  activation_count?: number;
   students?: string[];
 }
 
