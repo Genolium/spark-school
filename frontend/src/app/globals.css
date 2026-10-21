@@ -390,22 +390,22 @@
   }
 
   /* Body and subtitle text legibility in Light Theme */
-  html:not(.dark) section:not(#hero-canvas) p.text-slate-300,
-  html:not(.dark) section:not(#hero-canvas) div.text-slate-300,
-  html:not(.dark) section:not(#hero-canvas) span.text-slate-300,
+  html:not(.dark) section:not(#hero-canvas) p[class*="text-slate-300"],
+  html:not(.dark) section:not(#hero-canvas) div[class*="text-slate-300"],
+  html:not(.dark) section:not(#hero-canvas) span[class*="text-slate-300"],
   html:not(.dark) .bento-card-dark .text-slate-300 {
     color: #334155;
   }
 
-  html:not(.dark) section:not(#hero-canvas) span.text-slate-400,
-  html:not(.dark) section:not(#hero-canvas) div.text-slate-400,
-  html:not(.dark) section:not(#hero-canvas) p.text-slate-400,
+  html:not(.dark) section:not(#hero-canvas) span[class*="text-slate-400"],
+  html:not(.dark) section:not(#hero-canvas) div[class*="text-slate-400"],
+  html:not(.dark) section:not(#hero-canvas) p[class*="text-slate-400"],
   html:not(.dark) .bento-card-dark .text-slate-400 {
     color: #64748B;
   }
 
-  html:not(.dark) section:not(#hero-canvas) span.text-slate-200,
-  html:not(.dark) section:not(#hero-canvas) div.text-slate-200,
+  html:not(.dark) section:not(#hero-canvas) span[class*="text-slate-200"],
+  html:not(.dark) section:not(#hero-canvas) div[class*="text-slate-200"],
   html:not(.dark) .bento-card-dark .text-slate-200 {
     color: #1E293B;
   }
