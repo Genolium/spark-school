@@ -38,10 +38,14 @@ if [ -n "${BACKUP_TELEGRAM_BOT_TOKEN}" ] && [ -n "${BACKUP_TELEGRAM_CHAT_ID}" ];
     echo "[$(date -Iseconds)] Sending backup copy to Telegram Archive..."
     TG_API_BASE="${TELEGRAM_API_SERVER:-https://api.telegram.org}"
     TG_API_BASE="${TG_API_BASE%/}"
-    curl -s -F chat_id="${BACKUP_TELEGRAM_CHAT_ID}" \
+    HTTP_CODE=$(curl -s -o /tmp/backup-telegram-response.json -w "%{http_code}" \
+            -F chat_id="${BACKUP_TELEGRAM_CHAT_ID}" \
             -F document=@"${BACKUP_FILE}" \
             -F caption="📦 Резервная копия БД: spark_db_${TIMESTAMP} (${FILE_SIZE})" \
-            "${TG_API_BASE}/bot${BACKUP_TELEGRAM_BOT_TOKEN}/sendDocument" > /dev/null || echo "[WARN] Failed sending backup to Telegram."
+            "${TG_API_BASE}/bot${BACKUP_TELEGRAM_BOT_TOKEN}/sendDocument" || echo "000")
+    if [ "$HTTP_CODE" != "200" ]; then
+        echo "[WARN] Telegram backup upload failed with HTTP ${HTTP_CODE}."
+    fi
 fi
 
 echo "[$(date -Iseconds)] Backup job completed successfully."

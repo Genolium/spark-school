@@ -159,47 +159,118 @@ copyDir(path.join(ROOT_DIR, 'frontend/public'), path.join(OUT_DIR, 'frontend/pub
 // 5. Generate Production deploy.sh helper for Linux VPS
 console.log('📜 Creating production deploy.sh script...');
 const deployShContent = `#!/usr/bin/env bash
-set -e
+set -euo pipefail
 
 echo "================================================"
 echo "🚀 проект «так называемый SPARK» — Production Deploy"
 echo "================================================"
 
-# Check if Docker is installed
-if ! command -v docker &> /dev/null; then
+if ! command -v docker >/dev/null 2>&1; then
     echo "❌ Error: Docker is not installed on this system."
-    echo "💡 Please install Docker: https://docs.docker.com/engine/install/"
     exit 1
 fi
 
-# Ensure .env file exists
 if [ ! -f .env ]; then
-    echo "📋 .env not found. Copying from .env.example..."
-    cp .env.example .env
+    echo "❌ .env not found. Copy .env.example and fill every required secret."
+    echo "   The backend refuses to start with empty or default production secrets."
+    exit 1
 fi
 
-# Detect Docker Compose command
-if docker compose version &> /dev/null; then
+if docker compose version >/dev/null 2>&1; then
     DOCKER_COMPOSE="docker compose"
-elif command -v docker-compose &> /dev/null; then
+elif command -v docker-compose >/dev/null 2>&1; then
     DOCKER_COMPOSE="docker-compose"
 else
     echo "❌ Error: Neither 'docker compose' nor 'docker-compose' found."
     exit 1
 fi
 
-echo "📦 Building and launching containers..."
-$DOCKER_COMPOSE down --remove-orphans 2>/dev/null || true
-docker rm -f spark_caddy spark_backend spark_frontend spark_postgres spark_bot 2>/dev/null || true
-$DOCKER_COMPOSE up -d --build
+# Refuse to deploy with the placeholder secrets shipped in .env.example.
+if grep -Eq '^(JWT_SECRET|ADMIN_PASSWORD|POSTGRES_PASSWORD|TELEGRAM_WEBHOOK_SECRET)=$' .env; then
+    echo "❌ .env contains empty required secrets. Deployment aborted before touching running containers."
+    exit 1
+fi
 
-echo "⏳ Checking container health..."
-sleep 5
-$DOCKER_COMPOSE ps
+echo "🔎 Capturing current images for rollback..."
+PREVIOUS_BACKEND=$($DOCKER_COMPOSE images -q backend 2>/dev/null || true)
+PREVIOUS_FRONTEND=$($DOCKER_COMPOSE images -q frontend 2>/dev/null || true)
+PREVIOUS_CADDY=$($DOCKER_COMPOSE images -q caddy 2>/dev/null || true)
+
+if [ -n "$PREVIOUS_BACKEND" ]; then docker tag "$PREVIOUS_BACKEND" spark-backend:rollback; fi
+if [ -n "$PREVIOUS_FRONTEND" ]; then docker tag "$PREVIOUS_FRONTEND" spark-frontend:rollback; fi
+if [ -n "$PREVIOUS_CADDY" ]; then docker tag "$PREVIOUS_CADDY" spark-caddy:rollback; fi
+
+echo "📦 Building new images BEFORE stopping the running version..."
+if ! $DOCKER_COMPOSE build backend frontend; then
+    echo "❌ Build failed. The currently running version was not stopped."
+    exit 1
+fi
+
+cat > docker-compose.rollback.yml <<'ROLLBACK_EOF'
+services:
+  backend:
+    image: spark-backend:rollback
+  frontend:
+    image: spark-frontend:rollback
+  caddy:
+    image: spark-caddy:rollback
+ROLLBACK_EOF
+
+wait_for_health() {
+    local container="$1"
+    local deadline=$((SECONDS + 180))
+    while [ $SECONDS -lt $deadline ]; do
+        local status
+        status=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container" 2>/dev/null || echo missing)
+        if [ "$status" = "healthy" ]; then
+            return 0
+        fi
+        if [ "$status" = "unhealthy" ] || [ "$status" = "exited" ] || [ "$status" = "dead" ]; then
+            echo "❌ Container $container is $status"
+            return 1
+        fi
+        sleep 3
+    done
+    echo "❌ Timeout waiting for $container to become healthy"
+    return 1
+}
+
+rollback() {
+    echo "↩️ Rolling back to the previous images..."
+    $DOCKER_COMPOSE down --remove-orphans >/dev/null 2>&1 || true
+    if docker image inspect spark-backend:rollback >/dev/null 2>&1; then
+        $DOCKER_COMPOSE -f docker-compose.yml -f docker-compose.rollback.yml up -d --no-build || true
+        echo "⚠️ Rollback started. Check: $DOCKER_COMPOSE ps"
+    else
+        echo "❌ No previous backend image is available for rollback."
+    fi
+}
+
+echo "🚀 Starting the new version..."
+if ! $DOCKER_COMPOSE up -d --no-build --remove-orphans; then
+    rollback
+    exit 1
+fi
+
+echo "⏳ Waiting for backend readiness and frontend health..."
+if ! wait_for_health spark_backend || ! wait_for_health spark_frontend || ! wait_for_health spark_caddy; then
+    echo "❌ Deployment did not become healthy."
+    $DOCKER_COMPOSE ps || true
+    $DOCKER_COMPOSE logs --tail=80 backend || true
+    rollback
+    exit 1
+fi
+
+# Readiness includes PostgreSQL connectivity and migration version.
+if ! $DOCKER_COMPOSE exec -T backend wget -qO- http://127.0.0.1:8080/health/ready | grep -q '"status":"ready"'; then
+    echo "❌ Backend readiness probe failed after startup."
+    rollback
+    exit 1
+fi
 
 echo "================================================"
-echo "✅ Deployment finished successfully!"
-echo "🌐 Web Application: http://localhost or https://\${DOMAIN:-so-called-spark.ru}"
+echo "✅ Deployment finished: all containers are healthy."
+echo "🌐 Web Application: https://\${DOMAIN:-so-called-spark.ru}"
 echo "📜 View live logs: $DOCKER_COMPOSE logs -f"
 echo "🛑 Stop services:   $DOCKER_COMPOSE down"
 echo "================================================"
@@ -209,7 +280,7 @@ fs.writeFileSync(path.join(OUT_DIR, 'deploy.sh'), deployShContent.replace(/\r\n/
 // 6. Generate DEPLOY.md instruction
 const deployMdContent = `# 🚀 Инструкция по деплою на сервер
 
-Данная папка содержит полный, оптимизированный контур проекта (Frontend + Backend + PostgreSQL + Caddy SSL) без мусора и лишних зависимостей.
+Данная папка содержит полный, оптимизированный контур проекта (Frontend + Backend + PostgreSQL + Caddy). Caddy работает в режиме reverse-proxy с \`auto_https off\`: TLS обязан завершать внешний Nginx/балансировщик.
 
 ---
 
@@ -236,6 +307,42 @@ const deployMdContent = `# 🚀 Инструкция по деплою на се
    \`\`\`bash
    chmod +x deploy.sh && ./deploy.sh
    \`\`\`
+
+### Обязательная TLS-схема
+
+Caddy в этом контуре слушает HTTP (\`auto_https off\`). Production-трафик **обязан**
+приходить через внешний TLS-терминатор: Nginx, cloud load balancer или отдельный
+Caddy с валидным сертификатом. Пример Nginx:
+
+\`\`\`nginx
+server {
+    listen 443 ssl http2;
+    server_name so-called-spark.ru;
+    ssl_certificate     /etc/letsencrypt/live/so-called-spark.ru/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/so-called-spark.ru/privkey.pem;
+    location / { proxy_pass http://127.0.0.1:38080; proxy_set_header Host $host; }
+}
+\`\`\`
+
+Без внешнего терминатора сайт будет доступен только по HTTP, а Telegram и
+платёжные webhook-и должны быть настроены на HTTPS-домен.
+
+### Проверка и откат
+
+\`deploy.sh\` собирает образы до остановки текущей версии, ждёт health-статусы
+backend/frontend/caddy и проверяет \`/health/ready\` (PostgreSQL + версия миграций).
+При любой ошибке он переключается на сохранённые образы \`spark-*-:rollback\`.
+
+### Восстановление backup
+
+\`\`\`bash
+gunzip -c /backups/spark_db_YYYYMMDD_HHMMSS.sql.gz > /tmp/restore.sql
+createdb -h 127.0.0.1 -U spark_user spark_restore_test
+psql -h 127.0.0.1 -U spark_user -d spark_restore_test -f /tmp/restore.sql
+\`\`\`
+
+Восстановление всегда выполняйте в отдельную базу и проверяйте её перед
+переключением production.
 
 ---
 
