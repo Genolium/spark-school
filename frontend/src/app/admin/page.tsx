@@ -47,6 +47,7 @@ export default function AdminPage() {
     month_revenue: 0,
     average_order_value: 0,
     promo_usage_count: 0,
+    promo_activation_count: 0,
     promo_saved_amount: 0,
   });
   const [students, setStudents] = useState<UserProfile[]>([]);

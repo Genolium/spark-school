@@ -53,6 +53,7 @@ export interface AdminStats {
   month_revenue?: number;
   average_order_value?: number;
   promo_usage_count?: number;
+  promo_activation_count?: number;
   promo_saved_amount?: number;
   tier_breakdown?: {
     basic?: TierBreakdownItem;

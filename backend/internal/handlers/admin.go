@@ -150,19 +150,20 @@ type DailyStat struct {
 func (h *AdminHandler) GetStats(c *gin.Context) {
 	if h.db == nil {
 		c.JSON(http.StatusOK, gin.H{
-			"gross_volume":          0.0,
-			"active_students":       0,
-			"total_registered":      0,
-			"conversion_rate":       0.0,
-			"pending_payouts_count": 0,
-			"pending_payouts_sum":   0.0,
-			"today_revenue":         0.0,
-			"today_purchases":       0,
-			"week_revenue":          0.0,
-			"month_revenue":         0.0,
-			"average_order_value":   0.0,
-			"promo_usage_count":     0,
-			"promo_saved_amount":    0.0,
+			"gross_volume":           0.0,
+			"active_students":        0,
+			"total_registered":       0,
+			"conversion_rate":        0.0,
+			"pending_payouts_count":  0,
+			"pending_payouts_sum":    0.0,
+			"today_revenue":          0.0,
+			"today_purchases":        0,
+			"week_revenue":           0.0,
+			"month_revenue":          0.0,
+			"average_order_value":    0.0,
+			"promo_usage_count":      0,
+			"promo_saved_amount":     0.0,
+			"promo_activation_count": 0,
 			"tier_breakdown": gin.H{
 				"basic":       gin.H{"count": 0, "revenue": 0.0, "percentage": 0.0},
 				"accelerator": gin.H{"count": 0, "revenue": 0.0, "percentage": 0.0},
@@ -178,6 +179,11 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 
 	var activeStudents int64
 	h.db.Model(&models.User{}).Where("has_access = true AND role != ?", "admin").Count(&activeStudents)
+
+	var promoActivationCount int64
+	h.db.Model(&models.User{}).
+		Where("COALESCE(promo_code, '') <> '' AND role != ?", "admin").
+		Count(&promoActivationCount)
 
 	var pendingPayoutsCount int64
 	h.db.Model(&models.PayoutRequest{}).Where("status = 'pending'").Count(&pendingPayoutsCount)
@@ -385,21 +391,22 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"gross_volume":          grossVolume,
-		"gross_volume_kopecks":  int64(grossKopecks),
-		"active_students":       activeStudents,
-		"free_access_count":     freeAccessCount,
-		"total_registered":      totalUsers,
-		"conversion_rate":       conversionRate,
-		"pending_payouts_count": pendingPayoutsCount,
-		"pending_payouts_sum":   pendingPayoutsSum,
-		"today_revenue":         todayRevenue,
-		"today_purchases":       todayPurchases,
-		"week_revenue":          weekRevenue,
-		"month_revenue":         monthRevenue,
-		"average_order_value":   averageOrderValue,
-		"promo_usage_count":     promoUsageCount,
-		"promo_saved_amount":    promoSavedAmount,
+		"gross_volume":           grossVolume,
+		"gross_volume_kopecks":   int64(grossKopecks),
+		"active_students":        activeStudents,
+		"free_access_count":      freeAccessCount,
+		"total_registered":       totalUsers,
+		"conversion_rate":        conversionRate,
+		"pending_payouts_count":  pendingPayoutsCount,
+		"pending_payouts_sum":    pendingPayoutsSum,
+		"today_revenue":          todayRevenue,
+		"today_purchases":        todayPurchases,
+		"week_revenue":           weekRevenue,
+		"month_revenue":          monthRevenue,
+		"average_order_value":    averageOrderValue,
+		"promo_usage_count":      promoUsageCount,
+		"promo_saved_amount":     promoSavedAmount,
+		"promo_activation_count": promoActivationCount,
 		"tier_breakdown": gin.H{
 			"basic": gin.H{
 				"count":      basicCount,
