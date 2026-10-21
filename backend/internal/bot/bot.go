@@ -1724,8 +1724,20 @@ func (s *BotService) processReceiptRejection(query *telego.CallbackQuery, idStr 
 		return
 	}
 
+	// Only a pending receipt may be rejected. A stale button pressed after
+	// approval must not overwrite a confirmed payment.
+	res := s.db.Model(&models.PaymentReceipt{}).
+		Where("id = ? AND status = ?", receipt.ID, "pending").
+		Updates(map[string]interface{}{"status": "rejected", "updated_at": time.Now()})
+	if res.Error != nil {
+		log.Printf("[Bot Rejection] failed to update receipt #%d: %v", receipt.ID, res.Error)
+		return
+	}
+	if res.RowsAffected != 1 {
+		s.answerCallback(query, "ℹ️ Чек уже обработан. Обновите список чеков.", true)
+		return
+	}
 	receipt.Status = "rejected"
-	s.db.Save(&receipt)
 
 	rejectMsg := `⚠️ <b>К сожалению, ваш чек не был подтверждён.</b>
 
@@ -1793,6 +1805,10 @@ func (s *BotService) processReceiptTierToggle(query *telego.CallbackQuery, idStr
 	if err := s.db.First(&receipt, "id = ?", idStr).Error; err != nil {
 		return
 	}
+	if receipt.Status != "pending" {
+		s.answerCallback(query, "ℹ️ Чек уже обработан. Изменение тарифа недоступно.", true)
+		return
+	}
 
 	var student models.User
 	userFound := false
@@ -1846,7 +1862,10 @@ func (s *BotService) processReceiptTierToggle(query *telego.CallbackQuery, idStr
 			receipt.Tier = "accelerator"
 		}
 	}
-	s.db.Save(&receipt)
+	if err := s.db.Save(&receipt).Error; err != nil {
+		log.Printf("[Bot Receipt] failed to save tier toggle for #%d: %v", receipt.ID, err)
+		return
+	}
 
 	if userFound && !isUpgrade {
 		student.Tier = receipt.Tier

@@ -162,9 +162,9 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) error {
 	}
 
 	if u := s.syncTelegramUser(msg.From); u != nil {
-		if !u.HasAccess && !isUpgrade {
-			u.Tier = chosenTier
-		}
+		// The selected tier is an intent, not an entitlement. It is applied
+		// only after the payment is confirmed, so an unpaid receipt cannot
+		// silently change the student's paid tier.
 		if session.PromoCode != "" && u.PromoCode == "" {
 			u.PromoCode = session.PromoCode
 		} else if u.PromoCode == "" && (amount == 6555.0 || amount == 14155.0 || amount == 3790.0) {
