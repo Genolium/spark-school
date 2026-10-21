@@ -43,6 +43,9 @@ var funnelOrder = []string{
 	"checkout_started",
 	"order_created",
 	"payment_confirmed",
+	"access_delivered",
+	"onboarding_intro_sent",
+	"onboarding_replied",
 }
 
 // piiMetadataKeys are dropped before persistence. Analytics must not become a

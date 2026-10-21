@@ -13,6 +13,9 @@ const STEP_LABELS: Record<string, string> = {
   checkout_started: "Начал оформление",
   order_created: "Заказ создан",
   payment_confirmed: "Оплата подтверждена",
+  access_delivered: "Доступ выдан",
+  onboarding_intro_sent: "Приветствие отправлено",
+  onboarding_replied: "Студент ответил",
 };
 
 export function FunnelAnalytics() {

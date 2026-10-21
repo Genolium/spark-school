@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spark-school/backend/internal/models"
 	"github.com/spark-school/backend/internal/outbox"
 )
 
@@ -71,7 +72,24 @@ func (s *BotService) DeliverPaymentNotice(p outbox.PaymentNoticePayload) error {
 		if inviteLink == "" {
 			return fmt.Errorf("cannot deliver access for payment %s: invite link is not configured", p.PaymentID)
 		}
-		return s.sendAccessNotificationToStudent(p.TelegramID, FormatPaymentSuccessMessage(inviteLink), inviteLink)
+		if err := s.sendAccessNotificationToStudent(p.TelegramID, FormatPaymentSuccessMessage(inviteLink), inviteLink); err != nil {
+			return err
+		}
+		if s.db != nil {
+			var user models.User
+			if err := s.db.Where("telegram_id = ?", p.TelegramID).First(&user).Error; err == nil {
+				_ = s.db.Create(&models.AnalyticsEvent{
+					VisitorID:        user.VisitorID,
+					AttributionToken: user.AttributionToken,
+					Step:             "access_delivered",
+					Source:           p.Source,
+					Tier:             p.Tier,
+					PaymentID:        p.PaymentID,
+					CreatedAt:        time.Now(),
+				}).Error
+			}
+		}
+		return nil
 	}
 }
 

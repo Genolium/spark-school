@@ -46,8 +46,8 @@ func TestPostgresMigrations_EmptyDatabaseAndRerun(t *testing.T) {
 	if err := sqlDB.QueryRow("SELECT MAX(version_id) FROM goose_db_version").Scan(&version); err != nil {
 		t.Fatalf("goose version: %v", err)
 	}
-	if version < 9 {
-		t.Fatalf("expected at least migration 9, got %d", version)
+	if version < 10 {
+		t.Fatalf("expected at least migration 10, got %d", version)
 	}
 
 	for _, table := range []string{
@@ -65,6 +65,14 @@ func TestPostgresMigrations_EmptyDatabaseAndRerun(t *testing.T) {
 		if !exists {
 			t.Errorf("expected table %s", table)
 		}
+	}
+
+	var onboardingColumns int
+	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='users' AND column_name IN ('onboarding_status','intro_sent_at','onboarding_replied_at','onboarding_completed_at','onboarding_notes')`).Scan(&onboardingColumns); err != nil {
+		t.Fatal(err)
+	}
+	if onboardingColumns != 5 {
+		t.Errorf("expected onboarding columns, got %d", onboardingColumns)
 	}
 
 	var kopecksColumns int

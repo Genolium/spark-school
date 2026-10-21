@@ -34,6 +34,13 @@ type User struct {
 	DiagnosticStartedReminderSent   bool       `gorm:"default:false;index" json:"diagnostic_started_reminder_sent"`
 	DiagnosticCompletedReminderSent bool       `gorm:"default:false;index" json:"diagnostic_completed_reminder_sent"`
 	AnonymizedAt                    *time.Time `json:"anonymized_at,omitempty"`
+	OnboardingStatus                string     `gorm:"size:32;index" json:"onboarding_status,omitempty"`
+	IntroSentAt                     *time.Time `json:"intro_sent_at,omitempty"`
+	OnboardingRepliedAt             *time.Time `json:"onboarding_replied_at,omitempty"`
+	OnboardingCompletedAt           *time.Time `json:"onboarding_completed_at,omitempty"`
+	OnboardingNotes                 string     `gorm:"type:text" json:"onboarding_notes,omitempty"`
+	IntroReminderSentAt             *time.Time `json:"intro_reminder_sent_at,omitempty"`
+	ReplyReminderSentAt             *time.Time `json:"reply_reminder_sent_at,omitempty"`
 	CreatedAt                       time.Time  `json:"created_at"`
 	UpdatedAt                       time.Time  `json:"updated_at"`
 

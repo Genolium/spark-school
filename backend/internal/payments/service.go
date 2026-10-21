@@ -319,6 +319,7 @@ func (s *Service) applyConfirmation(tx *gorm.DB, in ConfirmInput, result *Result
 	}
 
 	// 4. Grant exactly the purchased entitlement.
+	previousAccess := user.HasAccess
 	now := time.Now()
 	user.HasAccess = true
 	if user.AccessGrantedAt == nil {
@@ -357,6 +358,9 @@ func (s *Service) applyConfirmation(tx *gorm.DB, in ConfirmInput, result *Result
 	paidKopecks += money.Kopecks(in.AmountKopecks)
 	user.PaidAmountKopecks = int64(paidKopecks)
 	user.PaidAmount = paidKopecks.ToRubles()
+	if !previousAccess && !isAuditTier(in.Tier) && user.OnboardingStatus == "" && user.AnonymizedAt == nil {
+		user.OnboardingStatus = "pending_intro"
+	}
 	if err := tx.Save(&user).Error; err != nil {
 		return err
 	}

@@ -371,6 +371,9 @@ func TestPostgres_UnknownTelegramUserIsCreated(t *testing.T) {
 	if !user.HasAccess || user.Tier != "basic" || user.PaidAmount != 3990 {
 		t.Fatalf("unexpected user: %+v", user)
 	}
+	if user.OnboardingStatus != "pending_intro" {
+		t.Fatalf("new purchase must start onboarding, got %q", user.OnboardingStatus)
+	}
 }
 
 func TestPostgres_PromoUsageCountedOnce(t *testing.T) {

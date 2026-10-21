@@ -301,6 +301,8 @@ func main() {
 		{
 			adminGroup.POST("/logout", adminHandler.Logout)
 			adminGroup.GET("/audit-log", adminHandler.ListAuditLog)
+			adminGroup.GET("/onboarding", adminHandler.ListOnboarding)
+			adminGroup.POST("/users/:id/onboarding", adminHandler.UpdateOnboarding)
 			adminGroup.GET("/stats", adminHandler.GetStats)
 			adminGroup.GET("/analytics/funnel", handlers.GetFunnel(db))
 			adminGroup.GET("/analytics/experiments", handlers.GetExperiments(db))

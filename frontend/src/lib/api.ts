@@ -20,6 +20,11 @@ export interface UserProfile {
   receipt_url?: string;
   receipt_number?: string;
   has_audit_upsell?: boolean;
+  onboarding_status?: "pending_intro" | "awaiting_reply" | "completed" | "skipped" | string;
+  intro_sent_at?: string;
+  onboarding_replied_at?: string;
+  onboarding_completed_at?: string;
+  onboarding_notes?: string;
 }
 
 export interface DailyRevenueStat {
@@ -221,6 +226,11 @@ export interface FunnelStepMetric {
   step: string;
   count: number;
   conversion_from_previous: number;
+}
+
+export interface OnboardingQueue {
+  users: UserProfile[];
+  counts: { pending_intro: number; awaiting_reply: number; completed: number };
 }
 
 export interface ExperimentMetric {
@@ -976,6 +986,39 @@ export const api = {
       return (json.experiments || []) as ExperimentMetric[];
     } catch {
       return null;
+    }
+  },
+
+  async getOnboarding(status?: string): Promise<OnboardingQueue | null> {
+    const token = getAdminToken();
+    const query = status ? `?status=${encodeURIComponent(status)}` : "";
+    try {
+      const res = await fetch(`${API_BASE}/admin/onboarding${query}`, {
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        credentials: "include",
+      });
+      if (!res.ok) return null;
+      return (await res.json()) as OnboardingQueue;
+    } catch {
+      return null;
+    }
+  },
+
+  async updateOnboarding(userId: number, status: string, notes = ""): Promise<boolean> {
+    const token = getAdminToken();
+    try {
+      const res = await fetch(`${API_BASE}/admin/users/${userId}/onboarding`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({ status, notes }),
+      });
+      return res.ok;
+    } catch {
+      return false;
     }
   },
 };
