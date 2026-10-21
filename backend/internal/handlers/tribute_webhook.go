@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -18,7 +17,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/spark-school/backend/internal/models"
-	"gorm.io/gorm"
+	"github.com/spark-school/backend/internal/payments"
+	"gorm.io/gorm/clause"
 )
 
 // Minimum allowable payment amount to prevent underpayment/tampering attacks.
@@ -276,21 +276,14 @@ func (h *PaymentWebhookHandler) HandleTributeWebhook(c *gin.Context) {
 		return
 	}
 
-	// 7. Atomic Concurrency Control & Idempotency Execution
-	var isAlreadyProcessed bool
-	var user models.User
+	// 7. Anti-Underpayment & Amount Tampering Protection
+	minAmount := minimumForTier(tier)
+	if amount < minAmount {
+		log.Printf("[SECURITY-ALERT] Tribute payment %s underpayment detected: %.2f %s. Minimum for %s: %.2f. Flagging without access grant.",
+			paymentID, amount, currency, tier, minAmount)
 
-	if h.db != nil {
-		err = h.db.Transaction(func(tx *gorm.DB) error {
-			// Idempotency check inside transaction
-			var existing models.PaymentTransaction
-			if err := tx.Where("payment_id = ?", paymentID).First(&existing).Error; err == nil {
-				isAlreadyProcessed = true
-				return nil
-			}
-
-			// Record PaymentTransaction
-			transaction := models.PaymentTransaction{
+		if h.db != nil {
+			flaggedTx := models.PaymentTransaction{
 				PaymentID:      paymentID,
 				OrderID:        paymentID,
 				TelegramID:     telegramID,
@@ -298,7 +291,7 @@ func (h *PaymentWebhookHandler) HandleTributeWebhook(c *gin.Context) {
 				Tier:           tier,
 				Amount:         amount,
 				OriginalAmount: amount,
-				Status:         "SUCCESS",
+				Status:         "FLAGGED_UNDERPAID",
 				Currency:       currency,
 				PayMethod:      "TRIBUTE",
 				ProductName:    productName,
@@ -306,132 +299,41 @@ func (h *PaymentWebhookHandler) HandleTributeWebhook(c *gin.Context) {
 				CreatedAt:      time.Now(),
 				UpdatedAt:      time.Now(),
 			}
-
-			if err := tx.Create(&transaction).Error; err != nil {
-				// Detect unique index collision (parallel race condition)
-				if strings.Contains(strings.ToLower(err.Error()), "duplicate") || strings.Contains(strings.ToLower(err.Error()), "unique") {
-					isAlreadyProcessed = true
-					return nil
-				}
-				return err
-			}
-
-			// Update or Create Student Record
-			if telegramID > 0 {
-				now := time.Now()
-				if err := tx.Where("telegram_id = ?", telegramID).First(&user).Error; err == nil {
-					user.HasAccess = true
-					user.AccessGrantedAt = &now
-					user.Tier = tier
-					user.PaidAmount = amount
-					if username != "" && user.Username == "" {
-						user.Username = username
-					}
-					if err := tx.Save(&user).Error; err != nil {
-						return err
-					}
-				} else {
-					user = models.User{
-						TelegramID:      telegramID,
-						Username:        username,
-						FirstName:       "Студент",
-						Role:            "student",
-						HasAccess:       true,
-						AccessGrantedAt: &now,
-						Tier:            tier,
-						PaidAmount:      amount,
-					}
-					if err := tx.Create(&user).Error; err != nil {
-						return err
-					}
-				}
-
-				// Process Affiliate Commission atomically
-				if h.affiliateService != nil && user.ID != 0 {
-					_ = h.affiliateService.ProcessCoursePurchaseTx(tx, user.ID, amount)
-				}
-			}
-
-			return nil
-		})
-
-		if err != nil {
-			log.Printf("[TRIBUTE-ERROR] DB transaction error: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "database error"})
-			return
+			_ = h.db.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "payment_id"}}, DoNothing: true}).Create(&flaggedTx).Error
 		}
-
-		if isAlreadyProcessed {
-			log.Printf("[TRIBUTE-IDEMPOTENCY] Payment %s already processed. Skipping duplicate callback safely.", paymentID)
-			c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "already_processed"})
-			return
-		}
+		h.alertAdmin(fmt.Sprintf(
+			"⚠️ <b>Tribute: недоплата</b>\n\nСтудент: ID %d (@%s)\nСумма: %.2f %s\nМинимум для %s: %.2f\nТовар: %s\nПлатёж: <code>%s</code>\n\nДоступ НЕ выдан.",
+			telegramID, html.EscapeString(username), amount, currency, html.EscapeString(tier), minAmount,
+			html.EscapeString(productName), html.EscapeString(paymentID),
+		))
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "payment_flagged_underpaid"})
+		return
 	}
 
-	// 8. Generate Single-Use Telegram Channel Invite Link (Only on successful settlement)
-	inviteLink := ""
-	if h.cfg != nil {
-		inviteLink = h.cfg.TelegramInviteLink
+	// 8. Single transactional confirmation shared by all payment providers.
+	result, err := h.payments.Confirm(payments.ConfirmInput{
+		Source:      "tribute",
+		PaymentID:   paymentID,
+		OrderID:     paymentID,
+		TelegramID:  telegramID,
+		Username:    username,
+		Tier:        tier,
+		Amount:      amount,
+		Currency:    currency,
+		PayMethod:   "TRIBUTE",
+		ProductName: productName,
+		RawCallback: rawBodyStr,
+		CreatedAt:   time.Now(),
+	})
+	if err != nil {
+		log.Printf("[TRIBUTE-ERROR] Confirmation failed for %s: %v", paymentID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "payment confirmation failed"})
+		return
 	}
-	if h.inviteLinkFunc != nil {
-		var chanID int64
-		if h.cfg != nil {
-			chanID = h.cfg.TelegramChannelID
-		}
-		if dynLink, err := h.inviteLinkFunc(context.Background(), chanID); err == nil && dynLink != "" {
-			inviteLink = dynLink
-		}
-	}
-
-	tierNameRU := "Акселератор"
-	if tier == "vip" {
-		tierNameRU = "VIP-сопровождение"
-	}
-
-	// 9. Deliver Channel Invite Link to Student
-	if h.notifyFunc != nil && telegramID > 0 {
-		sparkle := "<tg-emoji emoji-id=\"5884407720131436294\">✨</tg-emoji>"
-		sun := "<tg-emoji emoji-id=\"5883980366590517942\">🔆</tg-emoji>"
-		arrow := "<tg-emoji emoji-id=\"5884424573583106260\">➡️</tg-emoji>"
-
-		studentMsg := fmt.Sprintf(
-			"%s Спасибо за покупку! <b>Добро пожаловать на моё обучение!</b>\n\n"+
-				"%s Твоя ссылка для входа в закрытый канал потока:\n%s\n\n"+
-				"%s <i>Ссылка является персональной и одноразовой.</i>",
-			sparkle, sun, inviteLink, arrow,
-		)
-		_ = h.notifyFunc(telegramID, studentMsg)
-	}
-
-	// 10. Instant Push Notification to Ilya (Admin)
-	adminTG := int64(123456789)
-	if h.cfg != nil && h.cfg.AdminTelegramID != 0 {
-		adminTG = h.cfg.AdminTelegramID
-	}
-
-	if h.notifyFunc != nil && adminTG != 0 {
-		studentRef := fmt.Sprintf("ID: %d", telegramID)
-		if username != "" {
-			studentRef = fmt.Sprintf("@%s (%s)", username, studentRef)
-		}
-
-		adminAlert := fmt.Sprintf(
-			"⚡️ <b>НОВАЯ ОПЛАТА ЧЕРЕЗ TRIBUTE!</b> ⚡️\n\n"+
-				"👤 <b>Студент:</b> %s\n"+
-				"📦 <b>Тариф:</b> %s\n"+
-				"💰 <b>Сумма:</b> %.2f %s\n"+
-				"🆔 <b>ID платежа:</b> <code>%s</code>\n"+
-				"💳 <b>Метод:</b> Tribute (Cards/SBP)\n"+
-				"⏱ <b>Время:</b> %s\n\n"+
-				"✅ <i>Доступ в закрытый канал выдан автоматически, ссылка отправлена студенту!</i>",
-			studentRef,
-			tierNameRU,
-			amount,
-			currency,
-			paymentID,
-			time.Now().Format("15:04:05 02.01.2006"),
-		)
-		_ = h.notifyFunc(adminTG, adminAlert)
+	if result.AlreadyProcessed {
+		log.Printf("[TRIBUTE-IDEMPOTENCY] Payment %s already processed.", paymentID)
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "already_processed"})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "payment processed"})

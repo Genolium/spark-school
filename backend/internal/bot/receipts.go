@@ -136,6 +136,7 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) bool {
 		Tier:         chosenTier,
 		Amount:       amount,
 		Status:       "pending",
+		PromoCode:    session.PromoCode,
 		CreatedAt:    time.Now(),
 	}
 

@@ -6,29 +6,31 @@ import (
 
 // User represents a registered student or administrator.
 type User struct {
-	ID              uint       `gorm:"primaryKey" json:"id"`
-	TelegramID      int64      `gorm:"unique;not null" json:"telegram_id"`
-	Username        string     `gorm:"size:64" json:"username"`
-	FirstName       string     `gorm:"size:128;not null" json:"first_name"`
-	LastName        string     `gorm:"size:128" json:"last_name"`
-	PhotoURL        string     `json:"photo_url"`
-	Role            string     `gorm:"size:20;default:'student'" json:"role"` // 'student', 'admin'
-	HasAccess       bool       `gorm:"default:false" json:"has_access"`
-	AccessGrantedAt *time.Time `json:"access_granted_at"`
-	Tier            string     `gorm:"size:32;default:'accelerator'" json:"tier"` // 'accelerator', 'vip'
-	PaidAmount      float64    `gorm:"type:numeric(10,2);default:0.00" json:"paid_amount"`
-	PromoCode       string     `gorm:"size:32" json:"promo_code"`
-	ReceiptStatus   string     `gorm:"-" json:"receipt_status,omitempty"`
-	ReceiptIssued   bool       `gorm:"default:false;index" json:"receipt_issued"`
-	ReceiptIssuedAt *time.Time `json:"receipt_issued_at,omitempty"`
-	ReceiptURL      string     `gorm:"size:512" json:"receipt_url,omitempty"`
-	ReceiptNumber   string     `gorm:"size:64" json:"receipt_number,omitempty"`
+	ID                uint       `gorm:"primaryKey" json:"id"`
+	TelegramID        int64      `gorm:"unique;not null" json:"telegram_id"`
+	Username          string     `gorm:"size:64" json:"username"`
+	FirstName         string     `gorm:"size:128;not null" json:"first_name"`
+	LastName          string     `gorm:"size:128" json:"last_name"`
+	PhotoURL          string     `json:"photo_url"`
+	Role              string     `gorm:"size:20;default:'student'" json:"role"` // 'student', 'admin'
+	HasAccess         bool       `gorm:"default:false" json:"has_access"`
+	AccessGrantedAt   *time.Time `json:"access_granted_at"`
+	Tier              string     `gorm:"size:32;default:'accelerator'" json:"tier"` // 'accelerator', 'vip'
+	PaidAmount        float64    `gorm:"type:numeric(10,2);default:0.00" json:"paid_amount"`
+	PromoCode         string     `gorm:"size:32" json:"promo_code"`
+	ReceiptStatus     string     `gorm:"-" json:"receipt_status,omitempty"`
+	ReceiptIssued     bool       `gorm:"default:false;index" json:"receipt_issued"`
+	ReceiptIssuedAt   *time.Time `json:"receipt_issued_at,omitempty"`
+	ReceiptURL        string     `gorm:"size:512" json:"receipt_url,omitempty"`
+	ReceiptNumber     string     `gorm:"size:64" json:"receipt_number,omitempty"`
 	UpsellAuditSent   bool       `gorm:"default:false;index" json:"upsell_audit_sent"`
 	UpsellAuditSentAt *time.Time `json:"upsell_audit_sent_at,omitempty"`
 	HasAuditUpsell    bool       `gorm:"default:false;index" json:"has_audit_upsell"`
 	AuditCredits      int        `gorm:"default:0" json:"audit_credits"`
-	CreatedAt       time.Time  `json:"created_at"`
-	UpdatedAt       time.Time  `json:"updated_at"`
+	AttributionToken  string     `gorm:"size:64;index" json:"attribution_token,omitempty"`
+	VisitorID         string     `gorm:"size:64;index" json:"visitor_id,omitempty"`
+	CreatedAt         time.Time  `json:"created_at"`
+	UpdatedAt         time.Time  `json:"updated_at"`
 
 	AffiliateProfile *AffiliateProfile `gorm:"foreignKey:UserID" json:"affiliate_profile,omitempty"`
 }
@@ -44,13 +46,13 @@ type Referral struct {
 
 // AffiliateProfile maintains balance and partner tracking code.
 type AffiliateProfile struct {
-	UserID          uint      `gorm:"primaryKey" json:"user_id"`
-	ReferralCode    string    `gorm:"uniqueIndex;size:32;not null" json:"referral_code"`
-	CurrentBalance  float64   `gorm:"type:numeric(10,2);default:0.00" json:"current_balance"`
-	TotalEarned     float64   `gorm:"type:numeric(10,2);default:0.00" json:"total_earned"`
-	TotalWithdrawn  float64   `gorm:"type:numeric(10,2);default:0.00" json:"total_withdrawn"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	UserID         uint      `gorm:"primaryKey" json:"user_id"`
+	ReferralCode   string    `gorm:"uniqueIndex;size:32;not null" json:"referral_code"`
+	CurrentBalance float64   `gorm:"type:numeric(10,2);default:0.00" json:"current_balance"`
+	TotalEarned    float64   `gorm:"type:numeric(10,2);default:0.00" json:"total_earned"`
+	TotalWithdrawn float64   `gorm:"type:numeric(10,2);default:0.00" json:"total_withdrawn"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 // ReferralTransaction logs commission payouts for transparency.
@@ -59,6 +61,7 @@ type ReferralTransaction struct {
 	AffiliateID uint      `gorm:"not null;index" json:"affiliate_id"`
 	BuyerID     uint      `gorm:"not null" json:"buyer_id"`
 	Level       int       `gorm:"not null" json:"level"` // 1 or 2
+	PaymentID   string    `gorm:"size:64;index" json:"payment_id,omitempty"`
 	Amount      float64   `gorm:"type:numeric(10,2);not null" json:"amount"`
 	CreatedAt   time.Time `json:"created_at"`
 }
@@ -92,17 +95,19 @@ type PromoCode struct {
 
 // PaymentReceipt stores submitted payment receipts with hash deduplication to prevent fraud/reuse.
 type PaymentReceipt struct {
-	ID           uint      `gorm:"primaryKey" json:"id"`
-	FileHash     string    `gorm:"uniqueIndex;size:64;not null" json:"file_hash"`
-	FileUniqueID string    `gorm:"index;size:64" json:"file_unique_id"`
-	TelegramID   int64     `gorm:"index" json:"telegram_id"`
-	Username     string    `gorm:"size:64" json:"username"`
-	FileID       string    `gorm:"size:255" json:"file_id"`
-	Tier         string    `gorm:"size:32;default:'accelerator'" json:"tier"` // 'accelerator', 'vip'
-	Amount       float64   `gorm:"type:numeric(10,2)" json:"amount"`
-	Status       string    `gorm:"size:20;default:'pending'" json:"status"` // 'pending', 'approved', 'rejected'
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID           uint       `gorm:"primaryKey" json:"id"`
+	FileHash     string     `gorm:"uniqueIndex;size:64;not null" json:"file_hash"`
+	FileUniqueID string     `gorm:"index;size:64" json:"file_unique_id"`
+	TelegramID   int64      `gorm:"index" json:"telegram_id"`
+	Username     string     `gorm:"size:64" json:"username"`
+	FileID       string     `gorm:"size:255" json:"file_id"`
+	Tier         string     `gorm:"size:32;default:'accelerator'" json:"tier"` // 'accelerator', 'vip'
+	Amount       float64    `gorm:"type:numeric(10,2)" json:"amount"`
+	Status       string     `gorm:"size:20;default:'pending'" json:"status"` // 'pending', 'approved', 'rejected'
+	PromoCode    string     `gorm:"size:32" json:"promo_code,omitempty"`
+	ConfirmedAt  *time.Time `json:"confirmed_at,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
 // OutboxEvent provides reliable asynchronous delivery of critical system events (notifications, invite links).
@@ -114,31 +119,58 @@ type OutboxEvent struct {
 	RetryCount  int        `gorm:"default:0" json:"retry_count"`
 	MaxRetries  int        `gorm:"default:5" json:"max_retries"`
 	LastError   string     `gorm:"type:text" json:"last_error,omitempty"`
+	AvailableAt *time.Time `gorm:"index" json:"available_at,omitempty"`
+	LockedUntil *time.Time `gorm:"index" json:"locked_until,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
 	ProcessedAt *time.Time `json:"processed_at,omitempty"`
 }
 
 // PaymentTransaction logs verified Antilopay/gateway payments with idempotency guarantee.
 type PaymentTransaction struct {
-	ID             uint      `gorm:"primaryKey" json:"id"`
-	PaymentID      string    `gorm:"uniqueIndex;size:64;not null" json:"payment_id"`
-	OrderID        string    `gorm:"index;size:100" json:"order_id"`
-	TelegramID     int64     `gorm:"index" json:"telegram_id"`
-	Username       string    `gorm:"size:64" json:"username"`
-	Tier           string    `gorm:"size:32;default:'accelerator'" json:"tier"`
-	Amount         float64   `gorm:"type:numeric(10,2);not null" json:"amount"`
-	OriginalAmount float64   `gorm:"type:numeric(10,2)" json:"original_amount"`
-	Fee            float64   `gorm:"type:numeric(10,2)" json:"fee"`
-	Status         string    `gorm:"size:32;not null" json:"status"` // 'SUCCESS', 'FAIL', 'PENDING'
-	Currency       string    `gorm:"size:10;default:'RUB'" json:"currency"`
-	PayMethod      string    `gorm:"size:32" json:"pay_method"`
-	ProductName    string    `gorm:"size:128" json:"product_name"`
-	PromoCode      string    `gorm:"size:32" json:"promo_code"`
-	CustomerEmail  string    `gorm:"size:128" json:"customer_email"`
-	CustomerPhone  string    `gorm:"size:64" json:"customer_phone"`
-	RawCallback    string    `gorm:"type:text" json:"raw_callback"`
-	CreatedAt      time.Time `json:"created_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID               uint       `gorm:"primaryKey" json:"id"`
+	PaymentID        string     `gorm:"uniqueIndex;size:64;not null" json:"payment_id"`
+	OrderID          string     `gorm:"index;size:100" json:"order_id"`
+	TelegramID       int64      `gorm:"index" json:"telegram_id"`
+	Username         string     `gorm:"size:64" json:"username"`
+	Tier             string     `gorm:"size:32;default:'accelerator'" json:"tier"`
+	Amount           float64    `gorm:"type:numeric(10,2);not null" json:"amount"`
+	OriginalAmount   float64    `gorm:"type:numeric(10,2)" json:"original_amount"`
+	Fee              float64    `gorm:"type:numeric(10,2)" json:"fee"`
+	Status           string     `gorm:"size:32;not null" json:"status"` // 'SUCCESS', 'FAIL', 'PENDING'
+	Currency         string     `gorm:"size:10;default:'RUB'" json:"currency"`
+	PayMethod        string     `gorm:"size:32" json:"pay_method"`
+	ProductName      string     `gorm:"size:128" json:"product_name"`
+	PromoCode        string     `gorm:"size:32" json:"promo_code"`
+	CustomerEmail    string     `gorm:"size:128" json:"customer_email"`
+	CustomerPhone    string     `gorm:"size:64" json:"customer_phone"`
+	RawCallback      string     `gorm:"type:text" json:"raw_callback"`
+	Source           string     `gorm:"size:32" json:"source,omitempty"`
+	VisitorID        string     `gorm:"size:64;index" json:"visitor_id,omitempty"`
+	AttributionToken string     `gorm:"size:64;index" json:"attribution_token,omitempty"`
+	ConfirmedAt      *time.Time `json:"confirmed_at,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
+}
+
+// PaymentOrder is a server-side checkout intent. The expected amount and tier
+// are fixed at creation time and verified again when the provider webhook
+// arrives, so a client cannot change the price or product after checkout.
+type PaymentOrder struct {
+	ID                uint      `gorm:"primaryKey" json:"id"`
+	OrderID           string    `gorm:"uniqueIndex;size:100;not null" json:"order_id"`
+	TelegramID        int64     `gorm:"index;not null" json:"telegram_id"`
+	Username          string    `gorm:"size:64" json:"username"`
+	Tier              string    `gorm:"size:32;not null" json:"tier"`
+	Amount            float64   `gorm:"type:numeric(10,2);not null" json:"amount"`
+	Currency          string    `gorm:"size:10;default:'RUB'" json:"currency"`
+	PromoCode         string    `gorm:"size:32" json:"promo_code,omitempty"`
+	Provider          string    `gorm:"size:32;not null" json:"provider"`
+	ProviderPaymentID string    `gorm:"size:100;index" json:"provider_payment_id,omitempty"`
+	Status            string    `gorm:"size:20;default:'pending';index" json:"status"` // pending, paid, canceled, failed
+	VisitorID         string    `gorm:"size:64;index" json:"visitor_id,omitempty"`
+	AttributionToken  string    `gorm:"size:64;index" json:"attribution_token,omitempty"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 // DripLead tracks progress of 72-hour automated nurture sequences for prospective students.
@@ -177,7 +209,7 @@ type StudentSubmission struct {
 	TelegramID   int64      `gorm:"index;not null" json:"telegram_id"`
 	Username     string     `gorm:"size:64" json:"username"`
 	WorkType     string     `gorm:"size:32;not null" json:"work_type"` // 'essay', 'resume', 'video', 'positioning'
-	Content      string     `gorm:"type:text;not null" json:"content"`   // Google Doc link or submitted text
+	Content      string     `gorm:"type:text;not null" json:"content"` // Google Doc link or submitted text
 	Version      int        `gorm:"default:1" json:"version"`
 	Status       string     `gorm:"size:32;default:'pending';index" json:"status"` // 'pending', 'reviewing', 'reviewed', 'changes_requested'
 	CuratorNotes string     `gorm:"type:text" json:"curator_notes,omitempty"`

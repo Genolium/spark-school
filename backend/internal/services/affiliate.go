@@ -7,6 +7,7 @@ import (
 
 	"github.com/spark-school/backend/internal/models"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type AffiliateService struct {
@@ -58,15 +59,31 @@ func (s *AffiliateService) TrackReferral(userID uint, refCode string) error {
 
 // ProcessCoursePurchaseTx calculates 15% and 5% commissions within an existing database transaction.
 func (s *AffiliateService) ProcessCoursePurchaseTx(tx *gorm.DB, buyerID uint, coursePrice float64) error {
+	return s.ProcessCoursePurchaseForPaymentTx(tx, buyerID, "", coursePrice)
+}
+
+// ProcessCoursePurchaseForPaymentTx distributes commission at most once per
+// payment. The uniqueness of (payment_id, level) at the database level is the
+// final guard against two concurrent confirmations of the same purchase.
+func (s *AffiliateService) ProcessCoursePurchaseForPaymentTx(tx *gorm.DB, buyerID uint, paymentID string, coursePrice float64) error {
 	if tx == nil {
 		return nil
 	}
 
-	// Prevent duplicate commission payouts if access was toggled or retried
-	var existingTx models.ReferralTransaction
-	if err := tx.Where("buyer_id = ?", buyerID).First(&existingTx).Error; err == nil {
-		// Commission already distributed for this buyer
-		return nil
+	if paymentID != "" {
+		var count int64
+		if err := tx.Model(&models.ReferralTransaction{}).Where("payment_id = ?", paymentID).Count(&count).Error; err != nil {
+			return err
+		}
+		if count > 0 {
+			return nil
+		}
+	} else {
+		// Legacy callers without a payment key keep the old per-buyer guard.
+		var existingTx models.ReferralTransaction
+		if err := tx.Where("buyer_id = ?", buyerID).First(&existingTx).Error; err == nil {
+			return nil
+		}
 	}
 
 	var ref models.Referral
@@ -82,6 +99,7 @@ func (s *AffiliateService) ProcessCoursePurchaseTx(tx *gorm.DB, buyerID uint, co
 			AffiliateID: *ref.ReferredByID,
 			BuyerID:     buyerID,
 			Level:       1,
+			PaymentID:   paymentID,
 			Amount:      l1Amount,
 			CreatedAt:   time.Now(),
 		}
@@ -106,6 +124,7 @@ func (s *AffiliateService) ProcessCoursePurchaseTx(tx *gorm.DB, buyerID uint, co
 			AffiliateID: *ref.ParentReferrerID,
 			BuyerID:     buyerID,
 			Level:       2,
+			PaymentID:   paymentID,
 			Amount:      l2Amount,
 			CreatedAt:   time.Now(),
 		}
@@ -145,7 +164,7 @@ func (s *AffiliateService) RequestPayout(userID uint, amount float64, details st
 	var payout models.PayoutRequest
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		var profile models.AffiliateProfile
-		if err := tx.Where("user_id = ?", userID).First(&profile).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("user_id = ?", userID).First(&profile).Error; err != nil {
 			return errors.New("affiliate profile not found")
 		}
 
@@ -153,9 +172,16 @@ func (s *AffiliateService) RequestPayout(userID uint, amount float64, details st
 			return errors.New("недостаточно средств на балансе для вывода")
 		}
 
-		// Deduct from balance immediately to freeze funds
-		if err := tx.Model(&profile).Update("current_balance", gorm.Expr("current_balance - ?", amount)).Error; err != nil {
-			return err
+		// Conditional debit: the database itself guarantees the balance can
+		// never go negative even if two requests race past the read above.
+		res := tx.Model(&models.AffiliateProfile{}).
+			Where("user_id = ? AND current_balance >= ?", userID, amount).
+			Update("current_balance", gorm.Expr("current_balance - ?", amount))
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected != 1 {
+			return errors.New("недостаточно средств на балансе для вывода")
 		}
 
 		payout = models.PayoutRequest{
@@ -176,7 +202,7 @@ func (s *AffiliateService) RequestPayout(userID uint, amount float64, details st
 func (s *AffiliateService) ApprovePayout(payoutID uint) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		var payout models.PayoutRequest
-		if err := tx.Where("id = ?", payoutID).First(&payout).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", payoutID).First(&payout).Error; err != nil {
 			return err
 		}
 
@@ -185,10 +211,14 @@ func (s *AffiliateService) ApprovePayout(payoutID uint) error {
 		}
 
 		now := time.Now()
-		payout.Status = "paid"
-		payout.ResolvedAt = &now
-		if err := tx.Save(&payout).Error; err != nil {
-			return err
+		res := tx.Model(&models.PayoutRequest{}).
+			Where("id = ? AND status = ?", payout.ID, "pending").
+			Updates(map[string]interface{}{"status": "paid", "resolved_at": &now})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected != 1 {
+			return fmt.Errorf("payout is no longer pending")
 		}
 
 		return tx.Model(&models.AffiliateProfile{}).
@@ -201,7 +231,7 @@ func (s *AffiliateService) ApprovePayout(payoutID uint) error {
 func (s *AffiliateService) RejectPayout(payoutID uint) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		var payout models.PayoutRequest
-		if err := tx.Where("id = ?", payoutID).First(&payout).Error; err != nil {
+		if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", payoutID).First(&payout).Error; err != nil {
 			return err
 		}
 
@@ -210,10 +240,14 @@ func (s *AffiliateService) RejectPayout(payoutID uint) error {
 		}
 
 		now := time.Now()
-		payout.Status = "rejected"
-		payout.ResolvedAt = &now
-		if err := tx.Save(&payout).Error; err != nil {
-			return err
+		res := tx.Model(&models.PayoutRequest{}).
+			Where("id = ? AND status = ?", payout.ID, "pending").
+			Updates(map[string]interface{}{"status": "rejected", "resolved_at": &now})
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected != 1 {
+			return fmt.Errorf("payout is no longer pending")
 		}
 
 		// Refund balance

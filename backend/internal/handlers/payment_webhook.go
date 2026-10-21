@@ -9,6 +9,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net/http"
@@ -19,8 +20,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/spark-school/backend/internal/config"
 	"github.com/spark-school/backend/internal/models"
+	"github.com/spark-school/backend/internal/payments"
 	"github.com/spark-school/backend/internal/services"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type PaymentWebhookHandler struct {
@@ -29,6 +32,7 @@ type PaymentWebhookHandler struct {
 	affiliateService *services.AffiliateService
 	notifyFunc       func(telegramID int64, message string) error
 	inviteLinkFunc   func(ctx context.Context, channelID int64) (string, error)
+	payments         *payments.Service
 }
 
 func NewPaymentWebhookHandler(
@@ -48,6 +52,7 @@ func NewPaymentWebhookHandler(
 		affiliateService: aff,
 		notifyFunc:       notify,
 		inviteLinkFunc:   gen,
+		payments:         payments.NewService(db, aff),
 	}
 }
 
@@ -169,26 +174,13 @@ func (h *PaymentWebhookHandler) HandleAntilopayWebhook(c *gin.Context) {
 		paymentID = "APAY_HASH_" + ComputeHash(bodyBytes)[:20]
 	}
 
-	// 4. Idempotency Check: prevent duplicate processing & double rewards
-	if h.db != nil {
-		var existing models.PaymentTransaction
-		if err := h.db.Where("payment_id = ?", paymentID).First(&existing).Error; err == nil {
-			log.Printf("[ANTILOPAY-IDEMPOTENCY] Payment %s already processed. Skipping duplicate.", paymentID)
-			c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "already_processed"})
-			return
-		}
-	}
-
-	// 5. Extract metadata (telegram_id, tier, promo_code) from order_id or merchant_extra
-	// Format conventions:
-	// OrderID: "spark_{telegramId}_{tier}_{promo}_{timestamp}" or "pay_{tier}_{telegramId}"
-	// MerchantExtra: "telegram_id=12345&tier=accelerator&promo=SPARK26"
+	// 4. Extract metadata (telegram_id, tier, promo_code) from order_id or merchant_extra.
 	var telegramID int64
 	tier := "accelerator"
 	promoCode := ""
 	username := ""
+	orderID := strings.TrimSpace(payload.OrderID)
 
-	// Check order_id parts
 	orderParts := strings.Split(payload.OrderID, "_")
 	for i, part := range orderParts {
 		if id, err := strconv.ParseInt(part, 10, 64); err == nil && id > 10000 {
@@ -201,237 +193,177 @@ func (h *PaymentWebhookHandler) HandleAntilopayWebhook(c *gin.Context) {
 			tier = "basic"
 		} else if lower == "accelerator" {
 			tier = "accelerator"
+		} else if lower == "audit" && i+1 < len(orderParts) && strings.EqualFold(orderParts[i+1], "essay") {
+			tier = "audit_essay"
 		}
 		if (lower == "promo" || lower == "code") && i+1 < len(orderParts) {
 			promoCode = strings.ToUpper(orderParts[i+1])
 		}
 	}
 
-	// Check merchant_extra if present (query-string or JSON format)
 	if payload.MerchantExtra != "" {
 		extra := payload.MerchantExtra
 		if strings.Contains(extra, "telegram_id=") {
 			for _, param := range strings.Split(extra, "&") {
 				kv := strings.SplitN(param, "=", 2)
-				if len(kv) == 2 {
-					k := strings.ToLower(strings.TrimSpace(kv[0]))
-					v := strings.TrimSpace(kv[1])
-					switch k {
-					case "telegram_id", "tg_id", "user_id":
-						if id, err := strconv.ParseInt(v, 10, 64); err == nil && id > 0 {
-							telegramID = id
-						}
-					case "tier":
-						if strings.ToLower(v) == "basic" {
-							tier = "basic"
-						} else if strings.ToLower(v) == "vip" {
-							tier = "vip"
-						}
-					case "promo", "promocode", "promo_code":
-						promoCode = strings.ToUpper(v)
-					case "username":
-						username = strings.TrimPrefix(v, "@")
+				if len(kv) != 2 {
+					continue
+				}
+				k := strings.ToLower(strings.TrimSpace(kv[0]))
+				v := strings.TrimSpace(kv[1])
+				switch k {
+				case "telegram_id", "tg_id", "user_id":
+					if id, err := strconv.ParseInt(v, 10, 64); err == nil && id > 0 {
+						telegramID = id
 					}
+				case "tier":
+					if normalized := normalizePaidTier(v); normalized != "" {
+						tier = normalized
+					}
+				case "promo", "promocode", "promo_code":
+					promoCode = strings.ToUpper(v)
+				case "username":
+					username = strings.TrimPrefix(v, "@")
 				}
 			}
 		}
 	}
 
-	// Determine tier based on amount if not explicit:
-	// VIP without promo is 14900, with 5% discount is 14155
-	// Accelerator is 6900 / 6555
-	// Basic is 3990 / 3790
-	if payload.Amount >= 13000 {
-		tier = "vip"
-	} else if payload.Amount < 5000 {
-		tier = "basic"
+	amount := roundAmount(payload.Amount)
+	currency := strings.ToUpper(payload.Currency)
+	if currency == "" {
+		currency = "RUB"
 	}
 
-	// 6. Anti-Underpayment & Tampering Protection
-	if strings.ToUpper(payload.Status) == "SUCCESS" && payload.Amount < MinCoursePaymentThreshold {
-		log.Printf("[SECURITY-ALERT] Antilopay payment %s underpayment detected: %.2f %s. Minimum required: %.2f.",
-			paymentID, payload.Amount, payload.Currency, MinCoursePaymentThreshold)
-
-		transaction := models.PaymentTransaction{
-			PaymentID:      paymentID,
-			OrderID:        payload.OrderID,
-			TelegramID:     telegramID,
-			Username:       username,
-			Tier:           tier,
-			Amount:         payload.Amount,
-			OriginalAmount: payload.OriginalAmount,
-			Fee:            payload.Fee,
-			Status:         "FLAGGED_UNDERPAID",
-			Currency:       payload.Currency,
-			PayMethod:      payload.PayMethod,
-			PromoCode:      promoCode,
-			CustomerEmail:  payload.Customer.Email,
-			CustomerPhone:  payload.Customer.Phone,
-			RawCallback:    rawBodyStr,
-			CreatedAt:      time.Now(),
-			UpdatedAt:      time.Now(),
+	// Amount-based fallback is only used for legacy orders without metadata.
+	if telegramID == 0 || (promoCode == "" && payload.MerchantExtra == "") {
+		if amount >= 13000 {
+			tier = "vip"
+		} else if amount < 5000 {
+			tier = "basic"
 		}
+	}
+
+	// If this is a server-side checkout order, it is authoritative.
+	var order models.PaymentOrder
+	hasOrder := false
+	if orderID != "" && h.db != nil {
+		if err := h.db.Where("order_id = ?", orderID).First(&order).Error; err == nil {
+			hasOrder = true
+			if order.Provider != "" && order.Provider != "antilopay" {
+				c.JSON(http.StatusConflict, gin.H{"status": "error", "message": "order provider mismatch"})
+				return
+			}
+			if order.Currency != "" && currency != strings.ToUpper(order.Currency) {
+				c.JSON(http.StatusConflict, gin.H{"status": "error", "message": "currency mismatch"})
+				return
+			}
+			if diff := amount - order.Amount; diff > 0.01 || diff < -0.01 {
+				c.JSON(http.StatusConflict, gin.H{"status": "error", "message": "amount mismatch"})
+				return
+			}
+			telegramID = order.TelegramID
+			tier = order.Tier
+			promoCode = firstNonEmptyString(promoCode, order.PromoCode)
+			username = firstNonEmptyString(username, order.Username)
+		}
+	}
+
+	// 5. Anti-underpayment protection by product.
+	minAmount := minimumForTier(tier)
+	if strings.ToUpper(payload.Status) == "SUCCESS" && amount < minAmount {
+		log.Printf("[SECURITY-ALERT] Antilopay payment %s underpayment detected: %.2f %s. Minimum for %s: %.2f.",
+			paymentID, amount, currency, tier, minAmount)
+
 		if h.db != nil {
-			_ = h.db.Create(&transaction)
+			transaction := models.PaymentTransaction{
+				PaymentID:      paymentID,
+				OrderID:        orderID,
+				TelegramID:     telegramID,
+				Username:       username,
+				Tier:           tier,
+				Amount:         amount,
+				OriginalAmount: payload.OriginalAmount,
+				Fee:            payload.Fee,
+				Status:         "FLAGGED_UNDERPAID",
+				Currency:       currency,
+				PayMethod:      payload.PayMethod,
+				PromoCode:      promoCode,
+				CustomerEmail:  payload.Customer.Email,
+				CustomerPhone:  payload.Customer.Phone,
+				RawCallback:    rawBodyStr,
+				CreatedAt:      time.Now(),
+				UpdatedAt:      time.Now(),
+			}
+			_ = h.db.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "payment_id"}}, DoNothing: true}).Create(&transaction).Error
 		}
-
-		adminTG := int64(123456789)
-		if h.cfg != nil && h.cfg.AdminTelegramID != 0 {
-			adminTG = h.cfg.AdminTelegramID
-		}
-		if h.notifyFunc != nil && adminTG != 0 {
-			alertMsg := fmt.Sprintf(
-				"⚠️ <b>ВНИМАНИЕ: ПОДОЗРИТЕЛЬНАЯ ОПЛАТА ANTILOPAY!</b> ⚠️\n\n"+
-					"👤 <b>Студент:</b> ID %d (@%s)\n"+
-					"💰 <b>Сумма:</b> %.2f %s <i>(МЕНЬШЕ МИНИМУМА 6 000 ₽)</i>\n"+
-					"🆔 <b>ID платежа:</b> <code>%s</code>\n\n"+
-					"⛔️ <b>Доступ НЕ выдан.</b> Проверьте транзакцию вручную!",
-				telegramID, username, payload.Amount, payload.Currency, paymentID,
-			)
-			_ = h.notifyFunc(adminTG, alertMsg)
-		}
-
+		h.alertAdmin(fmt.Sprintf(
+			"⚠️ <b>Antilopay: недоплата</b>\n\nСтудент: ID %d (@%s)\nСумма: %.2f %s\nМинимум для %s: %.2f\nПлатёж: <code>%s</code>\n\nДоступ НЕ выдан.",
+			telegramID, html.EscapeString(username), amount, currency, html.EscapeString(tier), minAmount, html.EscapeString(paymentID),
+		))
 		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "payment_flagged_underpaid"})
 		return
 	}
 
-	// Record PaymentTransaction in DB
-	transaction := models.PaymentTransaction{
-		PaymentID:      paymentID,
-		OrderID:        payload.OrderID,
-		TelegramID:     telegramID,
-		Username:       username,
-		Tier:           tier,
-		Amount:         payload.Amount,
-		OriginalAmount: payload.OriginalAmount,
-		Fee:            payload.Fee,
-		Status:         payload.Status,
-		Currency:       payload.Currency,
-		PayMethod:      payload.PayMethod,
-		PromoCode:      promoCode,
-		CustomerEmail:  payload.Customer.Email,
-		CustomerPhone:  payload.Customer.Phone,
-		RawCallback:    rawBodyStr,
-		CreatedAt:      time.Now(),
-		UpdatedAt:      time.Now(),
+	// 6. Only settled payments change state.
+	if strings.ToUpper(payload.Status) != "SUCCESS" {
+		if h.db != nil {
+			pending := models.PaymentTransaction{
+				PaymentID:      paymentID,
+				OrderID:        orderID,
+				TelegramID:     telegramID,
+				Username:       username,
+				Tier:           tier,
+				Amount:         amount,
+				OriginalAmount: payload.OriginalAmount,
+				Fee:            payload.Fee,
+				Status:         strings.ToUpper(payload.Status),
+				Currency:       currency,
+				PayMethod:      payload.PayMethod,
+				PromoCode:      promoCode,
+				RawCallback:    rawBodyStr,
+				CreatedAt:      time.Now(),
+				UpdatedAt:      time.Now(),
+			}
+			_ = h.db.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "payment_id"}}, DoNothing: true}).Create(&pending).Error
+		}
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "non-success status recorded"})
+		return
 	}
 
-	if h.db != nil {
-		_ = h.db.Create(&transaction)
+	visitorID := ""
+	attributionToken := ""
+	if hasOrder {
+		visitorID = order.VisitorID
+		attributionToken = order.AttributionToken
 	}
 
-	// 7. If status is SUCCESS: Grant Access & Process Notifications
-	if strings.ToUpper(payload.Status) == "SUCCESS" {
-		tierNameRU := "Акселератор"
-		if tier == "vip" {
-			tierNameRU = "VIP-сопровождение"
-		}
-
-		// Update or Create user in database
-		if h.db != nil && telegramID > 0 {
-			var user models.User
-			now := time.Now()
-			err := h.db.Where("telegram_id = ?", telegramID).First(&user).Error
-			if err == nil {
-				user.HasAccess = true
-				user.AccessGrantedAt = &now
-				user.Tier = tier
-				user.PaidAmount = payload.Amount
-				if promoCode != "" {
-					user.PromoCode = promoCode
-				}
-				h.db.Save(&user)
-				if user.Username != "" && username == "" {
-					username = user.Username
-				}
-			} else {
-				// Create new student
-				newUser := models.User{
-					TelegramID:      telegramID,
-					Username:        username,
-					FirstName:       payload.Customer.Fullname,
-					Role:            "student",
-					HasAccess:       true,
-					AccessGrantedAt: &now,
-					Tier:            tier,
-					PaidAmount:      payload.Amount,
-					PromoCode:       promoCode,
-				}
-				if newUser.FirstName == "" {
-					newUser.FirstName = "Студент"
-				}
-				h.db.Create(&newUser)
-			}
-
-			// Atomic promo attribution
-			if promoCode != "" {
-				_, _ = RedeemPromoCode(h.db, promoCode)
-			}
-		}
-
-		// Generate dynamic single-use invite link for student
-		inviteLink := ""
-		if h.cfg != nil {
-			inviteLink = h.cfg.TelegramInviteLink
-		}
-		if h.inviteLinkFunc != nil && h.cfg != nil && h.cfg.TelegramChannelID != 0 {
-			if dynLink, err := h.inviteLinkFunc(context.Background(), h.cfg.TelegramChannelID); err == nil && dynLink != "" {
-				inviteLink = dynLink
-			}
-		}
-
-		// Deliver invite link to student via bot
-		if h.notifyFunc != nil && telegramID > 0 {
-			studentMsg := fmt.Sprintf(
-				"🎉 <b>Оплата подтверждена!</b>\n\n"+
-					"Добро пожаловать в проект «так называемый SPARK» 2027!\n\n"+
-					"📦 <b>Твой тариф:</b> %s\n"+
-					"💳 <b>Оплачено:</b> %.2f ₽\n\n"+
-					"🔒 <b>Твоя персональная ссылка в закрытый канал и комьюнити:</b>\n%s\n\n"+
-					"<i>Ссылка одноразовая и действует 24 часа. Сохрани её.</i>",
-				tierNameRU, payload.Amount, inviteLink,
-			)
-			_ = h.notifyFunc(telegramID, studentMsg)
-		}
-
-		// Instant Push Notification to Ilya (Admin) in Telegram
-		adminTG := int64(123456789)
-		if h.cfg != nil && h.cfg.AdminTelegramID != 0 {
-			adminTG = h.cfg.AdminTelegramID
-		}
-
-		if h.notifyFunc != nil && adminTG != 0 {
-			studentRef := fmt.Sprintf("ID: %d", telegramID)
-			if username != "" {
-				studentRef = fmt.Sprintf("@%s (%s)", username, studentRef)
-			}
-
-			promoBadge := "— (без промокода)"
-			if promoCode != "" {
-				promoBadge = fmt.Sprintf("🏷 %s (-5%%)", promoCode)
-			}
-
-			customerContact := ""
-			if payload.Customer.Phone != "" {
-				customerContact += "\n📱 Телефон: " + payload.Customer.Phone
-			}
-			if payload.Customer.Email != "" {
-				customerContact += "\n✉️ Email: " + payload.Customer.Email
-			}
-
-			adminAlert := fmt.Sprintf(
-				"🔥 <b>Новая оплата через Antilopay!</b>\n\n"+
-					"💳 <b>ID платежа:</b> <code>%s</code>\n"+
-					"👤 <b>Студент:</b> %s\n"+
-					"📦 <b>Тариф:</b> %s\n"+
-					"💰 <b>Сумма:</b> %.2f ₽\n"+
-					"🏷 <b>Промокод:</b> %s%s\n\n"+
-					"✅ <i>Доступ студенту открыт автоматически, одноразовая ссылка отправлена.</i>",
-				paymentID, studentRef, tierNameRU, payload.Amount, promoBadge, customerContact,
-			)
-
-			_ = h.notifyFunc(adminTG, adminAlert)
-		}
+	result, err := h.payments.Confirm(payments.ConfirmInput{
+		Source:           "antilopay",
+		PaymentID:        paymentID,
+		OrderID:          orderID,
+		TelegramID:       telegramID,
+		Username:         username,
+		Tier:             tier,
+		Amount:           amount,
+		Currency:         currency,
+		PayMethod:        payload.PayMethod,
+		PromoCode:        promoCode,
+		ProductName:      payload.ProductName,
+		RawCallback:      rawBodyStr,
+		VisitorID:        visitorID,
+		AttributionToken: attributionToken,
+		CreatedAt:        time.Now(),
+	})
+	if err != nil {
+		log.Printf("[ANTILOPAY-ERROR] Confirmation failed for %s: %v", paymentID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"status": "error", "message": "payment confirmation failed"})
+		return
+	}
+	if result.AlreadyProcessed {
+		log.Printf("[ANTILOPAY-IDEMPOTENCY] Payment %s already processed.", paymentID)
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "already_processed"})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{

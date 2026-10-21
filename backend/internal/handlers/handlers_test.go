@@ -478,22 +478,14 @@ func TestHandleTributeWebhook(t *testing.T) {
 		AdminTelegramID: 999888,
 	}
 
+	db := setupHandlerDB(t)
 	var notifiedStudentMsg string
-	var notifiedAdminMsg string
 	notifyFunc := func(telegramID int64, message string) error {
-		if telegramID == 999888 {
-			notifiedAdminMsg = message
-		} else {
-			notifiedStudentMsg = message
-		}
+		notifiedStudentMsg = message
 		return nil
 	}
 
-	inviteGen := func(ctx context.Context, channelID int64) (string, error) {
-		return "https://t.me/+tribute_dyn_invite", nil
-	}
-
-	handler := NewPaymentWebhookHandler(nil, cfg, nil, notifyFunc, inviteGen)
+	handler := NewPaymentWebhookHandler(db, cfg, nil, notifyFunc)
 
 	r := gin.New()
 	r.POST("/api/payments/tribute", handler.HandleTributeWebhook)
@@ -528,13 +520,46 @@ func TestHandleTributeWebhook(t *testing.T) {
 		t.Fatalf("expected 200 OK, got %d: %s", w.Code, w.Body.String())
 	}
 
-	if !strings.Contains(notifiedStudentMsg, "https://t.me/+tribute_dyn_invite") {
-		t.Errorf("expected student invite link in notification, got: %s", notifiedStudentMsg)
+	var tx models.PaymentTransaction
+	if err := db.Where("payment_id = ?", "TRBT_sub_test_123").First(&tx).Error; err != nil {
+		t.Fatalf("expected payment transaction: %v", err)
+	}
+	if tx.Amount != 6900 || tx.Status != "SUCCESS" || tx.Tier != "accelerator" {
+		t.Fatalf("unexpected transaction: %+v", tx)
+	}
+	var user models.User
+	if err := db.Where("telegram_id = ?", 777666).First(&user).Error; err != nil {
+		t.Fatalf("expected user to be created: %v", err)
+	}
+	if !user.HasAccess || user.Tier != "accelerator" || user.PaidAmount != 6900 {
+		t.Fatalf("unexpected user rights: %+v", user)
+	}
+	var outboxCount int64
+	db.Model(&models.OutboxEvent{}).Where("event_type = 'payment_notice'").Count(&outboxCount)
+	if outboxCount != 2 {
+		t.Fatalf("expected user and admin notices in outbox, got %d", outboxCount)
 	}
 
-	if !strings.Contains(notifiedAdminMsg, "TRIBUTE") {
-		t.Errorf("expected admin notification to mention TRIBUTE, got: %s", notifiedAdminMsg)
+	// A repeated provider delivery must not duplicate money or rights.
+	req2 := httptest.NewRequest("POST", "/api/payments/tribute", bytes.NewReader(bodyBytes))
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("trbt-signature", sig)
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("expected 200 for replay, got %d", w2.Code)
 	}
+	var txCount int64
+	db.Model(&models.PaymentTransaction{}).Where("telegram_id = ?", 777666).Count(&txCount)
+	if txCount != 1 {
+		t.Fatalf("expected exactly one transaction after replay, got %d", txCount)
+	}
+	var reloaded models.User
+	db.Where("telegram_id = ?", 777666).First(&reloaded)
+	if reloaded.PaidAmount != 6900 {
+		t.Fatalf("replay changed paid amount: %f", reloaded.PaidAmount)
+	}
+	_ = notifiedStudentMsg
 }
 
 func TestHandleTributeWebhook_Security_MissingSignature(t *testing.T) {
@@ -646,22 +671,8 @@ func TestYooKassaHandler_Webhook_Success(t *testing.T) {
 		AdminTelegramID: 888777,
 	}
 
-	var notifiedStudentMsg string
-	var notifiedAdminMsg string
-	notifyFunc := func(telegramID int64, message string) error {
-		if telegramID == 888777 {
-			notifiedAdminMsg = message
-		} else {
-			notifiedStudentMsg = message
-		}
-		return nil
-	}
-
-	inviteGen := func(ctx context.Context, channelID int64) (string, error) {
-		return "https://t.me/+yookassa_dyn_invite", nil
-	}
-
-	handler := NewYooKassaHandler(nil, cfg, nil, nil, notifyFunc, inviteGen)
+	db := setupHandlerDB(t)
+	handler := NewYooKassaHandler(db, cfg, nil, nil, nil)
 
 	r := gin.New()
 	r.POST("/api/payments/yookassa", handler.HandleWebhook)
@@ -699,12 +710,24 @@ func TestYooKassaHandler_Webhook_Success(t *testing.T) {
 		t.Fatalf("expected status 200, got %d: %s", w.Code, w.Body.String())
 	}
 
-	if !strings.Contains(notifiedStudentMsg, "https://t.me/+yookassa_dyn_invite") {
-		t.Errorf("expected student notification to contain invite link, got: %s", notifiedStudentMsg)
+	var tx models.PaymentTransaction
+	if err := db.Where("payment_id = ?", "22d6d5eb-000f-5000-8000-18db351245c7").First(&tx).Error; err != nil {
+		t.Fatalf("expected transaction: %v", err)
 	}
-
-	if !strings.Contains(notifiedAdminMsg, "ЮKASSA") || !strings.Contains(notifiedAdminMsg, "1491540") {
-		t.Errorf("expected admin notification to mention ЮKASSA and ShopID 1491540, got: %s", notifiedAdminMsg)
+	if tx.Amount != 6900 || tx.Status != "SUCCESS" {
+		t.Fatalf("unexpected transaction: %+v", tx)
+	}
+	var user models.User
+	if err := db.Where("telegram_id = ?", 555444).First(&user).Error; err != nil {
+		t.Fatalf("expected user: %v", err)
+	}
+	if !user.HasAccess || user.PaidAmount != 6900 {
+		t.Fatalf("unexpected rights: %+v", user)
+	}
+	var outboxCount int64
+	db.Model(&models.OutboxEvent{}).Where("event_type = 'payment_notice'").Count(&outboxCount)
+	if outboxCount != 2 {
+		t.Fatalf("expected two outbox notices, got %d", outboxCount)
 	}
 }
 
@@ -830,9 +853,9 @@ func TestYooKassaHandler_CreateCheckout_InputSanitization(t *testing.T) {
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 
-	// Since yooKassaService is nil in this test handler, it safely returns 503 Service Unavailable
-	if w.Code != http.StatusServiceUnavailable {
-		t.Fatalf("expected 503 Service Unavailable for uninitialized service, got %d", w.Code)
+	// A payment must always have an identifiable recipient.
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 Bad Request for negative telegram id, got %d", w.Code)
 	}
 }
 
@@ -1029,6 +1052,3 @@ func TestAdminHandler_IssueReceipt_Mock(t *testing.T) {
 		t.Fatalf("expected receipt_issued=true, got %v", res["receipt_issued"])
 	}
 }
-
-
-

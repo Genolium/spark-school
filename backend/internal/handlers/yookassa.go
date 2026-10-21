@@ -16,8 +16,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/spark-school/backend/internal/config"
 	"github.com/spark-school/backend/internal/models"
+	"github.com/spark-school/backend/internal/payments"
 	"github.com/spark-school/backend/internal/services"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type YooKassaHandler struct {
@@ -27,6 +29,7 @@ type YooKassaHandler struct {
 	affiliateService *services.AffiliateService
 	notifyFunc       func(telegramID int64, message string) error
 	inviteLinkFunc   func(ctx context.Context, channelID int64) (string, error)
+	payments         *payments.Service
 }
 
 func NewYooKassaHandler(
@@ -48,15 +51,18 @@ func NewYooKassaHandler(
 		affiliateService: affService,
 		notifyFunc:       notify,
 		inviteLinkFunc:   gen,
+		payments:         payments.NewService(db, affService),
 	}
 }
 
 type CreateYooKassaCheckoutRequest struct {
-	Tier             string `json:"tier"` // "accelerator" or "vip"
+	Tier             string `json:"tier"` // "basic", "accelerator", "vip" or "audit_essay"
 	TelegramUsername string `json:"telegram_username"`
 	TelegramID       int64  `json:"telegram_id"`
 	PromoCode        string `json:"promo_code"`
 	Email            string `json:"email"`
+	VisitorID        string `json:"visitor_id"`
+	AttributionToken string `json:"attribution_token"`
 }
 
 // CreateCheckout creates a payment session via official YooKassa API and returns the redirect URL.
@@ -68,12 +74,8 @@ func (h *YooKassaHandler) CreateCheckout(c *gin.Context) {
 		return
 	}
 
-	tier := strings.ToLower(strings.TrimSpace(req.Tier))
-	if tier == "basic" {
-		tier = "basic"
-	} else if tier == "vip" {
-		tier = "vip"
-	} else {
+	tier := normalizePaidTier(req.Tier)
+	if tier == "" {
 		tier = "accelerator"
 	}
 
@@ -81,6 +83,12 @@ func (h *YooKassaHandler) CreateCheckout(c *gin.Context) {
 	telegramID := req.TelegramID
 	if telegramID < 0 || telegramID > 1000000000000 {
 		telegramID = 0
+	}
+	// A payment must always have an identifiable recipient; otherwise access
+	// cannot be granted automatically after the provider confirms it.
+	if telegramID == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "telegram_id is required for checkout"})
+		return
 	}
 
 	// Security: Sanitize Username (strip @, restrict length, allow only valid Telegram username chars)
@@ -104,10 +112,13 @@ func (h *YooKassaHandler) CreateCheckout(c *gin.Context) {
 
 	pricing := models.GetCoursePricing(h.db)
 	basePrice := pricing.AcceleratorPrice
-	if tier == "basic" {
+	switch tier {
+	case "basic":
 		basePrice = pricing.BasicPrice
-	} else if tier == "vip" {
+	case "vip":
 		basePrice = pricing.VIPPrice
+	case "audit_essay":
+		basePrice = 1900
 	}
 
 	finalPrice := basePrice
@@ -129,8 +140,13 @@ func (h *YooKassaHandler) CreateCheckout(c *gin.Context) {
 	}
 
 	tierNameRU := "Акселератор"
-	if tier == "vip" {
+	switch tier {
+	case "vip":
 		tierNameRU = "VIP"
+	case "basic":
+		tierNameRU = "Базовый"
+	case "audit_essay":
+		tierNameRU = "Аудит эссе"
 	}
 
 	domain := "so-called-spark.ru"
@@ -141,13 +157,43 @@ func (h *YooKassaHandler) CreateCheckout(c *gin.Context) {
 	description := fmt.Sprintf("Оплата участия в проекте «так называемый SPARK» (Тариф %s)", tierNameRU)
 	returnURL := fmt.Sprintf("https://%s/#payment-success", domain)
 
-	metadata := map[string]string{
-		"tier":       tier,
-		"username":   cleanUsername,
-		"promo_code": cleanPromo,
+	orderID := fmt.Sprintf("YK_%d_%d", telegramID, time.Now().UnixNano())
+	visitorID := sanitizeToken(req.VisitorID, 64)
+	attributionToken := sanitizeToken(req.AttributionToken, 64)
+
+	if h.db == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "checkout is temporarily unavailable"})
+		return
 	}
-	if telegramID > 0 {
-		metadata["telegram_id"] = strconv.FormatInt(telegramID, 10)
+	order := models.PaymentOrder{
+		OrderID:          orderID,
+		TelegramID:       telegramID,
+		Username:         cleanUsername,
+		Tier:             tier,
+		Amount:           roundAmount(finalPrice),
+		Currency:         "RUB",
+		PromoCode:        cleanPromo,
+		Provider:         "yookassa",
+		Status:           "pending",
+		VisitorID:        visitorID,
+		AttributionToken: attributionToken,
+		CreatedAt:        time.Now(),
+		UpdatedAt:        time.Now(),
+	}
+	if err := h.db.Create(&order).Error; err != nil {
+		log.Printf("[YOOKASSA-ERROR] Failed to persist checkout order: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "checkout could not be created"})
+		return
+	}
+
+	metadata := map[string]string{
+		"tier":              tier,
+		"username":          cleanUsername,
+		"promo_code":        cleanPromo,
+		"telegram_id":       strconv.FormatInt(telegramID, 10),
+		"order_id":          orderID,
+		"visitor_id":        visitorID,
+		"attribution_token": attributionToken,
 	}
 
 	ykReq := services.YooKassaPaymentRequest{
@@ -174,17 +220,26 @@ func (h *YooKassaHandler) CreateCheckout(c *gin.Context) {
 	paymentResp, err := h.yooKassaService.CreatePayment(c.Request.Context(), ykReq)
 	if err != nil {
 		log.Printf("[YOOKASSA-ERROR] CreatePayment failed: %v", err)
+		_ = h.db.Model(&models.PaymentOrder{}).Where("order_id = ?", orderID).Updates(map[string]interface{}{
+			"status":     "failed",
+			"updated_at": time.Now(),
+		}).Error
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"error": "Платёжный сервис ЮKassa временно недоступен. Пожалуйста, оплатите через Telegram-бота или Tribute.",
 		})
 		return
 	}
+	_ = h.db.Model(&models.PaymentOrder{}).Where("order_id = ?", orderID).Updates(map[string]interface{}{
+		"provider_payment_id": paymentResp.ID,
+		"updated_at":          time.Now(),
+	}).Error
 
 	c.JSON(http.StatusOK, gin.H{
 		"payment_id":       paymentResp.ID,
+		"order_id":         orderID,
 		"status":           paymentResp.Status,
 		"confirmation_url": paymentResp.Confirmation.ConfirmationURL,
-		"amount":           finalPrice,
+		"amount":           roundAmount(finalPrice),
 		"tier":             tier,
 	})
 }
@@ -194,12 +249,12 @@ type YooKassaWebhookPayload struct {
 	Type   string `json:"type"`  // "notification"
 	Event  string `json:"event"` // "payment.succeeded", "payment.canceled", etc.
 	Object struct {
-		ID            string                 `json:"id"`
-		Status        string                 `json:"status"` // "succeeded"
-		Paid          bool                   `json:"paid"`
+		ID            string                  `json:"id"`
+		Status        string                  `json:"status"` // "succeeded"
+		Paid          bool                    `json:"paid"`
 		Amount        services.YooKassaAmount `json:"amount"`
-		Description   string                 `json:"description"`
-		Metadata      map[string]string      `json:"metadata"`
+		Description   string                  `json:"description"`
+		Metadata      map[string]string       `json:"metadata"`
 		PaymentMethod struct {
 			Type  string `json:"type"`
 			Title string `json:"title"`
@@ -284,47 +339,26 @@ func (h *YooKassaHandler) HandleWebhook(c *gin.Context) {
 
 	// Extract amount
 	amount, _ := strconv.ParseFloat(payload.Object.Amount.Value, 64)
-	currency := payload.Object.Amount.Currency
+	amount = roundAmount(amount)
+	currency := strings.ToUpper(payload.Object.Amount.Currency)
 	if currency == "" {
 		currency = "RUB"
 	}
 
-	// Anti-underpayment protection
-	if amount < MinCoursePaymentThreshold {
-		log.Printf("[SECURITY-ALERT] YooKassa payment %s underpayment detected: %.2f %s. Minimum: %.2f.",
-			paymentID, amount, currency, MinCoursePaymentThreshold)
-
-		adminTG := int64(123456789)
-		if h.cfg != nil && h.cfg.AdminTelegramID != 0 {
-			adminTG = h.cfg.AdminTelegramID
-		}
-		if h.notifyFunc != nil && adminTG != 0 {
-			alertMsg := fmt.Sprintf(
-				"⚠️ <b>ВНИМАНИЕ: ПОДОЗРИТЕЛЬНАЯ ОПЛАТА ЮKASSA!</b> ⚠️\n\n"+
-					"💰 <b>Сумма:</b> %.2f %s <i>(МЕНЬШЕ МИНИМУМА 6 000 ₽)</i>\n"+
-					"🆔 <b>ID платежа:</b> <code>%s</code>\n\n"+
-					"⛔️ <b>Доступ НЕ выдан.</b> Проверьте транзакцию в кабинете ЮKassa вручную!",
-				amount, currency, paymentID,
-			)
-			_ = h.notifyFunc(adminTG, alertMsg)
-		}
-
-		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "payment_flagged_underpaid"})
-		return
-	}
-
-	// Extract metadata
+	// Extract metadata.
 	tier := "accelerator"
 	promoCode := ""
 	username := ""
+	visitorID := ""
+	attributionToken := ""
+	orderID := ""
 	var telegramID int64
 
 	if payload.Object.Metadata != nil {
 		m := payload.Object.Metadata
 		if t, ok := m["tier"]; ok {
-			tLower := strings.ToLower(strings.TrimSpace(t))
-			if tLower == "vip" || tLower == "basic" || tLower == "accelerator" {
-				tier = tLower
+			if normalized := normalizePaidTier(t); normalized != "" {
+				tier = normalized
 			}
 		}
 		if p, ok := m["promo_code"]; ok {
@@ -338,190 +372,112 @@ func (h *YooKassaHandler) HandleWebhook(c *gin.Context) {
 				telegramID = id
 			}
 		}
+		if v, ok := m["visitor_id"]; ok {
+			visitorID = v
+		}
+		if a, ok := m["attribution_token"]; ok {
+			attributionToken = a
+		}
+		if o, ok := m["order_id"]; ok {
+			orderID = strings.TrimSpace(o)
+		}
 	}
 
-	if amount >= MinVipPaymentThreshold {
-		tier = "vip"
-	} else if amount < 6000 && (tier == "basic" || strings.Contains(strings.ToLower(payload.Object.Description), "базов") || strings.Contains(strings.ToLower(payload.Object.Description), "basic")) {
-		tier = "basic"
+	// If checkout was created through the web API, the server-side order is
+	// authoritative: provider amount, currency and product must match it.
+	if orderID != "" && h.db != nil {
+		var order models.PaymentOrder
+		if err := h.db.Where("order_id = ?", orderID).First(&order).Error; err != nil {
+			log.Printf("[YOOKASSA-SECURITY] Unknown order %s for payment %s", orderID, paymentID)
+			c.JSON(http.StatusBadRequest, gin.H{"error": "unknown order"})
+			return
+		}
+		if order.Status != "pending" && order.Status != "paid" {
+			c.JSON(http.StatusConflict, gin.H{"error": "order is not payable"})
+			return
+		}
+		if order.Provider != "" && order.Provider != "yookassa" {
+			c.JSON(http.StatusConflict, gin.H{"error": "order provider mismatch"})
+			return
+		}
+		if order.Currency != "" && currency != strings.ToUpper(order.Currency) {
+			c.JSON(http.StatusConflict, gin.H{"error": "currency mismatch"})
+			return
+		}
+		if diff := amount - order.Amount; diff > 0.01 || diff < -0.01 {
+			log.Printf("[YOOKASSA-SECURITY] Amount mismatch for order %s: got %.2f, expected %.2f", orderID, amount, order.Amount)
+			c.JSON(http.StatusConflict, gin.H{"error": "amount mismatch"})
+			return
+		}
+		telegramID = order.TelegramID
+		tier = order.Tier
+		promoCode = firstNonEmptyString(promoCode, order.PromoCode)
+		visitorID = firstNonEmptyString(visitorID, order.VisitorID)
+		attributionToken = firstNonEmptyString(attributionToken, order.AttributionToken)
+		username = firstNonEmptyString(username, order.Username)
 	}
 
-	// Concurrency & Idempotency Execution in DB Transaction
-	var isAlreadyProcessed bool
-	var user models.User
+	// Anti-underpayment protection by product.
+	minAmount := minimumForTier(tier)
+	if amount < minAmount {
+		log.Printf("[SECURITY-ALERT] YooKassa payment %s underpayment detected: %.2f %s. Minimum for %s: %.2f.",
+			paymentID, amount, currency, tier, minAmount)
 
-	if h.db != nil {
-		err = h.db.Transaction(func(tx *gorm.DB) error {
-			var existing models.PaymentTransaction
-			if err := tx.Where("payment_id = ?", paymentID).First(&existing).Error; err == nil {
-				isAlreadyProcessed = true
-				return nil
-			}
-
-			payMethod := "YOOKASSA"
-			if payload.Object.PaymentMethod.Type != "" {
-				payMethod = "YOOKASSA_" + strings.ToUpper(payload.Object.PaymentMethod.Type)
-			}
-
-			transaction := models.PaymentTransaction{
+		if h.db != nil {
+			flagged := models.PaymentTransaction{
 				PaymentID:      paymentID,
-				OrderID:        paymentID,
+				OrderID:        orderID,
 				TelegramID:     telegramID,
 				Username:       username,
 				Tier:           tier,
 				Amount:         amount,
 				OriginalAmount: amount,
-				Status:         "SUCCESS",
+				Status:         "FLAGGED_UNDERPAID",
 				Currency:       currency,
-				PayMethod:      payMethod,
+				PayMethod:      "YOOKASSA",
 				PromoCode:      promoCode,
-				ProductName:    payload.Object.Description,
 				RawCallback:    string(bodyBytes),
 				CreatedAt:      time.Now(),
 				UpdatedAt:      time.Now(),
 			}
-
-			if err := tx.Create(&transaction).Error; err != nil {
-				if strings.Contains(strings.ToLower(err.Error()), "duplicate") || strings.Contains(strings.ToLower(err.Error()), "unique") {
-					isAlreadyProcessed = true
-					return nil
-				}
-				return err
-			}
-
-			// Update or Create Student Record
-			if telegramID > 0 {
-				now := time.Now()
-				if err := tx.Where("telegram_id = ?", telegramID).First(&user).Error; err == nil {
-					user.HasAccess = true
-					user.AccessGrantedAt = &now
-					user.Tier = tier
-					user.PaidAmount = amount
-					if promoCode != "" {
-						user.PromoCode = promoCode
-					}
-					if username != "" && user.Username == "" {
-						user.Username = username
-					}
-					if err := tx.Save(&user).Error; err != nil {
-						return err
-					}
-				} else {
-					user = models.User{
-						TelegramID:      telegramID,
-						Username:        username,
-						FirstName:       "Студент",
-						Role:            "student",
-						HasAccess:       true,
-						AccessGrantedAt: &now,
-						Tier:            tier,
-						PaidAmount:      amount,
-						PromoCode:       promoCode,
-					}
-					if err := tx.Create(&user).Error; err != nil {
-						return err
-					}
-				}
-
-				// Redeem promo code atomically
-				if promoCode != "" {
-					_, _ = RedeemPromoCode(tx, promoCode)
-				}
-
-				// Affiliate Attribution
-				if h.affiliateService != nil && user.ID != 0 {
-					_ = h.affiliateService.ProcessCoursePurchaseTx(tx, user.ID, amount)
-				}
-			}
-
-			return nil
-		})
-
-		if err != nil {
-			log.Printf("[YOOKASSA-ERROR] DB transaction failed: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "database transaction error"})
-			return
+			_ = h.db.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "payment_id"}}, DoNothing: true}).Create(&flagged).Error
 		}
-
-		if isAlreadyProcessed {
-			log.Printf("[YOOKASSA-IDEMPOTENCY] Payment %s already processed. Skipping duplicate safely.", paymentID)
-			c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "already_processed"})
-			return
-		}
+		h.alertAdmin(fmt.Sprintf("⚠️ <b>ЮKassa: недоплата</b>\n\nПлатёж <code>%s</code>\nСумма: %.2f %s\nМинимум для %s: %.2f\n\nДоступ НЕ выдан.", html.EscapeString(paymentID), amount, currency, html.EscapeString(tier), minAmount))
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "payment_flagged_underpaid"})
+		return
 	}
 
-	// Generate single-use channel invite link
-	inviteLink := ""
-	if h.cfg != nil {
-		inviteLink = h.cfg.TelegramInviteLink
-	}
-	if h.inviteLinkFunc != nil {
-		var chanID int64
-		if h.cfg != nil {
-			chanID = h.cfg.TelegramChannelID
-		}
-		if dynLink, err := h.inviteLinkFunc(context.Background(), chanID); err == nil && dynLink != "" {
-			inviteLink = dynLink
-		}
+	payMethod := "YOOKASSA"
+	if payload.Object.PaymentMethod.Type != "" {
+		payMethod = "YOOKASSA_" + strings.ToUpper(payload.Object.PaymentMethod.Type)
 	}
 
-	tierNameRU := "Акселератор"
-	if tier == "vip" {
-		tierNameRU = "VIP-сопровождение"
+	result, err := h.payments.Confirm(payments.ConfirmInput{
+		Source:           "yookassa",
+		PaymentID:        paymentID,
+		OrderID:          orderID,
+		TelegramID:       telegramID,
+		Username:         username,
+		Tier:             tier,
+		Amount:           amount,
+		Currency:         currency,
+		PayMethod:        payMethod,
+		PromoCode:        promoCode,
+		ProductName:      payload.Object.Description,
+		RawCallback:      string(bodyBytes),
+		VisitorID:        visitorID,
+		AttributionToken: attributionToken,
+		CreatedAt:        time.Now(),
+	})
+	if err != nil {
+		log.Printf("[YOOKASSA-ERROR] Confirmation failed for %s: %v", paymentID, err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "payment confirmation failed"})
+		return
 	}
-
-	// Deliver to student in Telegram
-	if h.notifyFunc != nil && telegramID > 0 {
-		sparkle := "<tg-emoji emoji-id=\"5884407720131436294\">✨</tg-emoji>"
-		sun := "<tg-emoji emoji-id=\"5883980366590517942\">🔆</tg-emoji>"
-		arrow := "<tg-emoji emoji-id=\"5884424573583106260\">➡️</tg-emoji>"
-
-		studentMsg := fmt.Sprintf(
-			"%s Спасибо за покупку! <b>Добро пожаловать на моё обучение!</b>\n\n"+
-				"%s Твоя ссылка для входа в закрытый канал потока:\n%s\n\n"+
-				"%s <i>Ссылка является персональной и одноразовой.</i>",
-			sparkle, sun, inviteLink, arrow,
-		)
-		_ = h.notifyFunc(telegramID, studentMsg)
-	}
-
-	// Instant push alert to Ilya
-	adminTG := int64(123456789)
-	if h.cfg != nil && h.cfg.AdminTelegramID != 0 {
-		adminTG = h.cfg.AdminTelegramID
-	}
-
-	if h.notifyFunc != nil && adminTG != 0 {
-		studentRef := fmt.Sprintf("ID: %d", telegramID)
-		if username != "" {
-			studentRef = fmt.Sprintf("@%s (%s)", html.EscapeString(username), studentRef)
-		}
-
-		promoBadge := "— (без промокода)"
-		if promoCode != "" {
-			promoBadge = fmt.Sprintf("🏷 %s (-5%%)", html.EscapeString(promoCode))
-		}
-
-		adminAlert := fmt.Sprintf(
-			"⚡️ <b>НОВАЯ ОПЛАТА ЧЕРЕЗ ЮKASSA!</b> ⚡️\n\n"+
-				"👤 <b>Студент:</b> %s\n"+
-				"📦 <b>Тариф:</b> %s\n"+
-				"💰 <b>Сумма:</b> %.2f %s\n"+
-				"🎟 <b>Промокод:</b> %s\n"+
-				"🆔 <b>ID платежа:</b> <code>%s</code>\n"+
-				"🏪 <b>Магазин:</b> ShopID <code>1491540</code> (so-called-spark.ru)\n"+
-				"💳 <b>Шлюз:</b> ЮKassa (ООО НКО «ЮМани» / Сбер)\n"+
-				"⏱ <b>Время:</b> %s\n\n"+
-				"✅ <i>Официальный платёж подтверждён, доступ выдан автоматически!</i>",
-			studentRef,
-			tierNameRU,
-			amount,
-			currency,
-			promoBadge,
-			paymentID,
-			time.Now().Format("15:04:05 02.01.2006"),
-		)
-		_ = h.notifyFunc(adminTG, adminAlert)
+	if result.AlreadyProcessed {
+		log.Printf("[YOOKASSA-IDEMPOTENCY] Payment %s already processed.", paymentID)
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "already_processed"})
+		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "payment processed successfully"})

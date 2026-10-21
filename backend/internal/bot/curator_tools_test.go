@@ -12,6 +12,7 @@ import (
 	tu "github.com/mymmrac/telego/telegoutil"
 	"github.com/spark-school/backend/internal/config"
 	"github.com/spark-school/backend/internal/models"
+	"github.com/spark-school/backend/internal/payments"
 	"github.com/spark-school/backend/internal/services"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -35,6 +36,10 @@ func setupTestBot(t *testing.T) (*BotService, *gorm.DB) {
 		&models.AnalyticsEvent{},
 		&models.PromoCode{},
 		&models.AffiliateProfile{},
+		&models.Referral{},
+		&models.ReferralTransaction{},
+		&models.OutboxEvent{},
+		&models.PaymentOrder{},
 	)
 	if err != nil {
 		t.Fatalf("failed to automigrate models: %v", err)
@@ -48,6 +53,7 @@ func setupTestBot(t *testing.T) (*BotService, *gorm.DB) {
 		db:               db,
 		cfg:              &config.Config{AdminTelegramID: 999999},
 		affiliateService: affService,
+		paymentsService:  payments.NewService(db, affService),
 	}
 
 	return botService, db

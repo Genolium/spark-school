@@ -57,7 +57,7 @@ func main() {
 			return botService.SendAdminReceiptCard(adminID, &receipt)
 		}
 		return nil
-	})
+	}, botService.DeliverPaymentNotice)
 	outboxDispatcher.Start()
 	defer outboxDispatcher.Stop()
 

@@ -640,22 +640,8 @@ func (h *AdminHandler) UpdateUser(c *gin.Context) {
 		if *req.HasAccess && user.AccessGrantedAt == nil {
 			now := time.Now()
 			user.AccessGrantedAt = &now
-			if user.PaidAmount == 0 {
-				pricing := models.GetCoursePricing(h.db)
-				if user.Tier == "vip" {
-					if user.PromoCode != "" {
-						user.PaidAmount = pricing.VIPPrice * 0.95
-					} else {
-						user.PaidAmount = pricing.VIPPrice
-					}
-				} else {
-					if user.PromoCode != "" {
-						user.PaidAmount = pricing.AcceleratorPrice * 0.95
-					} else {
-						user.PaidAmount = pricing.AcceleratorPrice
-					}
-				}
-			}
+			// Manual access is not a sale. Revenue must only come from
+			// payment_transactions, never from an inferred list price.
 		}
 	}
 
@@ -759,10 +745,10 @@ func (h *AdminHandler) IssueReceipt(c *gin.Context) {
 			amount = *req.Amount
 		}
 		c.JSON(http.StatusOK, gin.H{
-			"success":       true,
-			"message":       "Чек успешно выписан и отправлен в Telegram (тестовый режим)",
-			"telegram_sent": sendTelegram,
-			"receipt_issued": true,
+			"success":           true,
+			"message":           "Чек успешно выписан и отправлен в Telegram (тестовый режим)",
+			"telegram_sent":     sendTelegram,
+			"receipt_issued":    true,
 			"receipt_issued_at": now,
 			"user": gin.H{
 				"id":                1,
@@ -966,30 +952,9 @@ func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 		}
 		if req.PaidAmount != nil {
 			user.PaidAmount = *req.PaidAmount
-		} else if req.HasAccess && user.PaidAmount == 0 {
-			pricing := models.GetCoursePricing(h.db)
-			tierLower := strings.ToLower(strings.TrimSpace(user.Tier))
-			switch tierLower {
-			case "vip":
-				if user.PromoCode != "" {
-					user.PaidAmount = pricing.VIPPrice * 0.95
-				} else {
-					user.PaidAmount = pricing.VIPPrice
-				}
-			case "basic":
-				if user.PromoCode != "" {
-					user.PaidAmount = pricing.BasicPrice * 0.95
-				} else {
-					user.PaidAmount = pricing.BasicPrice
-				}
-			default:
-				if user.PromoCode != "" {
-					user.PaidAmount = pricing.AcceleratorPrice * 0.95
-				} else {
-					user.PaidAmount = pricing.AcceleratorPrice
-				}
-			}
 		}
+		// Access can be granted manually for free. Do not invent revenue from
+		// the current list price; only explicit paid amounts are recorded.
 		if req.HasAccess && user.AccessGrantedAt == nil {
 			now := time.Now()
 			user.AccessGrantedAt = &now
@@ -1000,8 +965,12 @@ func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 
 		// Record manual paid activation in payment_transactions for unified financial stats
 		if req.HasAccess && !wasActive && user.PaidAmount > 0 {
-			tx.Create(&models.PaymentTransaction{
-				PaymentID:  fmt.Sprintf("MANUAL_%d_%d", user.ID, time.Now().Unix()),
+			// Deterministic key prevents a repeated admin click from creating
+			// a second financial operation for the same manual payment.
+			paymentID := fmt.Sprintf("MANUAL_%d_%s_%d", user.ID, strings.ToLower(user.Tier), int64(user.PaidAmount*100))
+			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "payment_id"}}, DoNothing: true}).Create(&models.PaymentTransaction{
+				PaymentID:  paymentID,
+				OrderID:    paymentID,
 				TelegramID: user.TelegramID,
 				Username:   user.Username,
 				Amount:     user.PaidAmount,
@@ -1011,7 +980,9 @@ func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 				PayMethod:  "admin_manual",
 				PromoCode:  user.PromoCode,
 				CreatedAt:  time.Now(),
-			})
+			}).Error; err != nil {
+				return err
+			}
 		}
 
 		// Only redeem promo and distribute commission on initial access activation

@@ -352,12 +352,12 @@ type RedeemPromoRequest struct {
 }
 
 type RedeemPromoResponse struct {
-	Success         bool    `json:"success"`
-	Code            string  `json:"code"`
-	UsesCount       int     `json:"uses_count"`
-	DiscountPercent int     `json:"discount_percent"`
-	OwnerUsername   string  `json:"owner_username,omitempty"`
-	Message         string  `json:"message,omitempty"`
+	Success         bool   `json:"success"`
+	Code            string `json:"code"`
+	UsesCount       int    `json:"uses_count"`
+	DiscountPercent int    `json:"discount_percent"`
+	OwnerUsername   string `json:"owner_username,omitempty"`
+	Message         string `json:"message,omitempty"`
 }
 
 // Redeem handles public promo code redemption requests atomically.
