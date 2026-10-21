@@ -14,9 +14,9 @@ import (
 )
 
 // HandleReceiptUpload processes receipt screenshot from user with SHA-256 deduplication and fraud prevention.
-func (s *BotService) HandleReceiptUpload(msg *telego.Message) bool {
+func (s *BotService) HandleReceiptUpload(msg *telego.Message) error {
 	if s.bot == nil || msg == nil {
-		return false
+		return nil
 	}
 
 	if msg.From != nil {
@@ -37,7 +37,7 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) bool {
 		fileID = msg.Document.FileID
 		fileUniqueID = msg.Document.FileUniqueID
 	} else {
-		return false
+		return nil
 	}
 
 	// Calculate deterministic unique hash based on fileUniqueID or fileID
@@ -54,7 +54,7 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) bool {
 		reply := "⚠️ <b>Этот чек уже был загружен ранее!</b>\n\nЕсли произошла ошибка или вы отправили чек повторно, пожалуйста, напишите куратору: @ilyan_vas"
 		m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML)
 		_, _ = s.bot.SendMessage(m)
-		return true
+		return nil
 	}
 
 	var dbUser models.User
@@ -144,7 +144,7 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) bool {
 		reply := "❌ Ошибка при сохранении чека в системе. Пожалуйста, напишите так называемому Илю (@ilyan_vas)."
 		m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML)
 		_, _ = s.bot.SendMessage(m)
-		return true
+		return nil
 	}
 
 	if u := s.syncTelegramUser(msg.From); u != nil {
@@ -196,7 +196,7 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) bool {
 	}
 
 	_ = upgradeCurrentTier
-	return true
+	return nil
 }
 
 // SendAdminReceiptCard sends the review notification with photo/document and 1-click action buttons,

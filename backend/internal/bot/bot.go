@@ -147,26 +147,39 @@ func (s *BotService) Stop() {
 	}
 }
 
-// ProcessUpdate handles incoming updates directly (from Webhook or Long Polling).
+// ProcessUpdate is kept as a convenience wrapper for long polling and tests.
+// Webhook processing must call HandleUpdate with the request context.
 func (s *BotService) ProcessUpdate(update *telego.Update) error {
+	return s.HandleUpdate(context.Background(), update)
+}
+
+// HandleUpdate executes one Telegram update and reports every failure to the
+// caller. A recovered panic is returned as an error (named return value), so a
+// crash can never be mistaken for successful processing.
+func (s *BotService) HandleUpdate(ctx context.Context, update *telego.Update) (err error) {
 	if update == nil {
 		return nil
 	}
-
-	var processErr error
 	defer func() {
 		if r := recover(); r != nil {
-			processErr = fmt.Errorf("bot processing panic: %v", r)
+			err = fmt.Errorf("bot update panic: %v", r)
+			log.Printf("[Bot Panic] update_id=%d: %v", update.UpdateID, r)
 		}
 	}()
 
-	if update.CallbackQuery != nil {
-		s.HandleCallbackQuery(update.CallbackQuery)
-	} else if update.Message != nil {
-		s.handleMessage(update.Message)
+	if ctx != nil {
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return ctxErr
+		}
 	}
 
-	return processErr
+	if update.CallbackQuery != nil {
+		return s.HandleCallbackQuery(update.CallbackQuery)
+	}
+	if update.Message != nil {
+		return s.handleMessage(update.Message)
+	}
+	return nil
 }
 
 // Start launches the bot polling worker if Long Polling is configured.
@@ -183,13 +196,15 @@ func (s *BotService) Start() {
 	}
 
 	for update := range updates {
-		s.ProcessUpdate(&update)
+		if err := s.HandleUpdate(context.Background(), &update); err != nil {
+			log.Printf("[Bot Polling] update %d failed: %v", update.UpdateID, err)
+		}
 	}
 }
 
-func (s *BotService) handleMessage(msg *telego.Message) bool {
+func (s *BotService) handleMessage(msg *telego.Message) error {
 	if msg == nil {
-		return false
+		return nil
 	}
 
 	log.Printf("[Bot Inbound] chat_id=%d, type=%s, from=%s, text=%q", msg.Chat.ID, msg.Chat.Type, msg.From.FirstName, msg.Text)
@@ -197,7 +212,7 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 	// Private Chat Filter (R5): strictly ignore group, supergroup, channel messages
 	if msg.Chat.Type != "private" || msg.Chat.ID <= 0 {
 		log.Printf("[Bot Inbound Ignored] chat_type=%s, chat_id=%d", msg.Chat.Type, msg.Chat.ID)
-		return false
+		return nil
 	}
 
 	// Always persist and sync every interacting user as a lead in Postgres CRM
@@ -218,12 +233,12 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 	// Check if in StateWaitingPromo
 	if session.State == StateWaitingPromo && !strings.HasPrefix(text, "/") {
 		s.processPromoInput(chatID, msg.From, text)
-		return true
+		return nil
 	}
 
 	if strings.HasPrefix(text, "/withdraw") {
 		s.handleWithdraw(chatID, msg.From)
-		return true
+		return nil
 	}
 
 	if strings.HasPrefix(text, "/start") {
@@ -236,7 +251,7 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 
 		if param == "pay_audit" || param == "upsell_audit" || param == "audit" || strings.HasPrefix(param, "pay_audit") {
 			s.handleAuditUpsellPayment(chatID, msg.From)
-			return true
+			return nil
 		}
 
 		if strings.HasPrefix(param, "pay") {
@@ -247,7 +262,7 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 
 			if strings.HasPrefix(payload, "audit") {
 				s.handleAuditUpsellPayment(chatID, msg.From)
-				return true
+				return nil
 			}
 
 			// 1. Extract tier
@@ -311,12 +326,12 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 			}
 
 			s.sendPaymentDetails(chatID, msg.From, withPromo)
-			return true
+			return nil
 		}
 
 		if strings.HasPrefix(param, "withdraw") {
 			s.handleWithdraw(chatID, msg.From)
-			return true
+			return nil
 		}
 
 		if strings.HasPrefix(param, "ref_") {
@@ -327,14 +342,14 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 		}
 
 		s.sendWelcomeMenu(chatID, msg.From)
-		return true
+		return nil
 	}
 
 	// Curator Broadcast input state
 	if session.State == StateAdminBroadcast && !strings.HasPrefix(text, "/") {
 		session.State = StateDefault
 		s.ExecuteBroadcast(chatID, text)
-		return true
+		return nil
 	}
 
 	// Curator In-line Command: /admin
@@ -345,7 +360,7 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 			m := tu.Message(chatID, "⛔️ Доступ ограничен. Команда доступна только куратору проекта.")
 			_, _ = s.bot.SendMessage(m)
 		}
-		return true
+		return nil
 	}
 
 	// Curator In-line Command: /promo create [CODE] [DISCOUNT%]
@@ -356,7 +371,7 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 			m := tu.Message(chatID, "⛔️ Доступ ограничен. Команда доступна только куратору проекта.")
 			_, _ = s.bot.SendMessage(m)
 		}
-		return true
+		return nil
 	}
 
 	// Curator In-line Command: /digest
@@ -367,7 +382,7 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 			m := tu.Message(chatID, "⛔️ Доступ ограничен. Команда доступна только куратору проекта.")
 			_, _ = s.bot.SendMessage(m)
 		}
-		return true
+		return nil
 	}
 
 	// Diagnostic tool for Telegram Premium Custom Emojis
@@ -430,17 +445,17 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 				log.Printf("[Bot Error] /emoji info SendMessage failed: %v", err)
 			}
 		}
-		return true
+		return nil
 	}
 
 	if strings.HasPrefix(text, "/status") || strings.HasPrefix(text, "/orders") {
 		s.SendOrdersHistory(chatID, msg.From)
-		return true
+		return nil
 	}
 
 	if strings.HasPrefix(text, "/plan") {
 		s.SendPreparationPlan(chatID, msg.From)
-		return true
+		return nil
 	}
 
 	if strings.HasPrefix(text, "/done_step") {
@@ -452,25 +467,25 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 			}
 		}
 		s.TogglePlanStep(chatID, msg.From, stepNum)
-		return true
+		return nil
 	}
 
 	// [Временно приостановлено: Сценарий 2 (Сдача работ на аудит) и Сценарий 3 (Запись на Zoom-созвон 1-на-1)]
 	/*
 		if strings.HasPrefix(text, "/submit_work") {
-			s.SubmitWork(chatID, msg.From, text)
-			return true
+			return s.SubmitWork(chatID, msg.From, text)
+			return nil
 		}
 
 		if strings.HasPrefix(text, "/book_call") {
 			s.BookCallDialog(chatID, msg.From, "")
-			return true
+			return nil
 		}
 	*/
 
 	if strings.HasPrefix(text, "/interview") {
 		s.SendInterviewTrainer(chatID)
-		return true
+		return nil
 	}
 
 	if strings.HasPrefix(text, "/queue") {
@@ -480,36 +495,36 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 			m := tu.Message(chatID, "⛔️ Доступ ограничен. Команда доступна только куратору проекта.")
 			_, _ = s.bot.SendMessage(m)
 		}
-		return true
+		return nil
 	}
 
 	/*
 		if strings.HasPrefix(text, "/reviewed") {
-			s.HandleReviewedCommand(chatID, msg.From, text)
-			return true
+			return s.HandleReviewedCommand(chatID, msg.From, text)
+			return nil
 		}
 
 		if strings.HasPrefix(text, "/changes") {
-			s.HandleChangesCommand(chatID, msg.From, text)
-			return true
+			return s.HandleChangesCommand(chatID, msg.From, text)
+			return nil
 		}
 
 		if strings.HasPrefix(text, "/cancel_call") {
 			s.CancelBooking(chatID, msg.From, 0)
-			return true
+			return nil
 		}
 	*/
 
 	if strings.HasPrefix(text, "/upgrade") {
 		s.sendUpgradeOptions(chatID, msg.From)
-		return true
+		return nil
 	}
 
 	// State-dependent handling:
 	// Only parse promo code if user actually requested to enter a promo code
 	if session.State == StateWaitingPromo && text != "" && !strings.HasPrefix(text, "/") {
 		s.processPromoInput(chatID, msg.From, text)
-		return true
+		return nil
 	}
 
 	// Default fallback for any unexpected text: guide user back to main menu
@@ -517,10 +532,10 @@ func (s *BotService) handleMessage(msg *telego.Message) bool {
 		helpMsg := tu.Message(chatID, `👋 Я вас понял! Чтобы выбрать действие, воспользуйтесь кнопками меню ниже или отправьте команду /start:`)
 		helpMsg.WithReplyMarkup(MainMenuKeyboard(s.cfg.FrontendURL, s.getPricing()))
 		_, _ = s.bot.SendMessage(helpMsg)
-		return true
+		return nil
 	}
 
-	return true
+	return nil
 }
 
 func (s *BotService) sendWelcomeMenu(chatID telego.ChatID, from *telego.User) {
@@ -972,9 +987,9 @@ func (s *BotService) sendStatusMessage(chatID telego.ChatID, from *telego.User) 
 }
 
 // HandleCallbackQuery handles all button taps.
-func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
+func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) error {
 	if query == nil {
-		return false
+		return nil
 	}
 
 	// Always sync every interacting user as a lead in Postgres CRM
@@ -985,31 +1000,30 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 	// Admin Receipt Approvals - Security check for admin rights
 	if strings.HasPrefix(data, "receipt_approve_") {
 		idStr := strings.TrimPrefix(data, "receipt_approve_")
-		s.processReceiptApproval(query, idStr)
-		return true
+		return s.processReceiptApproval(query, idStr)
 	}
 	if strings.HasPrefix(data, "receipt_reject_") {
 		idStr := strings.TrimPrefix(data, "receipt_reject_")
 		s.processReceiptRejection(query, idStr)
-		return true
+		return nil
 	}
 	if strings.HasPrefix(data, "receipt_tier_basic_") {
 		idStr := strings.TrimPrefix(data, "receipt_tier_basic_")
 		s.processReceiptTierToggle(query, idStr, "basic")
-		return true
+		return nil
 	}
 	if strings.HasPrefix(data, "receipt_tier_vip_") {
 		idStr := strings.TrimPrefix(data, "receipt_tier_vip_")
 		s.processReceiptTierToggle(query, idStr, "vip")
-		return true
+		return nil
 	}
 	if strings.HasPrefix(data, "receipt_tier_accelerator_") {
 		idStr := strings.TrimPrefix(data, "receipt_tier_accelerator_")
 		s.processReceiptTierToggle(query, idStr, "accelerator")
-		return true
+		return nil
 	}
 	if query.Message == nil {
-		return false
+		return nil
 	}
 
 	chatID := tu.ID(query.Message.GetChat().ID)
@@ -1032,13 +1046,13 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 			idStr := strings.TrimPrefix(data, "cancel_booking_")
 			idNum, _ := strconv.Atoi(idStr)
 			s.CancelBooking(chatID, &query.From, uint(idNum))
-			return true
+			return nil
 		}
 
 		if strings.HasPrefix(data, "book_slot_") {
 			slotKey := strings.TrimPrefix(data, "book_slot_")
 			s.BookCallDialog(chatID, &query.From, slotKey)
-			return true
+			return nil
 		}
 	*/
 
@@ -1046,7 +1060,7 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 		m := tu.Message(chatID, "🔒 Этот слот уже занят другим студентом. Пожалуйста, выберите другое свободное время.")
 		_, _ = s.bot.SendMessage(m)
 		s.BookCallDialog(chatID, &query.From, "")
-		return true
+		return nil
 	}
 
 	// Curator submission reviews from queue
@@ -1054,24 +1068,24 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 		if s.IsAdmin(query.From.ID) {
 			idStr := strings.TrimPrefix(data, "sub_review_")
 			idNum, _ := strconv.Atoi(idStr)
-			s.ProcessSubmissionReview(chatID, &query.From, uint(idNum), "Работа проверена и одобрена куратором.", true)
+			return s.ProcessSubmissionReview(chatID, &query.From, uint(idNum), "Работа проверена и одобрена куратором.", true)
 		} else {
 			m := tu.Message(chatID, "⛔️ Доступ ограничен. Действие доступно только куратору проекта.")
 			_, _ = s.bot.SendMessage(m)
 		}
-		return true
+		return nil
 	}
 
 	if strings.HasPrefix(data, "sub_changes_") {
 		if s.IsAdmin(query.From.ID) {
 			idStr := strings.TrimPrefix(data, "sub_changes_")
 			idNum, _ := strconv.Atoi(idStr)
-			s.ProcessSubmissionReview(chatID, &query.From, uint(idNum), "Куратор рекомендует доработать материал по комментариям в документе.", false)
+			return s.ProcessSubmissionReview(chatID, &query.From, uint(idNum), "Куратор рекомендует доработать материал по комментариям в документе.", false)
 		} else {
 			m := tu.Message(chatID, "⛔️ Доступ ограничен. Действие доступно только куратору проекта.")
 			_, _ = s.bot.SendMessage(m)
 		}
-		return true
+		return nil
 	}
 
 	// Guaranteed drip promo discount
@@ -1087,106 +1101,106 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 			}
 		}
 		s.handleSbpPayment(chatID, &query.From, tier)
-		return true
+		return nil
 	}
 
 	switch data {
 	case "action_menu":
 		session.State = StateDefault
 		s.sendWelcomeMenu(chatID, &query.From)
-		return true
+		return nil
 
 	case "action_status":
 		s.SendOrdersHistory(chatID, &query.From)
-		return true
+		return nil
 
 	case "action_orders":
 		s.SendOrdersHistory(chatID, &query.From)
-		return true
+		return nil
 
 	case "action_plan":
 		s.SendPreparationPlan(chatID, &query.From)
-		return true
+		return nil
 
 	case "plan_toggle_1":
 		s.TogglePlanStep(chatID, &query.From, 1)
-		return true
+		return nil
 	case "plan_toggle_2":
 		s.TogglePlanStep(chatID, &query.From, 2)
-		return true
+		return nil
 	case "plan_toggle_3":
 		s.TogglePlanStep(chatID, &query.From, 3)
-		return true
+		return nil
 	case "plan_toggle_4":
 		s.TogglePlanStep(chatID, &query.From, 4)
-		return true
+		return nil
 	case "plan_toggle_5":
 		s.TogglePlanStep(chatID, &query.From, 5)
-		return true
+		return nil
 	case "plan_toggle_6":
 		s.TogglePlanStep(chatID, &query.From, 6)
-		return true
+		return nil
 
 	// [Временно приостановлено: Сценарий 2 (Сдача работ) и Сценарий 3 (Запись на Zoom-созвон 1-на-1)]
 	/*
 		case "action_submit_work_info":
-			s.SubmitWork(chatID, &query.From, "/submit_work")
-			return true
+			return s.SubmitWork(chatID, &query.From, "/submit_work")
+			return nil
 
 		case "action_book_call":
 			s.BookCallDialog(chatID, &query.From, "")
-			return true
+			return nil
 
 		case "book_slot_tue_18":
 			s.BookCallDialog(chatID, &query.From, "Вторник, 18:00 МСК")
-			return true
+			return nil
 		case "book_slot_thu_1930":
 			s.BookCallDialog(chatID, &query.From, "Четверг, 19:30 МСК")
-			return true
+			return nil
 		case "book_slot_sat_14":
 			s.BookCallDialog(chatID, &query.From, "Суббота, 14:00 МСК")
-			return true
+			return nil
 	*/
 
 	case "action_interview":
 		s.SendInterviewTrainer(chatID)
-		return true
+		return nil
 
 	case "admin_queue":
 		if s.IsAdmin(query.From.ID) {
 			s.SendCuratorQueue(chatID)
-			return true
+			return nil
 		}
 
 	case "action_payment":
 		session.State = StateWaitingReceipt
 		s.sendPaymentDetails(chatID, &query.From, false)
-		return true
+		return nil
 
 	case "pay_yk_menu":
 		session.State = StateWaitingReceipt
 		s.sendPaymentDetails(chatID, &query.From, false)
-		return true
+		return nil
 
 	case "pay_yk_basic", "pay_sbp_basic":
 		s.handleSbpPayment(chatID, &query.From, "basic")
-		return true
+		return nil
 
 	case "pay_yk_accelerator", "pay_sbp_accelerator":
 		s.handleSbpPayment(chatID, &query.From, "accelerator")
-		return true
+		return nil
 
 	case "pay_yk_vip", "pay_sbp_vip":
 		s.handleSbpPayment(chatID, &query.From, "vip")
-		return true
+		return nil
 
 	case "pay_upsell_audit":
 		s.handleAuditUpsellPayment(chatID, &query.From)
-		return true
+		return nil
 
 	case "action_upgrade":
 		s.sendUpgradeOptions(chatID, &query.From)
-		return true
+		return nil
 
 	case "upgrade_to_accelerator":
 		pricing := s.getPricing()
@@ -1195,7 +1209,7 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 			diff = 2910.0
 		}
 		s.handleUpgradePayment(chatID, &query.From, "accelerator", diff)
-		return true
+		return nil
 
 	case "upgrade_to_vip":
 		pricing := s.getPricing()
@@ -1212,12 +1226,12 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 			diff = 8000.0
 		}
 		s.handleUpgradePayment(chatID, &query.From, "vip", diff)
-		return true
+		return nil
 
 	case "pay_sbp_info":
 		session.State = StateWaitingReceipt
 		s.handleSbpPayment(chatID, &query.From, "accelerator")
-		return true
+		return nil
 
 	case "promo_enter":
 		session.State = StateWaitingPromo
@@ -1243,7 +1257,7 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 			cleanMsg := tu.Message(chatID, cleanText).WithParseMode(telego.ModeHTML).WithReplyMarkup(PromoRequestKeyboard())
 			_, _ = s.bot.SendMessage(cleanMsg)
 		}
-		return true
+		return nil
 
 	case "info_program":
 		star := TgEmoji(EmojiSparkleGreen, "✨")
@@ -1296,30 +1310,30 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 			m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
 			_, _ = s.bot.SendMessage(m)
 		}
-		return true
+		return nil
 
 	case "admin_menu":
 		if s.IsAdmin(query.From.ID) {
 			s.SendAdminDashboard(chatID)
-			return true
+			return nil
 		}
 
 	case "admin_stats":
 		if s.IsAdmin(query.From.ID) {
 			s.SendAdminLiveStats(chatID)
-			return true
+			return nil
 		}
 
 	case "admin_digest":
 		if s.IsAdmin(query.From.ID) {
 			_, _ = s.SendCuratorDailyDigest(chatID.ID)
-			return true
+			return nil
 		}
 
 	case "admin_receipts":
 		if s.IsAdmin(query.From.ID) {
 			s.SendAdminReceipts(chatID)
-			return true
+			return nil
 		}
 
 	case "admin_promos":
@@ -1339,7 +1353,7 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 			btnBack := tu.InlineKeyboardButton("⬅️ В админку").WithCallbackData("admin_menu")
 			m := tu.Message(chatID, sb.String()).WithParseMode(telego.ModeHTML).WithReplyMarkup(tu.InlineKeyboard(tu.InlineKeyboardRow(btnBack)))
 			_, _ = s.bot.SendMessage(m)
-			return true
+			return nil
 		}
 
 	case "admin_broadcast_prompt":
@@ -1354,11 +1368,11 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) bool {
 Для отмены просто напиши /admin.`
 			m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML)
 			_, _ = s.bot.SendMessage(m)
-			return true
+			return nil
 		}
 	}
 
-	return false
+	return nil
 }
 
 // sendAccessNotificationToStudent reliably delivers channel invite link to student using 6-stage fallback logic
@@ -1467,28 +1481,28 @@ func (s *BotService) sendAccessNotificationToStudent(studentTelegramID int64, st
 	}
 }
 
-func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr string) {
+func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr string) error {
 	adminID := query.From.ID
 	if !s.IsAdmin(adminID) {
 		s.answerCallback(query, "⛔️ У вас нет прав администратора.", true)
-		return
+		return nil
 	}
 	if s.db == nil || s.paymentsService == nil {
 		s.answerCallback(query, "❌ Сервис платежей недоступен.", true)
-		return
+		return fmt.Errorf("payment service is unavailable")
 	}
 
 	receiptID64, err := strconv.ParseUint(strings.TrimSpace(idStr), 10, 32)
 	if err != nil || receiptID64 == 0 {
 		s.answerCallback(query, "Чек не найден в базе данных.", true)
-		return
+		return fmt.Errorf("invalid receipt id %q", idStr)
 	}
 	receiptID := uint(receiptID64)
 
 	var receipt models.PaymentReceipt
 	if err := s.db.First(&receipt, receiptID).Error; err != nil {
 		s.answerCallback(query, "Чек не найден в базе данных.", true)
-		return
+		return err
 	}
 
 	paymentID := fmt.Sprintf("RECEIPT_%d", receipt.ID)
@@ -1508,7 +1522,7 @@ func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr s
 	if err != nil {
 		log.Printf("[Bot Approval] Receipt #%d confirmation failed: %v", receipt.ID, err)
 		s.answerCallback(query, "❌ Не удалось подтвердить чек: "+err.Error(), true)
-		return
+		return err
 	}
 
 	// A repeated approval is a deliberate resend: it must not change money,
@@ -1516,7 +1530,7 @@ func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr s
 	if result.AlreadyProcessed {
 		if err := s.paymentsService.RequeueAccessNotification(paymentID); err != nil {
 			s.answerCallback(query, "⚠️ Платёж уже подтверждён, но повторная отправка не поставлена в очередь: "+err.Error(), true)
-			return
+			return err
 		}
 		s.answerCallback(query, "✅ Платёж уже подтверждён. Ссылка поставлена в очередь на повторную отправку.", false)
 	} else if result.AccessGranted {
@@ -1551,6 +1565,7 @@ func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr s
 			ReplyMarkup: approvedKb,
 		})
 	}
+	return nil
 }
 
 func (s *BotService) answerCallback(query *telego.CallbackQuery, text string, alert bool) {

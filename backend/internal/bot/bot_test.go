@@ -187,17 +187,16 @@ func TestBot_HandleMessage_IgnoresNonPrivateChats(t *testing.T) {
 				},
 			}
 
-			processed := service.handleMessage(msg)
-			if processed != tc.shouldProc {
-				t.Errorf("handleMessage for %s (type=%s, id=%d): got processed=%v, want %v",
-					tc.name, tc.chatType, tc.chatID, processed, tc.shouldProc)
+			if err := service.handleMessage(msg); err != nil {
+				t.Errorf("handleMessage for %s (type=%s, id=%d) failed: %v",
+					tc.name, tc.chatType, tc.chatID, err)
 			}
 		})
 	}
 
-	// Also verify nil message returns false safely
-	if service.handleMessage(nil) != false {
-		t.Error("expected nil message to return false")
+	// Also verify nil message is ignored safely
+	if err := service.handleMessage(nil); err != nil {
+		t.Errorf("expected nil message to be ignored, got %v", err)
 	}
 }
 
@@ -239,4 +238,3 @@ func TestBot_SendNotification_RateLimitQueue(t *testing.T) {
 		t.Errorf("expected nil error for mock notification send, got %v", err)
 	}
 }
-

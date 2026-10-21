@@ -9,9 +9,9 @@ import (
 )
 
 // HandleCalculatorCallback routes calculator interactive steps.
-func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) bool {
+func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) error {
 	if s.bot == nil || query == nil || query.Message == nil {
-		return false
+		return nil
 	}
 
 	data := query.Data
@@ -56,7 +56,7 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) bool 
 				_, _ = s.bot.SendMessage(cleanMsg)
 			}
 		}
-		return true
+		return nil
 
 	case "calc_q1_yes":
 		session.CalcAgeCitizenship = true
@@ -69,7 +69,7 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) bool 
 На каком курсе ты сейчас учишься?`, books)
 		m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(CalcQ2Keyboard())
 		_, _ = s.bot.SendMessage(m)
-		return true
+		return nil
 
 	case "calc_q1_no":
 		session.State = StateDefault
@@ -83,7 +83,7 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) bool 
 		btnMenu := tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu")
 		m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(tu.InlineKeyboard(tu.InlineKeyboardRow(btnChat), tu.InlineKeyboardRow(btnMenu)))
 		_, _ = s.bot.SendMessage(m)
-		return true
+		return nil
 
 	case "calc_q2_12", "calc_q2_3":
 		session.CalcStudyYear = "undergraduate"
@@ -95,7 +95,7 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) bool 
 (Международные сертификаты IELTS/TOEFL не требуются — отбор оценивает реальную речь)`, speech)
 		m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(CalcQ3Keyboard())
 		_, _ = s.bot.SendMessage(m)
-		return true
+		return nil
 
 	case "calc_q2_senior":
 		session.CalcStudyYear = "senior"
@@ -109,7 +109,7 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) bool 
 %s <b>Оцени свой текущий уровень английского языка:</b>`, warning, speech)
 		m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(CalcQ3Keyboard())
 		_, _ = s.bot.SendMessage(m)
-		return true
+		return nil
 
 	case "calc_q3_b1", "calc_q3_b2", "calc_q3_c1":
 		session.State = StateDefault
@@ -175,8 +175,8 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) bool 
 				_, _ = s.bot.SendMessage(plainMsg)
 			}
 		}
-		return true
+		return nil
 	}
 
-	return false
+	return nil
 }

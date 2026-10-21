@@ -413,7 +413,6 @@ func (s *Service) applyConfirmation(tx *gorm.DB, in ConfirmInput, result *Result
 		PromoCode:  in.PromoCode,
 		Source:     in.Source,
 	})
-	return nil
 }
 
 // RequeueAccessNotification schedules a repeated delivery for an already

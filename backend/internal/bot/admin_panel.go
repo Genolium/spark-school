@@ -382,4 +382,3 @@ func (s *BotService) SendCuratorDailyDigest(targetChatID ...int64) (*DailyDigest
 	}
 	return data, err
 }
-

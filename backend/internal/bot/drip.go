@@ -357,5 +357,3 @@ func (s *BotService) sendBasicUpsellMessage(chatID telego.ChatID, student models
 	s.sendDripMessageWithFallback(chatID, text, kb)
 	log.Printf("[Upsell Nurture] Sent 72h Basic Upsell offer to %d (@%s)", student.TelegramID, student.Username)
 }
-
-

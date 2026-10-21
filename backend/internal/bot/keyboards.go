@@ -20,9 +20,9 @@ func formatPriceRub(amount int) string {
 
 // Verified Permanent Telegram File IDs
 const (
-	PhotoGoldenGate = "AgACAgIAAxkDAAOWasIxYseSAb_vnw85duiZzZ0AATAQAAIMIGsbt0QRShR4PG9JDiVBAQADAgADdwADPQQ"
+	PhotoGoldenGate  = "AgACAgIAAxkDAAOWasIxYseSAb_vnw85duiZzZ0AATAQAAIMIGsbt0QRShR4PG9JDiVBAQADAgADdwADPQQ"
 	PhotoProgramInfo = "AgACAgIAAxkDAAOYasIxa-IKgi8-xStMQEfjbXFfeAEAAg4gaxu3RBFKEmLHSujsPDMBAAMCAAN3AAM9BA"
-	PhotoEssayAudit = "AgACAgIAAxkDAAOTasIxW9iIlsbAlYmg1cYlnc21TQkAAgogaxu3RBFKrmPgaWGgkNcBAAMCAAN5AAM9BA"
+	PhotoEssayAudit  = "AgACAgIAAxkDAAOTasIxW9iIlsbAlYmg1cYlnc21TQkAAgogaxu3RBFKrmPgaWGgkNcBAAMCAAN5AAM9BA"
 	PhotoInterview   = "AgACAgIAAxkDAAOXasIxZiE9Oldv2KfBsG2Q_z97ZVsAAg0gaxu3RBFKSi8nrfCubP8BAAMCAAN5AAM9BA"
 )
 
@@ -311,7 +311,7 @@ func UpgradeOptionsKeyboard(currentTier string, diffAmount ...float64) *telego.I
 	}
 
 	if currentTier == "basic" {
-		diffAcc := 2910 // 6900 - 3990
+		diffAcc := 2910  // 6900 - 3990
 		diffVIP := 10910 // 14900 - 3990
 		if len(diffAmount) > 0 && diffAmount[0] > 0 {
 			diffAcc = int(diffAmount[0])
@@ -380,5 +380,3 @@ func BasicUpsellAuditKeyboard() *telego.InlineKeyboardMarkup {
 		),
 	)
 }
-
-

@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -208,18 +207,19 @@ func main() {
 			c.JSON(http.StatusOK, gin.H{"ok": true})
 		})
 
-		// Telegram Bot Webhook endpoint (direct native Go integration with source validation, LRU cache & post-execution DB deduplication)
-		updateDeduplicator := NewUpdateDeduplicator(db, 4096)
+		// Telegram Bot Webhook endpoint. Authentication, a persistent
+		// claim/lease and idempotent business operations protect against
+		// duplicate delivery across any number of backend instances.
+		updateClaimStore := bot.NewUpdateClaimStore(db, 5*time.Minute)
 
 		api.POST("/bot/webhook", func(c *gin.Context) {
-			if cfg.TelegramWebhookSecret != "" {
-				secret := c.GetHeader("X-Telegram-Bot-Api-Secret-Token")
-				if secret != cfg.TelegramWebhookSecret {
-					c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized: invalid secret token"})
-					return
-				}
-			} else if isProd {
-				c.JSON(http.StatusForbidden, gin.H{"error": "telegram webhook secret is not configured"})
+			if cfg.TelegramWebhookSecret == "" {
+				c.JSON(http.StatusServiceUnavailable, gin.H{"error": "telegram webhook secret is not configured"})
+				return
+			}
+			secret := c.GetHeader("X-Telegram-Bot-Api-Secret-Token")
+			if secret != cfg.TelegramWebhookSecret {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized: invalid secret token"})
 				return
 			}
 
@@ -229,34 +229,33 @@ func main() {
 				return
 			}
 
-			// Pre-execution atomic claim: locks update_id in-flight to prevent concurrent duplicate execution
-			claimed, release := updateDeduplicator.TryClaim(update.UpdateID)
+			ctx := c.Request.Context()
+			claimed, err := updateClaimStore.Claim(ctx, update.UpdateID)
+			if err != nil {
+				log.Printf("[Bot Webhook] claim failed for update_id=%d: %v", update.UpdateID, err)
+				c.JSON(http.StatusServiceUnavailable, gin.H{"error": "update claim unavailable"})
+				return
+			}
 			if !claimed {
-				c.JSON(http.StatusOK, gin.H{"ok": true, "duplicate": true})
+				status, _ := updateClaimStore.Status(ctx, update.UpdateID)
+				c.JSON(http.StatusOK, gin.H{"ok": true, "duplicate": true, "status": status})
 				return
 			}
 
-			// Execute bot processing inside safe panic-guarded runner
-			var processErr error
-			func() {
-				defer func() {
-					if r := recover(); r != nil {
-						processErr = fmt.Errorf("bot update processing panic: %v", r)
-						log.Printf("[Bot Webhook Panic] update_id=%d: %v", update.UpdateID, r)
-					}
-				}()
-				processErr = botService.ProcessUpdate(&update)
-			}()
-
-			// If execution failed or panicked, release in-flight lock without marking processed
-			if processErr != nil {
-				release(false)
+			if err := botService.HandleUpdate(ctx, &update); err != nil {
+				log.Printf("[Bot Webhook] update_id=%d failed: %v", update.UpdateID, err)
+				if failErr := updateClaimStore.Fail(ctx, update.UpdateID, err); failErr != nil {
+					log.Printf("[Bot Webhook] failed to persist failure for update_id=%d: %v", update.UpdateID, failErr)
+				}
 				c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error processing update"})
 				return
 			}
 
-			// ONLY record update_id as processed AFTER successful execution!
-			release(true)
+			if err := updateClaimStore.Complete(ctx, update.UpdateID); err != nil {
+				log.Printf("[Bot Webhook] completion failed for update_id=%d: %v", update.UpdateID, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to persist update completion"})
+				return
+			}
 			c.JSON(http.StatusOK, gin.H{"ok": true})
 		})
 

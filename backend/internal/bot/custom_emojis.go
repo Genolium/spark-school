@@ -67,8 +67,8 @@ func StripTgEmoji(htmlText string) string {
 
 // FormatPaymentSuccessMessage formats the official purchase confirmation message using verified custom emojis.
 func FormatPaymentSuccessMessage(inviteLink string) string {
-	sparkle := TgEmoji(EmojiStarGreen, "✨")     // 5884407720131436294
-	sun := TgEmoji(EmojiSunGreen, "🔆")         // 5883980366590517942
+	sparkle := TgEmoji(EmojiStarGreen, "✨")      // 5884407720131436294
+	sun := TgEmoji(EmojiSunGreen, "🔆")           // 5883980366590517942
 	arrow := TgEmoji(EmojiArrowRightGreen, "➡️") // 5884424573583106260
 
 	return fmt.Sprintf("%s Спасибо за покупку! <b>Добро пожаловать на моё обучение!</b>\n\n"+
@@ -76,4 +76,3 @@ func FormatPaymentSuccessMessage(inviteLink string) string {
 		"%s <i>Ссылка является персональной и одноразовой.</i>",
 		sparkle, sun, inviteLink, arrow)
 }
-

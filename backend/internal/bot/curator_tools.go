@@ -2,20 +2,21 @@ package bot
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"html"
 	"math/rand"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/mymmrac/telego"
 	tu "github.com/mymmrac/telego/telegoutil"
 	"github.com/spark-school/backend/internal/models"
+	"github.com/spark-school/backend/internal/outbox"
+	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
-
-var bookingMutex sync.Mutex
 
 var interviewQuestions = []struct {
 	Question string
@@ -44,10 +45,12 @@ var interviewQuestions = []struct {
 	},
 }
 
-func (s *BotService) send(m *telego.SendMessageParams) {
-	if s.bot != nil && m != nil {
-		_, _ = s.bot.SendMessage(m)
+func (s *BotService) send(m *telego.SendMessageParams) error {
+	if s.bot == nil || m == nil {
+		return nil
 	}
+	_, err := s.bot.SendMessage(m)
+	return err
 }
 
 // SendPreparationPlan renders the 6-step preparation plan and current progress.
@@ -291,53 +294,20 @@ func (s *BotService) SendOrdersHistory(chatID telego.ChatID, from *telego.User) 
 	s.send(m)
 }
 
-// SubmitWork processes a student's submission for curator feedback with strict entitlement checks.
-func (s *BotService) SubmitWork(chatID telego.ChatID, from *telego.User, rawText string) {
+// SubmitWork processes a student's submission for curator feedback atomically.
+// The user row lock serializes concurrent submissions by the same student, a
+// conditional UPDATE protects the last audit credit, and a unique version
+// index plus a short duplicate window make command retries safe.
+func (s *BotService) SubmitWork(chatID telego.ChatID, from *telego.User, rawText string) error {
 	if from == nil {
-		return
+		return nil
 	}
-
 	if s.db == nil {
-		m := tu.Message(chatID, "❌ База данных временно недоступна. Пожалуйста, попробуйте позже.")
-		s.send(m)
-		return
+		_ = s.send(tu.Message(chatID, "❌ База данных временно недоступна. Пожалуйста, попробуйте позже."))
+		return fmt.Errorf("database is unavailable")
 	}
 
-	// 1. Strict Entitlement Verification: User must have active paid access
-	var user models.User
-	if err := s.db.Where("telegram_id = ?", from.ID).First(&user).Error; err != nil || !user.HasAccess {
-		text := `⛔️ <b>Проверка работ доступна только студентам программы</b>
-
-Отправка эссе, резюме и видеовизиток на аудит куратору доступна после оформления тарифа.
-
-Выберите подходящий формат подготовки:`
-		kb := tu.InlineKeyboard(
-			tu.InlineKeyboardRow(tu.InlineKeyboardButton("💳 Выбрать тариф").WithCallbackData("action_payment")),
-			tu.InlineKeyboardRow(tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu")),
-		)
-		m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
-		s.send(m)
-		return
-	}
-
-	// 2. Tier Check: Basic tier requires separate audit upsell; Accelerator and VIP include reviews
-	userTier := strings.ToLower(strings.TrimSpace(user.Tier))
-	if userTier == "basic" && (!user.HasAuditUpsell || user.AuditCredits <= 0) {
-		text := `ℹ️ <b>В тариф «Базовый» не входит личная проверка куратором</b>
-
-Вы обучаетесь на тарифе «Базовый» с самостоятельным изучением материалов.
-Чтобы получить подробный построчный аудит вашего эссе с комментариями прямо в Google Docs, добавьте разовый аудит или сделайте апгрейд:`
-		kb := tu.InlineKeyboard(
-			tu.InlineKeyboardRow(tu.InlineKeyboardButton("🔍 Добавить аудит эссе (1 900 ₽)").WithCallbackData("pay_upsell_audit")),
-			tu.InlineKeyboardRow(tu.InlineKeyboardButton("⚡️ Апгрейд до Акселератора").WithCallbackData("upgrade_to_accelerator")),
-			tu.InlineKeyboardRow(tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu")),
-		)
-		m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
-		s.send(m)
-		return
-	}
-
-	// 3. Syntax Verification: /submit_work [type] [link or text]
+	// 1. Syntax verification happens before any state change.
 	parts := strings.Fields(rawText)
 	if len(parts) < 3 {
 		help := `📝 <b>Отправка работы на проверку куратору</b>
@@ -355,47 +325,19 @@ func (s *BotService) SubmitWork(chatID telego.ChatID, from *telego.User, rawText
 <code>/submit_work essay https://docs.google.com/document/d/...</code>
 
 <i>Срок проверки куратором: до 48 часов с подробными комментариями прямо в документе!</i>`
-		m := tu.Message(chatID, help).WithParseMode(telego.ModeHTML)
-		s.send(m)
-		return
+		return s.send(tu.Message(chatID, help).WithParseMode(telego.ModeHTML))
 	}
 
 	workType := strings.ToLower(parts[1])
-
-	// Single audit for Basic tier only applies to essay review
-	if userTier == "basic" && workType != "essay" {
-		text := `ℹ️ <b>Разовый аудит распространяется только на проверку эссе (500 слов)</b>
-
-Для полной проверки резюме, видеовизитки и таблицы позиционирования сделайте апгрейд до тарифа «Акселератор»:`
-		kb := tu.InlineKeyboard(
-			tu.InlineKeyboardRow(tu.InlineKeyboardButton("⚡️ Апгрейд до Акселератора").WithCallbackData("upgrade_to_accelerator")),
-			tu.InlineKeyboardRow(tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu")),
-		)
-		m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
-		s.send(m)
-		return
-	}
 	validTypes := map[string]string{
 		"essay":       "Эссе на 500 слов",
 		"resume":      "Американское резюме",
 		"video":       "Видеовизитка",
 		"positioning": "Распаковка бэкграунда",
 	}
-
 	typeDisplay, isValid := validTypes[workType]
 	if !isValid {
-		m := tu.Message(chatID, "❌ Неверный тип работы. Используйте: <code>essay</code>, <code>resume</code>, <code>video</code> или <code>positioning</code>.").WithParseMode(telego.ModeHTML)
-		s.send(m)
-		return
-	}
-
-	// 4. Rate Limiting: Max 3 pending submissions per student
-	var pendingCount int64
-	s.db.Model(&models.StudentSubmission{}).Where("telegram_id = ? AND status = ?", from.ID, "pending").Count(&pendingCount)
-	if pendingCount >= 3 {
-		m := tu.Message(chatID, "⏳ <b>Лимит очереди:</b> у вас уже есть 3 работы на проверке у куратора.\n\nПожалуйста, дождитесь комментариев по текущим работам перед отправкой новых.").WithParseMode(telego.ModeHTML)
-		s.send(m)
-		return
+		return s.send(tu.Message(chatID, "❌ Неверный тип работы. Используйте: <code>essay</code>, <code>resume</code>, <code>video</code> или <code>positioning</code>.").WithParseMode(telego.ModeHTML))
 	}
 
 	rawContent := strings.Join(parts[2:], " ")
@@ -404,10 +346,118 @@ func (s *BotService) SubmitWork(chatID telego.ChatID, from *telego.User, rawText
 	}
 	escapedContent := html.EscapeString(rawContent)
 
-	// Determine next version
+	tx := s.db.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+			panic(r)
+		}
+	}()
+
+	var user models.User
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("telegram_id = ?", from.ID).First(&user).Error; err != nil {
+		tx.Rollback()
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return s.send(tu.Message(chatID, "⛔️ Сначала зарегистрируйтесь в боте командой /start.").WithParseMode(telego.ModeHTML))
+		}
+		return err
+	}
+
+	// 2. Entitlements are re-checked under the row lock.
+	if !user.HasAccess {
+		tx.Rollback()
+		text := `⛔️ <b>Проверка работ доступна только студентам программы</b>
+
+Отправка эссе, резюме и видеовизиток на аудит куратору доступна после оформления тарифа.
+
+Выберите подходящий формат подготовки:`
+		kb := tu.InlineKeyboard(
+			tu.InlineKeyboardRow(tu.InlineKeyboardButton("💳 Выбрать тариф").WithCallbackData("action_payment")),
+			tu.InlineKeyboardRow(tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu")),
+		)
+		return s.send(tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb))
+	}
+
+	userTier := strings.ToLower(strings.TrimSpace(user.Tier))
+	if userTier == "basic" && (!user.HasAuditUpsell || user.AuditCredits <= 0) {
+		tx.Rollback()
+		text := `ℹ️ <b>В тариф «Базовый» не входит личная проверка куратором</b>
+
+Вы обучаетесь на тарифе «Базовый» с самостоятельным изучением материалов.
+Чтобы получить подробный построчный аудит вашего эссе с комментариями прямо в Google Docs, добавьте разовый аудит или сделайте апгрейд:`
+		kb := tu.InlineKeyboard(
+			tu.InlineKeyboardRow(tu.InlineKeyboardButton("🔍 Добавить аудит эссе (1 900 ₽)").WithCallbackData("pay_upsell_audit")),
+			tu.InlineKeyboardRow(tu.InlineKeyboardButton("⚡️ Апгрейд до Акселератора").WithCallbackData("upgrade_to_accelerator")),
+			tu.InlineKeyboardRow(tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu")),
+		)
+		return s.send(tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb))
+	}
+	if userTier == "basic" && workType != "essay" {
+		tx.Rollback()
+		text := `ℹ️ <b>Разовый аудит распространяется только на проверку эссе (500 слов)</b>
+
+Для полной проверки резюме, видеовизитки и таблицы позиционирования сделайте апгрейд до тарифа «Акселератор»:`
+		kb := tu.InlineKeyboard(
+			tu.InlineKeyboardRow(tu.InlineKeyboardButton("⚡️ Апгрейд до Акселератора").WithCallbackData("upgrade_to_accelerator")),
+			tu.InlineKeyboardRow(tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu")),
+		)
+		return s.send(tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb))
+	}
+
+	// 3. Retry guard: the same command committed a moment ago must not create
+	// a second submission when Telegram redelivers the update.
+	var duplicate models.StudentSubmission
+	if err := tx.Where("telegram_id = ? AND work_type = ? AND content = ? AND submitted_at > ?",
+		from.ID, workType, escapedContent, time.Now().Add(-10*time.Minute)).First(&duplicate).Error; err == nil {
+		tx.Rollback()
+		return nil
+	}
+
+	var pendingCount int64
+	if err := tx.Model(&models.StudentSubmission{}).
+		Where("telegram_id = ? AND status = ?", from.ID, "pending").Count(&pendingCount).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
+	if pendingCount >= 3 {
+		tx.Rollback()
+		return s.send(tu.Message(chatID, "⏳ <b>Лимит очереди:</b> у вас уже есть 3 работы на проверке у куратора.\n\nПожалуйста, дождитесь комментариев по текущим работам перед отправкой новых.").WithParseMode(telego.ModeHTML))
+	}
+
 	var existingCount int64
-	s.db.Model(&models.StudentSubmission{}).Where("telegram_id = ? AND work_type = ?", from.ID, workType).Count(&existingCount)
+	if err := tx.Model(&models.StudentSubmission{}).
+		Where("telegram_id = ? AND work_type = ?", from.ID, workType).Count(&existingCount).Error; err != nil {
+		tx.Rollback()
+		return err
+	}
 	version := int(existingCount) + 1
+
+	// 4. Conditional credit deduction for Basic. RowsAffected is the guard:
+	// two parallel submissions cannot spend the same last credit twice.
+	creditsNote := ""
+	if userTier == "basic" {
+		res := tx.Model(&models.User{}).
+			Where("id = ? AND audit_credits > 0", user.ID).
+			UpdateColumn("audit_credits", gorm.Expr("audit_credits - 1"))
+		if res.Error != nil {
+			tx.Rollback()
+			return res.Error
+		}
+		if res.RowsAffected != 1 {
+			tx.Rollback()
+			return s.send(tu.Message(chatID, "⏳ <b>Оплаченный аудит уже использован.</b>\n\nДобавьте новый аудит эссе или сделайте апгрейд тарифа.").WithParseMode(telego.ModeHTML))
+		}
+		if err := tx.Model(&models.User{}).Where("id = ? AND audit_credits <= 0", user.ID).
+			UpdateColumn("has_audit_upsell", false).Error; err != nil {
+			tx.Rollback()
+			return err
+		}
+		user.AuditCredits--
+		creditsNote = fmt.Sprintf("\n• Остаток оплаченных аудитов: <b>%d</b>", user.AuditCredits)
+	}
 
 	submission := models.StudentSubmission{
 		UserID:      user.ID,
@@ -419,26 +469,11 @@ func (s *BotService) SubmitWork(chatID telego.ChatID, from *telego.User, rawText
 		Status:      "pending",
 		SubmittedAt: time.Now(),
 	}
-
-	if err := s.db.Create(&submission).Error; err != nil {
-		m := tu.Message(chatID, "❌ Не удалось сохранить работу. Пожалуйста, попробуйте позже.")
-		s.send(m)
-		return
+	if err := tx.Create(&submission).Error; err != nil {
+		tx.Rollback()
+		return err
 	}
 
-	// Deduct audit credit for Basic tier student
-	creditsNote := ""
-	if userTier == "basic" {
-		user.AuditCredits -= 1
-		if user.AuditCredits <= 0 {
-			user.AuditCredits = 0
-			user.HasAuditUpsell = false
-		}
-		s.db.Save(&user)
-		creditsNote = fmt.Sprintf("\n• Остаток оплаченных аудитов: <b>%d</b>", user.AuditCredits)
-	}
-
-	// Send confirmation to student
 	successText := fmt.Sprintf(`✅ <b>Работа принята на проверку! (ID: #%d)</b>
 
 • Тип: <b>%s</b> (версия %d)
@@ -446,21 +481,26 @@ func (s *BotService) SubmitWork(chatID telego.ChatID, from *telego.User, rawText
 • Статус: <b>В очереди у куратора</b>%s
 
 Куратор разберёт материал в течение 48 часов и пришлёт разбор прямо сюда.`, submission.ID, typeDisplay, version, escapedContent, creditsNote)
+	if err := outbox.EnqueueNotificationTx(tx, from.ID, successText); err != nil {
+		tx.Rollback()
+		return err
+	}
 
-	m := tu.Message(chatID, successText).WithParseMode(telego.ModeHTML).WithReplyMarkup(tu.InlineKeyboard(
-		tu.InlineKeyboardRow(tu.InlineKeyboardButton("📋 Мой план подготовки").WithCallbackData("action_plan")),
-	))
-	s.send(m)
-
-	// Alert curator if AdminTelegramID is configured
-	if s.cfg.AdminTelegramID > 0 {
+	if s.cfg != nil && s.cfg.AdminTelegramID > 0 {
 		alert := fmt.Sprintf(`📥 <b>Новая работа на проверку! (#%d)</b>
 От: @%s (ID: %d)
 Тип: <b>%s</b> (v%d)
-Ссылка/текст: %s`, submission.ID, from.Username, from.ID, typeDisplay, version, escapedContent)
-		adminMsg := tu.Message(tu.ID(s.cfg.AdminTelegramID), alert).WithParseMode(telego.ModeHTML)
-		s.send(adminMsg)
+Ссылка/текст: %s`, submission.ID, html.EscapeString(from.Username), from.ID, typeDisplay, version, escapedContent)
+		if err := outbox.EnqueueNotificationTx(tx, s.cfg.AdminTelegramID, alert); err != nil {
+			tx.Rollback()
+			return err
+		}
 	}
+
+	if err := tx.Commit().Error; err != nil {
+		return err
+	}
+	return nil
 }
 
 // BookingSlot represents a concrete scheduled Zoom appointment slot with specific calendar date and time.
@@ -570,9 +610,6 @@ func (s *BotService) BookCallDialog(chatID telego.ChatID, from *telego.User, slo
 
 	// If slotKey is provided, attempt atomic reservation
 	if slotKey != "" {
-		bookingMutex.Lock()
-		defer bookingMutex.Unlock()
-
 		// Find matching display text
 		var targetSlot *BookingSlot
 		for _, sl := range upcomingSlots {
@@ -590,6 +627,11 @@ func (s *BotService) BookCallDialog(chatID telego.ChatID, from *telego.User, slo
 
 		// Atomic database transaction to prevent double-booking and concurrent collision
 		tx := s.db.Begin()
+		if tx.Error != nil {
+			m := tu.Message(chatID, "❌ Не удалось начать бронирование из-за ошибки базы данных. Попробуйте снова.")
+			s.send(m)
+			return
+		}
 		defer func() {
 			if r := recover(); r != nil {
 				tx.Rollback()
@@ -797,9 +839,19 @@ func (s *BotService) CancelBooking(chatID telego.ChatID, from *telego.User, book
 	}
 
 	now := time.Now()
-	booking.Status = "cancelled"
-	booking.CancelledAt = &now
-	s.db.Save(&booking)
+	res := s.db.Model(&models.CallBooking{}).
+		Where("id = ? AND status = ? AND cancelled_at IS NULL", booking.ID, "confirmed").
+		Updates(map[string]interface{}{"status": "cancelled", "cancelled_at": &now})
+	if res.Error != nil {
+		m := tu.Message(chatID, "❌ Не удалось отменить запись из-за ошибки базы данных. Попробуйте позже.")
+		s.send(m)
+		return
+	}
+	if res.RowsAffected != 1 {
+		m := tu.Message(chatID, "ℹ️ Эта запись уже отменена или изменена. Обновите список записей командой /book_call.")
+		s.send(m)
+		return
+	}
 
 	text := fmt.Sprintf(`✅ <b>Запись на созвон успешно отменена</b>
 
@@ -890,43 +942,90 @@ func (s *BotService) SendCuratorQueue(chatID telego.ChatID) {
 	s.send(m)
 }
 
-// ProcessSubmissionReview records curator review decision and notifies the student.
-func (s *BotService) ProcessSubmissionReview(chatID telego.ChatID, from *telego.User, subID uint, notes string, isApproved bool) {
+// ProcessSubmissionReview records a curator decision and enqueues the student
+// notification through the outbox. The status transition is conditional, so a
+// repeated callback cannot review an already completed submission twice.
+func (s *BotService) ProcessSubmissionReview(chatID telego.ChatID, from *telego.User, subID uint, notes string, isApproved bool) error {
 	if s.db == nil || from == nil {
-		return
+		return fmt.Errorf("database is unavailable")
 	}
+	if !s.IsAdmin(from.ID) {
+		return s.send(tu.Message(chatID, "⛔️ Доступ ограничен. Действие доступно только куратору проекта."))
+	}
+
+	notes = strings.TrimSpace(notes)
+	if len(notes) > 2000 {
+		notes = notes[:2000]
+	}
+	escapedNotes := html.EscapeString(notes)
+	if escapedNotes == "" {
+		escapedNotes = "Комментарий не указан."
+	}
+
+	tx := s.db.Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+			panic(r)
+		}
+	}()
 
 	var sub models.StudentSubmission
-	if err := s.db.Where("id = ?", subID).First(&sub).Error; err != nil {
-		m := tu.Message(chatID, fmt.Sprintf("❌ Работа #%d не найдена в базе данных.", subID))
-		s.send(m)
-		return
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).Where("id = ?", subID).First(&sub).Error; err != nil {
+		tx.Rollback()
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return s.send(tu.Message(chatID, fmt.Sprintf("❌ Работа #%d не найдена в базе данных.", subID)))
+		}
+		return err
 	}
 
-	now := time.Now()
-	sub.ReviewedAt = &now
-	sub.CuratorNotes = notes
+	// Terminal states are final. A retry is acknowledged without a second
+	// update or a second student notification.
+	if sub.Status == "reviewed" || sub.Status == "changes_requested" {
+		tx.Rollback()
+		return s.send(tu.Message(chatID, fmt.Sprintf("ℹ️ Работа #%d уже завершена (статус: %s). Повторная обработка не требуется.", sub.ID, sub.Status)))
+	}
+	if sub.Status != "pending" && sub.Status != "reviewing" {
+		tx.Rollback()
+		return s.send(tu.Message(chatID, fmt.Sprintf("❌ Работа #%d находится в недопустимом статусе: %s.", sub.ID, sub.Status)))
+	}
+
+	newStatus := "changes_requested"
 	if isApproved {
-		sub.Status = "reviewed"
-	} else {
-		sub.Status = "changes_requested"
+		newStatus = "reviewed"
 	}
-	s.db.Save(&sub)
+	now := time.Now()
+	res := tx.Model(&models.StudentSubmission{}).
+		Where("id = ? AND status IN ?", sub.ID, []string{"pending", "reviewing"}).
+		Updates(map[string]interface{}{
+			"status":        newStatus,
+			"curator_notes": notes,
+			"reviewed_at":   &now,
+		})
+	if res.Error != nil {
+		tx.Rollback()
+		return res.Error
+	}
+	if res.RowsAffected != 1 {
+		tx.Rollback()
+		return s.send(tu.Message(chatID, fmt.Sprintf("❌ Статус работы #%d уже изменился. Обновите очередь.", sub.ID)))
+	}
 
-	// Send feedback notification to student
-	if sub.TelegramID != 0 {
-		var studentMsg string
-		if isApproved {
-			studentMsg = fmt.Sprintf(`🎉 <b>Ваша работа проверена куратором! (#%d)</b>
+	var studentMsg string
+	if isApproved {
+		studentMsg = fmt.Sprintf(`🎉 <b>Ваша работа проверена куратором! (#%d)</b>
 
 • Тип: <b>%s</b> (версия %d)
 • Статус: <b>Принято ✅</b>
 • Комментарий куратора:
 <i>%s</i>
 
-Продолжайте подготовку по плану: <code>/plan</code>`, sub.ID, sub.WorkType, sub.Version, notes)
-		} else {
-			studentMsg = fmt.Sprintf(`📝 <b>Куратор оставил замечания к вашей работе (#%d)</b>
+Продолжайте подготовку по плану: <code>/plan</code>`, sub.ID, html.EscapeString(sub.WorkType), sub.Version, escapedNotes)
+	} else {
+		studentMsg = fmt.Sprintf(`📝 <b>Куратор оставил замечания к вашей работе (#%d)</b>
 
 • Тип: <b>%s</b> (версия %d)
 • Статус: <b>Требуются правки 🔄</b>
@@ -934,43 +1033,41 @@ func (s *BotService) ProcessSubmissionReview(chatID telego.ChatID, from *telego.
 <i>%s</i>
 
 Внесите правки и отправьте обновлённую версию:
-<code>/submit_work %s [ссылка на обновлённый документ]</code>`, sub.ID, sub.WorkType, sub.Version, notes, sub.WorkType)
-		}
-
-		mStudent := tu.Message(tu.ID(sub.TelegramID), studentMsg).WithParseMode(telego.ModeHTML)
-		s.send(mStudent)
+<code>/submit_work %s [ссылка на обновлённый документ]</code>`, sub.ID, html.EscapeString(sub.WorkType), sub.Version, escapedNotes, html.EscapeString(sub.WorkType))
+	}
+	if err := outbox.EnqueueNotificationTx(tx, sub.TelegramID, studentMsg); err != nil {
+		tx.Rollback()
+		return err
+	}
+	if err := tx.Commit().Error; err != nil {
+		return err
 	}
 
-	// Confirm to admin
 	actionName := "одобрена"
 	if !isApproved {
 		actionName = "отправлена на доработку"
 	}
-	confirmAdmin := fmt.Sprintf("✅ Работа #%d (@%s, %s) успешно %s. Студент получил уведомление.", sub.ID, sub.Username, sub.WorkType, actionName)
-	mAdmin := tu.Message(chatID, confirmAdmin)
-	s.send(mAdmin)
+	confirmAdmin := fmt.Sprintf("✅ Работа #%d (@%s, %s) %s. Уведомление студенту поставлено в очередь на доставку.", sub.ID, html.EscapeString(sub.Username), html.EscapeString(sub.WorkType), actionName)
+	return s.send(tu.Message(chatID, confirmAdmin))
 }
 
 // HandleReviewedCommand parses and executes /reviewed [ID] [notes]
-func (s *BotService) HandleReviewedCommand(chatID telego.ChatID, from *telego.User, rawText string) {
+func (s *BotService) HandleReviewedCommand(chatID telego.ChatID, from *telego.User, rawText string) error {
 	if from == nil || !s.IsAdmin(from.ID) {
 		m := tu.Message(chatID, "⛔️ Доступ ограничен. Команда доступна только куратору проекта.")
-		s.send(m)
-		return
+		return s.send(m)
 	}
 
 	parts := strings.Fields(rawText)
 	if len(parts) < 2 {
 		m := tu.Message(chatID, "ℹ️ Формат команды: <code>/reviewed [ID] [комментарий студенту]</code>").WithParseMode(telego.ModeHTML)
-		s.send(m)
-		return
+		return s.send(m)
 	}
 
 	idNum, err := strconv.Atoi(parts[1])
 	if err != nil || idNum <= 0 {
 		m := tu.Message(chatID, "❌ Неверный ID работы. Пример: <code>/reviewed 1 Отличный хук!</code>").WithParseMode(telego.ModeHTML)
-		s.send(m)
-		return
+		return s.send(m)
 	}
 
 	notes := "Работа проверена и одобрена куратором."
@@ -978,29 +1075,26 @@ func (s *BotService) HandleReviewedCommand(chatID telego.ChatID, from *telego.Us
 		notes = strings.Join(parts[2:], " ")
 	}
 
-	s.ProcessSubmissionReview(chatID, from, uint(idNum), notes, true)
+	return s.ProcessSubmissionReview(chatID, from, uint(idNum), notes, true)
 }
 
 // HandleChangesCommand parses and executes /changes [ID] [notes]
-func (s *BotService) HandleChangesCommand(chatID telego.ChatID, from *telego.User, rawText string) {
+func (s *BotService) HandleChangesCommand(chatID telego.ChatID, from *telego.User, rawText string) error {
 	if from == nil || !s.IsAdmin(from.ID) {
 		m := tu.Message(chatID, "⛔️ Доступ ограничен. Команда доступна только куратору проекта.")
-		s.send(m)
-		return
+		return s.send(m)
 	}
 
 	parts := strings.Fields(rawText)
 	if len(parts) < 2 {
 		m := tu.Message(chatID, "ℹ️ Формат команды: <code>/changes [ID] [замечания студенту]</code>").WithParseMode(telego.ModeHTML)
-		s.send(m)
-		return
+		return s.send(m)
 	}
 
 	idNum, err := strconv.Atoi(parts[1])
 	if err != nil || idNum <= 0 {
 		m := tu.Message(chatID, "❌ Неверный ID работы. Пример: <code>/changes 1 Усилить вводный абзац</code>").WithParseMode(telego.ModeHTML)
-		s.send(m)
-		return
+		return s.send(m)
 	}
 
 	notes := "Куратор рекомендует доработать материал перед финальной подачей."
@@ -1008,5 +1102,5 @@ func (s *BotService) HandleChangesCommand(chatID telego.ChatID, from *telego.Use
 		notes = strings.Join(parts[2:], " ")
 	}
 
-	s.ProcessSubmissionReview(chatID, from, uint(idNum), notes, false)
+	return s.ProcessSubmissionReview(chatID, from, uint(idNum), notes, false)
 }

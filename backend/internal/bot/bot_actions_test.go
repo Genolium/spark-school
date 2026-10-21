@@ -56,14 +56,13 @@ func TestBot_HandleCallbackQuery_SecurityCheck(t *testing.T) {
 		},
 	}
 
-	handled := service.HandleCallbackQuery(nonAdminQuery)
-	if !handled {
-		t.Errorf("expected callback query to be intercepted by security check")
+	if err := service.HandleCallbackQuery(nonAdminQuery); err != nil {
+		t.Errorf("security rejection must not surface as a processing error: %v", err)
 	}
 
 	// Empty query
-	if service.HandleCallbackQuery(nil) {
-		t.Errorf("expected nil query to return false")
+	if err := service.HandleCallbackQuery(nil); err != nil {
+		t.Errorf("expected nil query to be ignored, got %v", err)
 	}
 }
 
@@ -94,9 +93,8 @@ func TestBot_AdminPanelSecurity(t *testing.T) {
 		},
 	}
 
-	handled := service.HandleCallbackQuery(nonAdminQuery)
-	if handled {
-		t.Errorf("non-admin should not be permitted to execute admin_stats callback")
+	if err := service.HandleCallbackQuery(nonAdminQuery); err != nil {
+		t.Errorf("non-admin callback must be rejected without a processing error: %v", err)
 	}
 
 	// 3. Admin accessing admin_stats callback handled safely
@@ -110,9 +108,8 @@ func TestBot_AdminPanelSecurity(t *testing.T) {
 			Chat: telego.Chat{ID: 123456789, Type: "private"},
 		},
 	}
-	handledAdmin := service.HandleCallbackQuery(adminQuery)
-	if !handledAdmin {
-		t.Errorf("admin should be permitted to execute admin_stats callback")
+	if err := service.HandleCallbackQuery(adminQuery); err != nil {
+		t.Errorf("admin callback failed: %v", err)
 	}
 
 	// 4. Admin accessing admin_receipts callback handled safely
@@ -126,9 +123,8 @@ func TestBot_AdminPanelSecurity(t *testing.T) {
 			Chat: telego.Chat{ID: 123456789, Type: "private"},
 		},
 	}
-	handledReceipts := service.HandleCallbackQuery(adminReceiptsQuery)
-	if !handledReceipts {
-		t.Errorf("admin should be permitted to execute admin_receipts callback")
+	if err := service.HandleCallbackQuery(adminReceiptsQuery); err != nil {
+		t.Errorf("admin receipts callback failed: %v", err)
 	}
 }
 
@@ -251,11 +247,10 @@ func TestBot_CuratorDailyDigest(t *testing.T) {
 			Chat: telego.Chat{ID: 123456789, Type: "private"},
 		},
 	}
-	if !service.HandleCallbackQuery(cb) {
-		t.Errorf("expected admin_digest callback to be handled for admin")
+	if err := service.HandleCallbackQuery(cb); err != nil {
+		t.Errorf("admin digest callback failed: %v", err)
 	}
 }
-
 
 func TestBot_MainMenuKeyboard_UpgradeForActiveUsers(t *testing.T) {
 	// 1. Without access, upgrade button is omitted
@@ -311,5 +306,3 @@ func TestBot_SendFiscalReceipt(t *testing.T) {
 		t.Errorf("expected nil error for receipt without URL, got %v", errNoURL)
 	}
 }
-
-

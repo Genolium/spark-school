@@ -245,10 +245,16 @@ type CallBooking struct {
 	CancelledAt *time.Time `json:"cancelled_at,omitempty"`
 }
 
-// ProcessedTelegramUpdate stores deduplicated Telegram update IDs that have been successfully processed.
+// ProcessedTelegramUpdate is the persistent claim/lease record for a Telegram
+// update. The primary key makes the initial claim atomic across all instances.
 type ProcessedTelegramUpdate struct {
-	UpdateID  int       `gorm:"primaryKey" json:"update_id"`
-	CreatedAt time.Time `json:"created_at"`
+	UpdateID    int        `gorm:"primaryKey" json:"update_id"`
+	Status      string     `gorm:"size:20;default:'processing';index" json:"status"` // processing, completed, failed
+	Attempts    int        `gorm:"default:1" json:"attempts"`
+	LockedUntil *time.Time `gorm:"index" json:"locked_until,omitempty"`
+	LastError   string     `gorm:"type:text" json:"last_error,omitempty"`
+	CreatedAt   time.Time  `json:"created_at"`
+	UpdatedAt   time.Time  `json:"updated_at"`
 }
 
 // AnalyticsEvent stores full-funnel conversion events.
