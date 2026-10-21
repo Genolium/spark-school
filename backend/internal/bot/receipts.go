@@ -128,6 +128,13 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) error {
 	}
 	username = strings.TrimPrefix(username, "@")
 
+	// Legacy sessions may carry the discount percentage but lose the code
+	// itself. The user's profile is the source of truth in that case.
+	promoCode := receiptPromoCode(session.PromoCode, session.DiscountPct, dbUser.PromoCode)
+	if session.PromoCode == "" && promoCode != "" {
+		session.PromoCode = promoCode
+	}
+
 	receipt := models.PaymentReceipt{
 		FileHash:      fileHash,
 		FileUniqueID:  fileUniqueID,
@@ -138,7 +145,7 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) error {
 		Amount:        amount,
 		AmountKopecks: int64(money.FromRubles(amount)),
 		Status:        "pending",
-		PromoCode:     session.PromoCode,
+		PromoCode:     promoCode,
 		CreatedAt:     time.Now(),
 	}
 
@@ -157,7 +164,7 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) error {
 			Step:             "order_created",
 			Source:           "telegram",
 			Tier:             chosenTier,
-			PromoCode:        session.PromoCode,
+			PromoCode:        promoCode,
 			Metadata:         metadata,
 			CreatedAt:        time.Now(),
 		}).Error
@@ -167,8 +174,8 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) error {
 		// The selected tier is an intent, not an entitlement. It is applied
 		// only after the payment is confirmed, so an unpaid receipt cannot
 		// silently change the student's paid tier.
-		if session.PromoCode != "" && u.PromoCode == "" {
-			u.PromoCode = session.PromoCode
+		if promoCode != "" && u.PromoCode == "" {
+			u.PromoCode = promoCode
 		} else if u.PromoCode == "" && (amount == 6555.0 || amount == 14155.0 || amount == 3790.0) {
 			u.PromoCode = "SPARK5"
 		}
@@ -370,4 +377,16 @@ func (s *BotService) SendAdminReceiptCard(adminID int64, receipt *models.Payment
 		log.Printf("[Bot Receipt Card] SendMessage failed for receipt #%d: %v", receipt.ID, err)
 	}
 	return err
+}
+
+// receiptPromoCode keeps the code attached to a discounted receipt even when
+// an old session persisted DiscountPct but lost PromoCode.
+func receiptPromoCode(sessionPromo string, discountPct int, userPromo string) string {
+	if code := strings.ToUpper(strings.TrimSpace(sessionPromo)); code != "" {
+		return code
+	}
+	if discountPct > 0 {
+		return strings.ToUpper(strings.TrimSpace(userPromo))
+	}
+	return ""
 }
