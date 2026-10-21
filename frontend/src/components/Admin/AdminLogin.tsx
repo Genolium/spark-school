@@ -166,10 +166,9 @@ export function AdminLogin({ onUnlock }: AdminLoginProps) {
           </button>
         </form>
 
-        {/* Test Credentials */}
         <div className="mt-6 pt-4 border-t border-white/10">
           <div className="text-[11px] font-mono text-slate-500 text-center">
-            Стандартные данные для входа: логин <strong>admin</strong>, пароль <strong>SparkAdmin2026!</strong>
+            Учётные данные администратора задаются только через переменные окружения сервера.
           </div>
         </div>
       </div>

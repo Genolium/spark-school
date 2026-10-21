@@ -297,12 +297,13 @@ services:
     restart: unless-stopped
     environment:
       - PORT=8080
-      - DATABASE_URL=postgres://spark_user:StrongPassword2026@postgres:5432/spark_db?sslmode=disable
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - JWT_SECRET=${JWT_SECRET}
+      - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET}
       - ADMIN_TELEGRAM_ID=${ADMIN_TELEGRAM_ID}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
-      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-SparkAdmin2026!}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - DOMAIN=sparkprep.ru
     depends_on:
       postgres:
@@ -316,7 +317,7 @@ services:
     restart: unless-stopped
     command: ["/app/spark-bot"]
     environment:
-      - DATABASE_URL=postgres://spark_user:StrongPassword2026@postgres:5432/spark_db?sslmode=disable
+      - DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?sslmode=disable
       - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
       - DOMAIN=sparkprep.ru
     depends_on:
