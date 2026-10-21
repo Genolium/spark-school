@@ -6,9 +6,8 @@ WORKDIR /app
 # Install certificates and build dependencies
 RUN apk add --no-cache git ca-certificates tzdata
 
-COPY go.mod ./
-# If go.sum exists, copy it, otherwise download modules
-RUN go mod download || true
+COPY go.mod go.sum ./
+RUN go mod download
 
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /app/spark-server ./cmd/server
