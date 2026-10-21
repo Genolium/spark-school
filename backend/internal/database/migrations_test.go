@@ -65,6 +65,14 @@ func TestPostgresMigrations_EmptyDatabaseAndRerun(t *testing.T) {
 		}
 	}
 
+	var reminderColumns int
+	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='call_bookings' AND column_name IN ('reminder_24_sent','reminder_1_sent')`).Scan(&reminderColumns); err != nil {
+		t.Fatal(err)
+	}
+	if reminderColumns != 2 {
+		t.Errorf("expected both Zoom reminder columns, got %d", reminderColumns)
+	}
+
 	for _, index := range []string{
 		"idx_active_slot_key", "idx_active_user_booking",
 		"idx_student_submission_version", "idx_referral_payment_level",
