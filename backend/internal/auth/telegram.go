@@ -25,8 +25,22 @@ type JWTClaims struct {
 	jwt.RegisteredClaims
 }
 
-// GenerateJWT creates a signed token with 30-day validity.
+// GenerateJWT creates a student token with a 7-day validity.
 func GenerateJWT(user *models.User, secret string) (string, error) {
+	return GenerateJWTWithTTL(user, secret, 7*24*time.Hour)
+}
+
+// GenerateAdminJWT creates a short-lived administrative token.
+func GenerateAdminJWT(user *models.User, secret string) (string, error) {
+	return GenerateJWTWithTTL(user, secret, 12*time.Hour)
+}
+
+// GenerateJWTWithTTL creates a signed token with a unique ID for revocation.
+func GenerateJWTWithTTL(user *models.User, secret string, ttl time.Duration) (string, error) {
+	jti, err := randomJTI()
+	if err != nil {
+		return "", err
+	}
 	claims := JWTClaims{
 		UserID:     user.ID,
 		TelegramID: user.TelegramID,
@@ -34,7 +48,8 @@ func GenerateJWT(user *models.User, secret string) (string, error) {
 		Role:       user.Role,
 		HasAccess:  user.HasAccess,
 		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(30 * 24 * time.Hour)),
+			ID:        jti,
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(ttl)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
 			Issuer:    "spark-school-auth",
 		},
@@ -85,6 +100,20 @@ func VerifyTelegramWidget(data map[string]string, botToken string) bool {
 	}
 
 	return true
+}
+
+func parseTokenString(tokenStr, secret string) (*JWTClaims, error) {
+	claims := &JWTClaims{}
+	token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method")
+		}
+		return []byte(secret), nil
+	})
+	if err != nil || !token.Valid {
+		return nil, fmt.Errorf("invalid session token")
+	}
+	return claims, nil
 }
 
 func parseToken(c *gin.Context, secret string) (*JWTClaims, error) {

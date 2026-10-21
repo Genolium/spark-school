@@ -324,14 +324,16 @@ func (s *Service) applyConfirmation(tx *gorm.DB, in ConfirmInput, result *Result
 	if user.AccessGrantedAt == nil {
 		user.AccessGrantedAt = &now
 	}
-	if in.Username != "" && user.Username == "" {
-		user.Username = in.Username
-	}
-	if in.AttributionToken != "" && user.AttributionToken == "" {
-		user.AttributionToken = in.AttributionToken
-	}
-	if in.VisitorID != "" && user.VisitorID == "" {
-		user.VisitorID = in.VisitorID
+	if user.AnonymizedAt == nil {
+		if in.Username != "" && user.Username == "" {
+			user.Username = in.Username
+		}
+		if in.AttributionToken != "" && user.AttributionToken == "" {
+			user.AttributionToken = in.AttributionToken
+		}
+		if in.VisitorID != "" && user.VisitorID == "" {
+			user.VisitorID = in.VisitorID
+		}
 	}
 	if in.PromoCode != "" {
 		user.PromoCode = strings.ToUpper(in.PromoCode)

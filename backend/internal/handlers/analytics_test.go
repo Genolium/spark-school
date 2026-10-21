@@ -70,7 +70,7 @@ func TestTrackAnalytics_WhitelistPIIAndSize(t *testing.T) {
 	if w := post(map[string]interface{}{"step": "not_a_real_step"}); w.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for unknown step, got %d", w.Code)
 	}
-	large := map[string]interface{}{"step": "landing_view", "metadata": map[string]interface{}{"blob": string(make([]byte, 5000))}}
+	large := map[string]interface{}{"step": "landing_view", "metadata": map[string]interface{}{"source": string(make([]byte, 5000))}}
 	if w := post(large); w.Code != http.StatusRequestEntityTooLarge {
 		t.Fatalf("expected 413 for oversized metadata, got %d", w.Code)
 	}

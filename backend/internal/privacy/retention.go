@@ -79,6 +79,12 @@ func (c *Cleaner) RunOnce(ctx context.Context) (int64, error) {
 		return deleted, res.Error
 	}
 	deleted += res.RowsAffected
+	// Operational tables: expired leases/tokens/sessions and old rate-limit rows.
+	cutoff24 := time.Now().Add(-24 * time.Hour)
+	_ = c.db.WithContext(ctx).Where("window_start < ?", cutoff24).Delete(&models.RateLimit{}).Error
+	_ = c.db.WithContext(ctx).Where("expires_at < ?", time.Now()).Delete(&models.RevokedToken{}).Error
+	_ = c.db.WithContext(ctx).Where("expires_at < ?", time.Now()).Delete(&models.BotSession{}).Error
+	_ = c.db.WithContext(ctx).Where("expires_at < ?", time.Now()).Delete(&models.SchedulerLease{}).Error
 	if deleted > 0 {
 		log.Printf("[Privacy] removed %d analytics rows older than %d days", deleted, c.days)
 	}

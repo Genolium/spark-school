@@ -10,6 +10,7 @@ const STEP_LABELS: Record<string, string> = {
   pricing_select_tier: "Выбор тарифа",
   bot_handoff: "Переход в Telegram",
   bot_lead: "Лид в боте",
+  checkout_started: "Начал оформление",
   order_created: "Заказ создан",
   payment_confirmed: "Оплата подтверждена",
 };

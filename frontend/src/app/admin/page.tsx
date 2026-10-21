@@ -31,13 +31,22 @@ export default function AdminPage() {
   const [unlocked, setUnlocked] = useState(false);
   const [activeTab, setActiveTab] = useState<AdminTab>("students");
 
+  // Start from an explicit empty state; never show invented revenue or users
+  // while the real admin request is loading or failing.
   const [stats, setStats] = useState<AdminStats>({
-    gross_volume: 289800,
-    active_students: 42,
-    total_registered: 656,
-    conversion_rate: 6.4,
-    pending_payouts_count: 3,
-    pending_payouts_sum: 8500,
+    gross_volume: 0,
+    active_students: 0,
+    total_registered: 0,
+    conversion_rate: 0,
+    pending_payouts_count: 0,
+    pending_payouts_sum: 0,
+    today_revenue: 0,
+    today_purchases: 0,
+    week_revenue: 0,
+    month_revenue: 0,
+    average_order_value: 0,
+    promo_usage_count: 0,
+    promo_saved_amount: 0,
   });
   const [students, setStudents] = useState<UserProfile[]>([]);
   const [payouts, setPayouts] = useState<PayoutRequest[]>([]);

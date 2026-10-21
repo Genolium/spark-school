@@ -23,6 +23,9 @@ func (s *BotService) startReminderWorker() {
 		case <-s.quitChan:
 			return
 		case <-ticker.C:
+			if !s.acquireSchedulerLease("bot:zoom_reminders", 15*time.Minute) {
+				continue
+			}
 			if err := s.sendDueZoomReminders(time.Now()); err != nil {
 				log.Printf("[Reminders] failed: %v", err)
 			}

@@ -43,6 +43,7 @@ services:
       - ADMIN_TELEGRAM_ID=${ADMIN_TELEGRAM_ID:-0}
       - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - ADMIN_TOTP_SECRET=${ADMIN_TOTP_SECRET:-}
       - DOMAIN=${DOMAIN:-so-called-spark.ru}
       - FRONTEND_URL=https://${DOMAIN:-so-called-spark.ru}
       - YOOKASSA_SHOP_ID=${YOOKASSA_SHOP_ID:-}
@@ -92,6 +93,7 @@ services:
       - FRONTEND_URL=https://${DOMAIN:-so-called-spark.ru}
       - JWT_SECRET=${JWT_SECRET:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
+      - ADMIN_TOTP_SECRET=${ADMIN_TOTP_SECRET:-}
       - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET:-}
       - DIGEST_HOUR=${DIGEST_HOUR:-21}
       - YOOKASSA_SHOP_ID=${YOOKASSA_SHOP_ID:-}

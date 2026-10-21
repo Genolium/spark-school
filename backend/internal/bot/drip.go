@@ -92,6 +92,9 @@ func (s *BotService) startDripWorker() {
 		case <-s.quitChan:
 			return
 		case <-ticker.C:
+			if !s.acquireSchedulerLease("bot:drip", 2*time.Minute) {
+				continue
+			}
 			s.processDueDripLeads()
 			s.processDueBasicUpsells()
 		}
@@ -114,12 +117,20 @@ func (s *BotService) processDueDripLeads() {
 	}
 
 	for _, lead := range dueLeads {
+		now := time.Now()
+		claim := s.db.Model(&models.DripLead{}).
+			Where("id = ? AND is_completed = FALSE AND (locked_until IS NULL OR locked_until < ?)", lead.ID, now).
+			Update("locked_until", now.Add(2*time.Minute))
+		if claim.Error != nil || claim.RowsAffected != 1 {
+			continue
+		}
 		// Double check if student has purchased
 		var user models.User
 		if err := s.db.Where("telegram_id = ?", lead.TelegramID).First(&user).Error; err == nil {
 			if user.HasAccess || user.RemindersOptOut {
 				lead.IsCompleted = true
 				lead.Stage = -1
+				lead.LockedUntil = nil
 				s.db.Save(&lead)
 				continue
 			}
@@ -133,6 +144,7 @@ func (s *BotService) processDueDripLeads() {
 			s.sendDripStep1(chatID, lead)
 			lead.Stage = 1
 			lead.NextTriggerAt = now.Add(22 * time.Hour) // Total 24 hours from start
+			lead.LockedUntil = nil
 			s.db.Save(&lead)
 
 		case 1:
@@ -140,6 +152,7 @@ func (s *BotService) processDueDripLeads() {
 			s.sendDripStep2(chatID, lead)
 			lead.Stage = 2
 			lead.NextTriggerAt = now.Add(24 * time.Hour) // Total 48 hours from start
+			lead.LockedUntil = nil
 			s.db.Save(&lead)
 
 		case 2:
@@ -147,6 +160,7 @@ func (s *BotService) processDueDripLeads() {
 			s.sendDripStep3(chatID, lead)
 			lead.Stage = 3
 			lead.IsCompleted = true
+			lead.LockedUntil = nil
 			s.db.Save(&lead)
 		}
 	}
@@ -314,13 +328,15 @@ func (s *BotService) processDueBasicUpsells() {
 	}
 
 	for _, student := range dueStudents {
+		now := time.Now()
+		claim := s.db.Model(&models.User{}).
+			Where("id = ? AND upsell_audit_sent = FALSE", student.ID).
+			Updates(map[string]interface{}{"upsell_audit_sent": true, "upsell_audit_sent_at": &now})
+		if claim.Error != nil || claim.RowsAffected != 1 {
+			continue
+		}
 		chatID := tu.ID(student.TelegramID)
 		s.sendBasicUpsellMessage(chatID, student)
-
-		now := time.Now()
-		student.UpsellAuditSent = true
-		student.UpsellAuditSentAt = &now
-		s.db.Save(&student)
 	}
 }
 

@@ -324,12 +324,12 @@ export const api = {
   },
 
   // Admin Login with Username & Password and Rate Limit handling
-  async adminLogin(username: string, password: string): Promise<{ success: boolean; token?: string; user?: UserProfile; error?: string; retryAfter?: number }> {
+  async adminLogin(username: string, password: string, totpCode?: string): Promise<{ success: boolean; token?: string; user?: UserProfile; error?: string; retryAfter?: number; totpRequired?: boolean }> {
     try {
       const res = await fetch(`${API_BASE}/admin/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password, totp_code: totpCode || "" }),
         credentials: "include",
       });
 

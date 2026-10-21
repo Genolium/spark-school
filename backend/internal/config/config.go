@@ -24,6 +24,7 @@ type Config struct {
 	AdminTelegramID        int64
 	AdminUsername          string
 	AdminPassword          string
+	AdminTOTPSecret        string
 	Domain                 string
 	FrontendURL            string
 	AntilopayPublicKey     string
@@ -80,6 +81,7 @@ func Load() *Config {
 		AdminTelegramID:        adminTGID,
 		AdminUsername:          getEnv("ADMIN_USERNAME", "admin"),
 		AdminPassword:          os.Getenv("ADMIN_PASSWORD"),
+		AdminTOTPSecret:        strings.TrimSpace(os.Getenv("ADMIN_TOTP_SECRET")),
 		Domain:                 getEnv("DOMAIN", "localhost"),
 		FrontendURL:            getEnv("FRONTEND_URL", "http://localhost:3000"),
 		AntilopayPublicKey:     getEnv("ANTILOPAY_PUBLIC_KEY", ""),

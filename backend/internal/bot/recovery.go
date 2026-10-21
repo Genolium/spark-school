@@ -54,6 +54,18 @@ func (s *BotService) recordOrderIntent(from *telego.User, tier string, amount fl
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}).Error
+
+	metadata := fmt.Sprintf(`{"tier":%q,"amount":%f,"source":%q}`, tier, amount, source)
+	_ = s.db.Create(&models.AnalyticsEvent{
+		VisitorID:        user.VisitorID,
+		AttributionToken: user.AttributionToken,
+		Step:             "checkout_started",
+		Source:           source,
+		Tier:             tier,
+		PromoCode:        promoCode,
+		Metadata:         metadata,
+		CreatedAt:        now,
+	}).Error
 }
 
 func (s *BotService) startRecoveryWorker() {
@@ -67,6 +79,9 @@ func (s *BotService) startRecoveryWorker() {
 		case <-s.quitChan:
 			return
 		case <-ticker.C:
+			if !s.acquireSchedulerLease("bot:recovery", 20*time.Minute) {
+				continue
+			}
 			now := time.Now()
 			if err := s.processAbandonedOrders(now); err != nil {
 				log.Printf("[Recovery] abandoned orders: %v", err)

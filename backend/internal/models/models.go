@@ -185,16 +185,17 @@ type PaymentOrder struct {
 
 // DripLead tracks progress of 72-hour automated nurture sequences for prospective students.
 type DripLead struct {
-	ID              uint      `gorm:"primaryKey" json:"id"`
-	TelegramID      int64     `gorm:"uniqueIndex;not null" json:"telegram_id"`
-	Username        string    `gorm:"size:64" json:"username"`
-	FirstName       string    `gorm:"size:128" json:"first_name"`
-	Stage           int       `gorm:"default:0" json:"stage"` // 0: new, 1: 2h sent, 2: 24h sent, 3: 48h sent, -1: cancelled/purchased
-	CalculatedScore int       `gorm:"default:0" json:"calculated_score"`
-	NextTriggerAt   time.Time `gorm:"index;not null" json:"next_trigger_at"`
-	IsCompleted     bool      `gorm:"default:false;index" json:"is_completed"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	ID              uint       `gorm:"primaryKey" json:"id"`
+	TelegramID      int64      `gorm:"uniqueIndex;not null" json:"telegram_id"`
+	Username        string     `gorm:"size:64" json:"username"`
+	FirstName       string     `gorm:"size:128" json:"first_name"`
+	Stage           int        `gorm:"default:0" json:"stage"` // 0: new, 1: 2h sent, 2: 24h sent, 3: 48h sent, -1: cancelled/purchased
+	CalculatedScore int        `gorm:"default:0" json:"calculated_score"`
+	NextTriggerAt   time.Time  `gorm:"index;not null" json:"next_trigger_at"`
+	IsCompleted     bool       `gorm:"default:false;index" json:"is_completed"`
+	LockedUntil     *time.Time `gorm:"index" json:"locked_until,omitempty"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
 }
 
 // FiscalReceipt stores issued official tax/self-employed receipts sent to students.
@@ -308,6 +309,7 @@ type AnalyticsEvent struct {
 	Tier             string    `gorm:"size:32;index" json:"tier,omitempty"`
 	PromoCode        string    `gorm:"size:32;index" json:"promo_code,omitempty"`
 	PaymentID        string    `gorm:"size:64;index" json:"payment_id,omitempty"`
+	SchemaVersion    int       `gorm:"default:1" json:"schema_version"`
 	Metadata         string    `gorm:"type:text" json:"metadata,omitempty"`
 	IP               string    `gorm:"size:45" json:"ip,omitempty"`
 	UserAgent        string    `gorm:"size:255" json:"user_agent,omitempty"`
@@ -320,4 +322,56 @@ type BackupHeartbeat struct {
 	LastSuccessAt time.Time `json:"last_success_at"`
 	FileName      string    `gorm:"size:255" json:"file_name,omitempty"`
 	SizeBytes     int64     `json:"size_bytes,omitempty"`
+}
+
+// RevokedToken is a JWT ID that must no longer be accepted.
+type RevokedToken struct {
+	JTI       string    `gorm:"primaryKey;size:64" json:"jti"`
+	ExpiresAt time.Time `gorm:"index" json:"expires_at"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// AdminAuditLog records privileged mutations.
+type AdminAuditLog struct {
+	ID              uint      `gorm:"primaryKey" json:"id"`
+	AdminUsername   string    `gorm:"size:64;index" json:"admin_username"`
+	AdminTelegramID int64     `json:"admin_telegram_id"`
+	Method          string    `gorm:"size:10;not null" json:"method"`
+	Path            string    `gorm:"size:255;not null" json:"path"`
+	Status          int       `gorm:"not null" json:"status"`
+	IP              string    `gorm:"size:45" json:"ip,omitempty"`
+	RequestID       string    `gorm:"size:64" json:"request_id,omitempty"`
+	CreatedAt       time.Time `gorm:"index" json:"created_at"`
+}
+
+// RateLimit is a shared sliding-window counter for multi-instance deployments.
+type RateLimit struct {
+	Key         string    `gorm:"primaryKey;size:255" json:"key"`
+	WindowStart time.Time `json:"window_start"`
+	Count       int       `gorm:"not null;default:0" json:"count"`
+}
+
+// BotSession persists the Telegram FSM across restarts.
+type BotSession struct {
+	TelegramID         int64     `gorm:"primaryKey" json:"telegram_id"`
+	State              string    `gorm:"size:32" json:"state"`
+	SelectedTier       string    `gorm:"size:32" json:"selected_tier"`
+	PromoCode          string    `gorm:"size:32" json:"promo_code"`
+	DiscountPct        int       `json:"discount_pct"`
+	IsUpgrade          bool      `json:"is_upgrade"`
+	UpgradeFromTier    string    `gorm:"size:32" json:"upgrade_from_tier"`
+	UpgradeToTier      string    `gorm:"size:32" json:"upgrade_to_tier"`
+	UpgradeAmount      float64   `gorm:"type:numeric(10,2)" json:"upgrade_amount"`
+	CalcAgeCitizenship bool      `json:"calc_age_citizenship"`
+	CalcStudyYear      string    `gorm:"size:32" json:"calc_study_year"`
+	CalcEnglishLevel   string    `gorm:"size:32" json:"calc_english_level"`
+	LastActivity       time.Time `gorm:"index" json:"last_activity"`
+	ExpiresAt          time.Time `gorm:"index" json:"expires_at"`
+}
+
+// SchedulerLease ensures only one instance runs a given background job.
+type SchedulerLease struct {
+	Name      string    `gorm:"primaryKey;size:64" json:"name"`
+	Owner     string    `gorm:"size:128" json:"owner"`
+	ExpiresAt time.Time `gorm:"index" json:"expires_at"`
 }

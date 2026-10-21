@@ -33,6 +33,7 @@ func setupHandlerDB(t *testing.T) *gorm.DB {
 		&models.ReferralTransaction{},
 		&models.OutboxEvent{},
 		&models.AnalyticsEvent{},
+		&models.AdminAuditLog{},
 		&models.ExperimentAssignment{},
 		&models.CallBooking{},
 		&models.StudentSubmission{},

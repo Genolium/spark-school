@@ -64,6 +64,7 @@ func (h *AdminHandler) Login(c *gin.Context) {
 	var req struct {
 		Username string `json:"username" binding:"required"`
 		Password string `json:"password" binding:"required"`
+		TOTPCode string `json:"totp_code"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Необходимо указать логин и пароль"})
@@ -88,6 +89,12 @@ func (h *AdminHandler) Login(c *gin.Context) {
 		return
 	}
 
+	if h.cfg.AdminTOTPSecret != "" && !auth.VerifyTOTP(h.cfg.AdminTOTPSecret, req.TOTPCode, time.Now()) {
+		time.Sleep(500 * time.Millisecond)
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Неверный или отсутствующий код 2FA", "totp_required": true})
+		return
+	}
+
 	adminUser := models.User{
 		ID:         1,
 		TelegramID: h.cfg.AdminTelegramID,
@@ -98,18 +105,32 @@ func (h *AdminHandler) Login(c *gin.Context) {
 		HasAccess:  true,
 	}
 
-	token, err := auth.GenerateJWT(&adminUser, h.cfg.JWTSecret)
+	token, err := auth.GenerateAdminJWT(&adminUser, h.cfg.JWTSecret)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка генерации токена"})
 		return
 	}
 
-	c.SetCookie("spark_session", token, 30*86400, "/", "", false, true)
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("spark_session", token, 12*3600, "/", "", h.cfg.IsProduction(), true)
 
 	c.JSON(http.StatusOK, gin.H{
 		"token": token,
 		"user":  adminUser,
 	})
+}
+
+// Logout revokes the current administrative token and clears the cookie.
+func (h *AdminHandler) Logout(c *gin.Context) {
+	value, ok := c.Get("jwt_claims")
+	if ok {
+		if claims, ok := value.(*auth.JWTClaims); ok {
+			_ = auth.RevokeJWT(h.db, claims)
+		}
+	}
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("spark_session", "", -1, "/", "", h.cfg.IsProduction(), true)
+	c.JSON(http.StatusOK, gin.H{"success": true})
 }
 
 // DailyStat represents daily revenue and order metrics for admin charts.

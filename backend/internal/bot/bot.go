@@ -47,7 +47,7 @@ func NewBotService(cfg *config.Config, db *gorm.DB) *BotService {
 		affiliateService: affService,
 		yooKassaService:  ykService,
 		paymentsService:  payments.NewService(db, affService),
-		sessions:         NewSessionManager(30 * time.Minute),
+		sessions:         NewSessionManager(30*time.Minute, db),
 		mediaCache:       NewMediaCache("media"),
 		notifyQueue:      make(chan queuedNotification, 500),
 		quitChan:         make(chan struct{}),
@@ -226,6 +226,11 @@ func (s *BotService) HandleUpdate(ctx context.Context, update *telego.Update) (e
 			err = fmt.Errorf("bot update panic: %v", r)
 			log.Printf("[Bot Panic] update_id=%d: %v", update.UpdateID, r)
 		}
+		if chatID := updateChatID(update); chatID != 0 && s.sessions != nil {
+			if session := s.sessions.Peek(chatID); session != nil {
+				s.sessions.Save(chatID, session)
+			}
+		}
 	}()
 
 	if ctx != nil {
@@ -241,6 +246,19 @@ func (s *BotService) HandleUpdate(ctx context.Context, update *telego.Update) (e
 		return s.handleMessage(update.Message)
 	}
 	return nil
+}
+
+func updateChatID(update *telego.Update) int64 {
+	if update == nil {
+		return 0
+	}
+	if update.Message != nil {
+		return update.Message.Chat.ID
+	}
+	if update.CallbackQuery != nil && update.CallbackQuery.Message != nil {
+		return update.CallbackQuery.Message.GetChat().ID
+	}
+	return 0
 }
 
 // Start launches the bot polling worker if Long Polling is configured.
@@ -2054,8 +2072,10 @@ func (s *BotService) SendNotification(telegramID int64, message string) error {
 			select {
 			case err := <-respChan:
 				return err
-			case <-time.After(3 * time.Second):
-				return nil
+			case <-time.After(10 * time.Second):
+				// Delivery was not confirmed. Outbox must retry instead of
+				// treating an unconfirmed send as success.
+				return fmt.Errorf("telegram notification timed out before delivery confirmation")
 			}
 		default:
 			log.Printf("[Bot Rate Limiter] Queue full, sending directly to %d", telegramID)
@@ -2237,6 +2257,11 @@ func (s *BotService) syncTelegramUser(from *telego.User) *models.User {
 		_ = s.db.Create(&affProfile).Error
 
 		log.Printf("[Bot User Sync] New lead registered in DB: @%s (ID: %d)", cleanUsername, tgID)
+		return &user
+	}
+
+	// Never resurrect personal data after an erasure request.
+	if user.AnonymizedAt != nil {
 		return &user
 	}
 
@@ -2456,6 +2481,9 @@ func (s *BotService) startDigestWorker() {
 			now := time.Now()
 			today := now.Format("2006-01-02")
 			if now.Hour() == targetHour && now.Minute() == 0 && lastSentDate != today {
+				if !s.acquireSchedulerLease("bot:digest", 2*time.Minute) {
+					continue
+				}
 				lastSentDate = today
 				log.Printf("[Daily Digest Cron] Automatically triggering curator daily digest for %s at %02d:%02d...", today, now.Hour(), now.Minute())
 				_, _ = s.SendCuratorDailyDigest()

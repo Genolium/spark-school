@@ -46,8 +46,8 @@ func TestPostgresMigrations_EmptyDatabaseAndRerun(t *testing.T) {
 	if err := sqlDB.QueryRow("SELECT MAX(version_id) FROM goose_db_version").Scan(&version); err != nil {
 		t.Fatalf("goose version: %v", err)
 	}
-	if version < 8 {
-		t.Fatalf("expected at least migration 8, got %d", version)
+	if version < 9 {
+		t.Fatalf("expected at least migration 9, got %d", version)
 	}
 
 	for _, table := range []string{
@@ -56,6 +56,7 @@ func TestPostgresMigrations_EmptyDatabaseAndRerun(t *testing.T) {
 		"student_progress", "call_bookings", "analytics_events",
 		"processed_telegram_updates", "course_pricings", "app_meta",
 		"order_intents", "experiment_assignments", "backup_heartbeat",
+		"revoked_tokens", "admin_audit_log", "rate_limits", "bot_sessions", "scheduler_leases",
 	} {
 		var exists bool
 		if err := sqlDB.QueryRow("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=$1)", table).Scan(&exists); err != nil {

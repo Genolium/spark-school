@@ -291,13 +291,16 @@ func main() {
 		api.Any("/payments/yookassa", security.WebhookMetricsMiddleware(metrics), yooKassaWebhookLimiter, yooKassaHandler.HandleWebhook)
 
 		// Admin Public Login (Username + Password -> JWT) with strict brute-force rate limiting (5 req/min)
-		adminLoginLimiter := security.RateLimitMiddleware(5, 1*time.Minute, "Слишком много попыток входа (максимум 5 в минуту). Пожалуйста, подождите 60 секунд.")
+		adminLoginLimiter := security.DatabaseRateLimitMiddleware(db, 5, 1*time.Minute, "admin_login", "Слишком много попыток входа (максимум 5 в минуту). Пожалуйста, подождите 60 секунд.")
 		api.POST("/admin/login", adminLoginLimiter, adminHandler.Login)
 
 		// Admin API (Protected by verified JWT role=admin)
 		adminGroup := api.Group("/admin")
-		adminGroup.Use(auth.AdminMiddleware(cfg.JWTSecret))
+		adminGroup.Use(auth.AdminMiddlewareWithRevocation(cfg.JWTSecret, db))
+		adminGroup.Use(handlers.AdminAuditMiddleware(db))
 		{
+			adminGroup.POST("/logout", adminHandler.Logout)
+			adminGroup.GET("/audit-log", adminHandler.ListAuditLog)
 			adminGroup.GET("/stats", adminHandler.GetStats)
 			adminGroup.GET("/analytics/funnel", handlers.GetFunnel(db))
 			adminGroup.GET("/analytics/experiments", handlers.GetExperiments(db))

@@ -12,6 +12,7 @@ export function AdminLogin({ onUnlock }: AdminLoginProps) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
+  const [totpCode, setTotpCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [lockoutSeconds, setLockoutSeconds] = useState(0);
@@ -44,13 +45,16 @@ export function AdminLogin({ onUnlock }: AdminLoginProps) {
     setLoading(true);
     setError(null);
 
-    const result = await api.adminLogin(username.trim(), password);
+    const result = await api.adminLogin(username.trim(), password, totpCode.trim());
     setLoading(false);
 
     if (result.success) {
       onUnlock();
     } else {
       setError(result.error || "Неверный логин или пароль администратора");
+      if (result.totpRequired) {
+        setError("Введите код 2FA из приложения-аутентификатора.");
+      }
       if (result.retryAfter && result.retryAfter > 0) {
         setLockoutSeconds(result.retryAfter);
       }
@@ -122,6 +126,29 @@ export function AdminLogin({ onUnlock }: AdminLoginProps) {
               >
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
               </button>
+            </div>
+          </div>
+
+          {/* Optional TOTP field; required only when ADMIN_TOTP_SECRET is set. */}
+          <div>
+            <label className="block text-xs font-mono text-slate-400 mb-1.5 uppercase tracking-wider">
+              Код 2FA (если включён)
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3.5 flex items-center pointer-events-none text-slate-400">
+                <ShieldCheck className="w-4 h-4" />
+              </div>
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                maxLength={6}
+                disabled={lockoutSeconds > 0 || loading}
+                placeholder="000000"
+                value={totpCode}
+                onChange={(e) => setTotpCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                className="w-full pl-10 pr-4 py-3 bg-white/10 border border-white/15 rounded-2xl text-white placeholder-slate-500 text-sm font-mono tracking-widest focus:outline-none focus:border-amber-400 transition-colors disabled:opacity-50"
+              />
             </div>
           </div>
 

@@ -40,15 +40,17 @@ var funnelOrder = []string{
 	"pricing_select_tier",
 	"bot_handoff",
 	"bot_lead",
+	"checkout_started",
 	"order_created",
 	"payment_confirmed",
 }
 
 // piiMetadataKeys are dropped before persistence. Analytics must not become a
 // second, unmanaged store of personal data.
-var piiMetadataKeys = map[string]struct{}{
-	"username": {}, "email": {}, "phone": {}, "name": {}, "first_name": {},
-	"last_name": {}, "telegram_username": {}, "address": {},
+var allowedMetadataKeys = map[string]struct{}{
+	"utm_source": {}, "utm_medium": {}, "utm_campaign": {}, "utm_content": {},
+	"source": {}, "tier": {}, "price": {}, "level": {}, "score": {},
+	"universityyear": {}, "tab": {}, "method": {},
 }
 
 type analyticsTrackRequest struct {
@@ -120,10 +122,13 @@ func TrackAnalytics(db *gorm.DB) gin.HandlerFunc {
 		metadata := make(map[string]interface{}, len(req.Metadata))
 		for key, value := range req.Metadata {
 			lower := strings.ToLower(key)
-			if _, isPII := piiMetadataKeys[lower]; isPII {
+			if _, allowed := allowedMetadataKeys[lower]; !allowed {
 				continue
 			}
-			metadata[key] = value
+			switch value.(type) {
+			case string, float64, bool, int, int64:
+				metadata[key] = value
+			}
 		}
 		metaBytes, err := json.Marshal(metadata)
 		if err != nil {
@@ -146,6 +151,7 @@ func TrackAnalytics(db *gorm.DB) gin.HandlerFunc {
 		}
 
 		event := models.AnalyticsEvent{
+			SchemaVersion:    1,
 			VisitorID:        visitorID,
 			AttributionToken: attributionToken,
 			Step:             step,
