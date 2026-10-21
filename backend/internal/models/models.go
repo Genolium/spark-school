@@ -232,17 +232,19 @@ type StudentProgress struct {
 
 // CallBooking tracks scheduled Zoom consultation and simulation interviews.
 type CallBooking struct {
-	ID          uint       `gorm:"primaryKey" json:"id"`
-	UserID      uint       `gorm:"index;not null" json:"user_id"`
-	TelegramID  int64      `gorm:"index;not null" json:"telegram_id"`
-	Username    string     `gorm:"size:64" json:"username"`
-	SlotKey     string     `gorm:"size:64;not null;index" json:"slot_key"`
-	SlotTime    string     `gorm:"size:128;not null" json:"slot_time"`
-	CallType    string     `gorm:"size:64;default:'zoom_simulation'" json:"call_type"`
-	Status      string     `gorm:"size:32;default:'confirmed';index" json:"status"` // 'confirmed', 'completed', 'cancelled'
-	ZoomLink    string     `gorm:"size:255" json:"zoom_link"`
-	CreatedAt   time.Time  `json:"created_at"`
-	CancelledAt *time.Time `json:"cancelled_at,omitempty"`
+	ID             uint       `gorm:"primaryKey" json:"id"`
+	UserID         uint       `gorm:"index;not null" json:"user_id"`
+	TelegramID     int64      `gorm:"index;not null" json:"telegram_id"`
+	Username       string     `gorm:"size:64" json:"username"`
+	SlotKey        string     `gorm:"size:64;not null;index" json:"slot_key"`
+	SlotTime       string     `gorm:"size:128;not null" json:"slot_time"`
+	CallType       string     `gorm:"size:64;default:'zoom_simulation'" json:"call_type"`
+	Status         string     `gorm:"size:32;default:'confirmed';index" json:"status"` // 'confirmed', 'completed', 'cancelled'
+	ZoomLink       string     `gorm:"size:255" json:"zoom_link"`
+	Reminder24Sent bool       `gorm:"column:reminder_24_sent;default:false;index" json:"reminder_24_sent"`
+	Reminder1Sent  bool       `gorm:"column:reminder_1_sent;default:false;index" json:"reminder_1_sent"`
+	CreatedAt      time.Time  `json:"created_at"`
+	CancelledAt    *time.Time `json:"cancelled_at,omitempty"`
 }
 
 // ProcessedTelegramUpdate is the persistent claim/lease record for a Telegram

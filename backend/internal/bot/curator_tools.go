@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"html"
 	"math/rand"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -905,14 +906,16 @@ func (s *BotService) SendInterviewTrainer(chatID telego.ChatID) {
 	s.send(m)
 }
 
-// SendCuratorQueue renders submissions pending review for project admin with actionable controls.
+// SendCuratorQueue renders the curator SLA queue: oldest first, VIP priority,
+// with age and overdue markers. Database remains the source of truth.
 func (s *BotService) SendCuratorQueue(chatID telego.ChatID) {
 	if s.db == nil {
 		return
 	}
 
 	var pending []models.StudentSubmission
-	s.db.Where("status = ?", "pending").Order("submitted_at ASC").Limit(15).Find(&pending)
+	s.db.Where("status IN ?", []string{"pending", "reviewing"}).
+		Order("submitted_at ASC").Limit(50).Find(&pending)
 
 	if len(pending) == 0 {
 		m := tu.Message(chatID, "🎉 <b>Очередь работ пуста!</b> Все эссе, резюме и видео проверены.").WithParseMode(telego.ModeHTML)
@@ -920,13 +923,51 @@ func (s *BotService) SendCuratorQueue(chatID telego.ChatID) {
 		return
 	}
 
+	tiers := make(map[int64]string, len(pending))
+	var userIDs []uint
+	for _, sub := range pending {
+		userIDs = append(userIDs, sub.UserID)
+	}
+	var users []models.User
+	if len(userIDs) > 0 {
+		s.db.Select("id, telegram_id, tier").Where("id IN ?", userIDs).Find(&users)
+		for _, u := range users {
+			tiers[u.TelegramID] = strings.ToLower(u.Tier)
+		}
+	}
+	sort.SliceStable(pending, func(i, j int) bool {
+		iVIP := tiers[pending[i].TelegramID] == "vip"
+		jVIP := tiers[pending[j].TelegramID] == "vip"
+		if iVIP != jVIP {
+			return iVIP
+		}
+		return pending[i].SubmittedAt.Before(pending[j].SubmittedAt)
+	})
+	if len(pending) > 15 {
+		pending = pending[:15]
+	}
+
+	now := time.Now()
+	overdue := 0
 	sb := strings.Builder{}
 	sb.WriteString(fmt.Sprintf("📬 <b>Очередь на проверку (%d работ):</b>\n\n", len(pending)))
 
 	var rows [][]telego.InlineKeyboardButton
 	for _, sub := range pending {
-		sb.WriteString(fmt.Sprintf("<b>#%d [%s]</b> @%s (v%d)\nСсылка: %s\nПодано: %s\n\n",
-			sub.ID, sub.WorkType, sub.Username, sub.Version, sub.Content, sub.SubmittedAt.Format("02.01 15:04")))
+		age := now.Sub(sub.SubmittedAt)
+		deadline := sub.SubmittedAt.Add(48 * time.Hour)
+		deadlineLabel := "до " + deadline.Format("02.01 15:04")
+		if now.After(deadline) {
+			overdue++
+			deadlineLabel = "⚠️ ПРОСРОЧЕНО"
+		}
+		priority := ""
+		if tiers[sub.TelegramID] == "vip" {
+			priority = " · ⭐ VIP"
+		}
+		sb.WriteString(fmt.Sprintf("<b>#%d [%s]%s</b> @%s (v%d)\nСсылка: %s\nВозраст: %s · SLA: %s\n\n",
+			sub.ID, html.EscapeString(sub.WorkType), priority, html.EscapeString(sub.Username), sub.Version,
+			sub.Content, humanAge(age), deadlineLabel))
 
 		rows = append(rows, []telego.InlineKeyboardButton{
 			tu.InlineKeyboardButton(fmt.Sprintf("✅ Принять #%d", sub.ID)).WithCallbackData(fmt.Sprintf("sub_review_%d", sub.ID)),
@@ -934,12 +975,23 @@ func (s *BotService) SendCuratorQueue(chatID telego.ChatID) {
 		})
 	}
 
+	sb.WriteString(fmt.Sprintf("<b>Просрочено:</b> %d\n\n", overdue))
 	sb.WriteString("<b>Команды куратора:</b>\n")
-	sb.WriteString("• <code>/reviewed [ID] [комментарий]</code> — одобрить работу и отправить отзыв\n")
-	sb.WriteString("• <code>/changes [ID] [замечания]</code> — запросить доработку с правками")
+	sb.WriteString("• <code>/reviewed [ID] [комментарий]</code> — одобрить и поставить уведомление в очередь\n")
+	sb.WriteString("• <code>/changes [ID] [замечания]</code> — запросить доработку")
 
 	m := tu.Message(chatID, sb.String()).WithParseMode(telego.ModeHTML).WithReplyMarkup(tu.InlineKeyboard(rows...))
 	s.send(m)
+}
+
+func humanAge(age time.Duration) string {
+	if age < time.Hour {
+		return fmt.Sprintf("%d мин", int(age.Minutes()))
+	}
+	if age < 48*time.Hour {
+		return fmt.Sprintf("%d ч", int(age.Hours()))
+	}
+	return fmt.Sprintf("%d дн", int(age.Hours()/24))
 }
 
 // ProcessSubmissionReview records a curator decision and enqueues the student

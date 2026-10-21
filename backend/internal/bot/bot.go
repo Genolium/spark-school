@@ -80,6 +80,9 @@ func NewBotService(cfg *config.Config, db *gorm.DB) *BotService {
 	// Start daily curator digest cron worker
 	go s.startDigestWorker()
 
+	// Start Zoom reminder worker (24h and 1h before the call)
+	go s.startReminderWorker()
+
 	return s
 }
 
@@ -983,6 +986,57 @@ func (s *BotService) processPromoInput(chatID telego.ChatID, from *telego.User, 
 	}
 }
 
+// studentStatusDetails renders the student's current program state: progress,
+// audit balance, pending work deadlines and the nearest Zoom call.
+func (s *BotService) studentStatusDetails(user *models.User) string {
+	if s.db == nil || user == nil {
+		return ""
+	}
+	var sb strings.Builder
+
+	var progress models.StudentProgress
+	if err := s.db.Where("telegram_id = ?", user.TelegramID).First(&progress).Error; err == nil {
+		done := 0
+		for _, step := range []bool{progress.Step1Done, progress.Step2Done, progress.Step3Done, progress.Step4Done, progress.Step5Done, progress.Step6Done} {
+			if step {
+				done++
+			}
+		}
+		sb.WriteString(fmt.Sprintf("\n📈 <b>Программа:</b> %d/6 этапов пройдено", done))
+	}
+
+	if strings.EqualFold(strings.TrimSpace(user.Tier), "basic") {
+		sb.WriteString(fmt.Sprintf("\n🔍 <b>Оплаченных аудитов:</b> %d", user.AuditCredits))
+	}
+
+	var pendingWorks int64
+	s.db.Model(&models.StudentSubmission{}).
+		Where("telegram_id = ? AND status IN ?", user.TelegramID, []string{"pending", "reviewing"}).
+		Count(&pendingWorks)
+	if pendingWorks > 0 {
+		var oldest models.StudentSubmission
+		if err := s.db.Where("telegram_id = ? AND status IN ?", user.TelegramID, []string{"pending", "reviewing"}).
+			Order("submitted_at ASC").First(&oldest).Error; err == nil {
+			deadline := oldest.SubmittedAt.Add(48 * time.Hour)
+			overdue := time.Now().After(deadline)
+			label := deadline.Format("02.01 15:04")
+			if overdue {
+				label = "просрочен — куратор уже уведомлён"
+			}
+			sb.WriteString(fmt.Sprintf("\n📝 <b>Работ в очереди:</b> %d (ближайший ответ до %s)", pendingWorks, label))
+		} else {
+			sb.WriteString(fmt.Sprintf("\n📝 <b>Работ в очереди:</b> %d", pendingWorks))
+		}
+	}
+
+	var booking models.CallBooking
+	if err := s.db.Where("telegram_id = ? AND status = ? AND cancelled_at IS NULL", user.TelegramID, "confirmed").
+		Order("slot_key ASC").First(&booking).Error; err == nil {
+		sb.WriteString(fmt.Sprintf("\n📅 <b>Ближайший Zoom:</b> %s", booking.SlotTime))
+	}
+	return sb.String()
+}
+
 func (s *BotService) sendStatusMessage(chatID telego.ChatID, from *telego.User) {
 	if s.bot == nil {
 		return
@@ -1006,13 +1060,14 @@ func (s *BotService) sendStatusMessage(chatID telego.ChatID, from *telego.User) 
 			tierTitle = "VIP"
 		}
 
+		statusDetails := s.studentStatusDetails(&user)
 		reply := fmt.Sprintf(`%s <b>Ваш доступ активен!</b>
 
 🎓 Тариф: <b>%s</b>
 
 %s Добро пожаловать в проект <b>«так называемый SPARK»</b>.
 Ваша ссылка в закрытый канал потока:
-%s`, heart, tierTitle, sun, inviteLink)
+%s%s`, heart, tierTitle, sun, inviteLink, statusDetails)
 
 		btnChannel := tu.InlineKeyboardButton("Открыть закрытый канал 🚀").WithURL(inviteLink)
 		rows := [][]telego.InlineKeyboardButton{
