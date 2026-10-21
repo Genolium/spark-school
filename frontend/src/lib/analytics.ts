@@ -16,6 +16,7 @@ export interface FunnelEvent {
   timestamp: string;
   visitor_id: string;
   attribution_token: string;
+  experiments?: Record<string, string>;
   metadata?: Record<string, any>;
 }
 
@@ -71,6 +72,22 @@ export function getAttributionToken(): string {
   }
 }
 
+function experimentAssignments(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const result: Record<string, string> = {};
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key || !key.startsWith("spark_exp_")) continue;
+      const variant = localStorage.getItem(key);
+      if (variant) result[key.slice("spark_exp_".length)] = variant;
+    }
+  } catch {
+    // Ignore storage errors.
+  }
+  return result;
+}
+
 function campaignContext(): Record<string, string> {
   if (typeof window === "undefined") return {};
   try {
@@ -96,6 +113,7 @@ export function trackFunnelStep(step: FunnelStep, metadata?: Record<string, any>
     timestamp: new Date().toISOString(),
     visitor_id: visitorId,
     attribution_token: attributionToken,
+    experiments: experimentAssignments(),
     metadata: { ...campaignContext(), ...(metadata || {}) },
   };
 

@@ -15,6 +15,7 @@ import { FaqSection } from "@/components/FaqSection";
 import { Footer } from "@/components/Footer";
 import { ChancesModal } from "@/components/Modals/ChancesModal";
 import { ReferralTracker } from "@/components/ReferralTracker";
+import { RecoveryBanner } from "@/components/RecoveryBanner";
 import { DemoLessonSection } from "@/components/DemoLessonSection";
 import { trackFunnelStep, getAttributionToken } from "@/lib/analytics";
 
@@ -131,6 +132,8 @@ export default function HomePage() {
         isOpen={isChancesOpen}
         onClose={() => setIsChancesOpen(false)}
       />
+
+      <RecoveryBanner onOpenDiagnostic={() => setIsChancesOpen(true)} />
 
       {/* Canonical checkout: direct Telegram deep link with attribution token.
           The unused web PaymentModal is intentionally not mounted. */}

@@ -11,6 +11,7 @@ import { PromosTable } from "@/components/Admin/PromosTable";
 import { PricingSettingsTable } from "@/components/Admin/PricingSettingsTable";
 import { RevenueAnalyticsCharts } from "@/components/Admin/RevenueAnalyticsCharts";
 import { FunnelAnalytics } from "@/components/Admin/FunnelAnalytics";
+import { ExperimentsReport } from "@/components/Admin/ExperimentsReport";
 import { api, AdminStats, UserProfile, PayoutRequest, PromoCode } from "@/lib/api";
 import {
   ShieldCheck,
@@ -276,6 +277,7 @@ export default function AdminPage() {
             {activeTab === "analytics" && (
               <div>
                 <FunnelAnalytics />
+                <ExperimentsReport />
                 <FinancialStats stats={stats} />
                 <RevenueAnalyticsCharts stats={stats} />
               </div>

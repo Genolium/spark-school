@@ -6,12 +6,14 @@ import { Check, ArrowUpRight, ShieldCheck, CreditCard, Sparkles, Crown, Trending
 import { api, PlacesStats, CoursePricing } from "@/lib/api";
 import { DeadlineCountdown } from "./DeadlineCountdown";
 import { trackFunnelStep } from "@/lib/analytics";
+import { getExperiment } from "@/lib/experiments";
 
 interface PricingSectionProps {
   onOpenPayment?: (tier?: "basic" | "accelerator" | "vip") => void;
 }
 
 export function PricingSection({ onOpenPayment }: PricingSectionProps) {
+  const pricingCtaVariant = getExperiment("pricing_cta_copy");
   const [places, setPlaces] = useState<PlacesStats>({
     total_capacity: 25,
     active_students: 16,
@@ -353,7 +355,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
             }}
             className="btn-primary-mono w-full py-4 text-sm font-bold flex items-center justify-center gap-2 group shadow-xl active:scale-95"
           >
-            <span>Занять место за {formatRub(pricing.accelerator_price)} ₽</span>
+            <span>{pricingCtaVariant === "action" ? "Оплатить и начать" : `Занять место за ${formatRub(pricing.accelerator_price)} ₽`}</span>
             <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
           </button>
         </motion.div>

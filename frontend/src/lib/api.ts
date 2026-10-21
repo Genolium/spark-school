@@ -223,6 +223,17 @@ export interface FunnelStepMetric {
   conversion_from_previous: number;
 }
 
+export interface ExperimentMetric {
+  experiment: string;
+  variant: string;
+  visitors: number;
+  bot_leads: number;
+  orders: number;
+  payers: number;
+  revenue: number;
+  conversion: number;
+}
+
 export interface FunnelData {
   filters: { from: string; to: string; source: string; campaign: string; tier: string; promo: string };
   steps: FunnelStepMetric[];
@@ -943,6 +954,21 @@ export const api = {
       });
       if (!res.ok) return null;
       return (await res.json()) as FunnelData;
+    } catch {
+      return null;
+    }
+  },
+
+  async getExperiments(): Promise<ExperimentMetric[] | null> {
+    const token = getAdminToken();
+    try {
+      const res = await fetch(`${API_BASE}/admin/analytics/experiments`, {
+        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+        credentials: "include",
+      });
+      if (!res.ok) return null;
+      const json = await res.json();
+      return (json.experiments || []) as ExperimentMetric[];
     } catch {
       return null;
     }

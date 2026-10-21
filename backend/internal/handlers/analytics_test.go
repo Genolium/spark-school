@@ -30,6 +30,7 @@ func TestTrackAnalytics_WhitelistPIIAndSize(t *testing.T) {
 		"step":              "landing_view",
 		"visitor_id":        "visitor-1",
 		"attribution_token": "a12345678",
+		"experiments":       map[string]string{"hero_cta_copy": "benefit", "unknown": "x"},
 		"metadata": map[string]interface{}{
 			"utm_source": "telegram",
 			"username":   "should-not-be-stored",
@@ -47,6 +48,11 @@ func TestTrackAnalytics_WhitelistPIIAndSize(t *testing.T) {
 	}
 	if bytes.Contains([]byte(event.Metadata), []byte("should-not-be-stored")) {
 		t.Fatalf("PII leaked into metadata: %s", event.Metadata)
+	}
+	var assignments []models.ExperimentAssignment
+	db.Find(&assignments)
+	if len(assignments) != 1 || assignments[0].Experiment != "hero_cta_copy" || assignments[0].Variant != "benefit" {
+		t.Fatalf("unexpected experiment assignments: %+v", assignments)
 	}
 
 	// The browser may not fabricate a paid conversion.

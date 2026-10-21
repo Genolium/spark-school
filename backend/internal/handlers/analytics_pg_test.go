@@ -51,7 +51,7 @@ func analyticsPGDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.AnalyticsEvent{}, &models.PaymentTransaction{}); err != nil {
+	if err := db.AutoMigrate(&models.AnalyticsEvent{}, &models.PaymentTransaction{}, &models.ExperimentAssignment{}); err != nil {
 		t.Fatal(err)
 	}
 	return db
@@ -114,5 +114,48 @@ func TestPostgres_FunnelUsesEventsAndPaymentTransactions(t *testing.T) {
 	}
 	if counts["payment_confirmed"] != 1 {
 		t.Fatalf("expected one confirmed payment event, got %d", counts["payment_confirmed"])
+	}
+}
+
+func TestPostgres_ExperimentsUseConfirmedPayments(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := analyticsPGDB(t)
+	now := time.Now()
+	db.Create(&models.ExperimentAssignment{Experiment: "hero_cta_copy", Variant: "control", VisitorID: "exp-v1", CreatedAt: now})
+	db.Create(&models.ExperimentAssignment{Experiment: "hero_cta_copy", Variant: "benefit", VisitorID: "exp-v2", CreatedAt: now})
+	db.Create(&models.AnalyticsEvent{VisitorID: "exp-v1", Step: "bot_lead", CreatedAt: now})
+	db.Create(&models.AnalyticsEvent{VisitorID: "exp-v1", Step: "order_created", CreatedAt: now})
+	db.Create(&models.AnalyticsEvent{VisitorID: "exp-v2", Step: "bot_lead", CreatedAt: now})
+	db.Create(&models.PaymentTransaction{
+		PaymentID: "exp-pay-1", TelegramID: 1, VisitorID: "exp-v1", Tier: "accelerator",
+		Amount: 6900, Status: "SUCCESS", Currency: "RUB", CreatedAt: now,
+	})
+
+	r := gin.New()
+	r.GET("/experiments", GetExperiments(db))
+	req := httptest.NewRequest("GET", "/experiments", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var response struct {
+		Experiments []experimentRow `json:"experiments"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &response); err != nil {
+		t.Fatal(err)
+	}
+	if len(response.Experiments) != 2 {
+		t.Fatalf("expected two variants, got %d", len(response.Experiments))
+	}
+	byVariant := map[string]experimentRow{}
+	for _, row := range response.Experiments {
+		byVariant[row.Variant] = row
+	}
+	if byVariant["control"].Payers != 1 || byVariant["control"].Revenue != 6900 || byVariant["control"].Conversion != 100 {
+		t.Fatalf("unexpected control metrics: %+v", byVariant["control"])
+	}
+	if byVariant["benefit"].Payers != 0 || byVariant["benefit"].BotLeads != 1 {
+		t.Fatalf("unexpected benefit metrics: %+v", byVariant["benefit"])
 	}
 }

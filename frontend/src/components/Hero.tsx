@@ -6,6 +6,7 @@ import { motion } from "framer-motion";
 import { ArrowUpRight, CheckCircle2, Video, FileText } from "lucide-react";
 import { api, PlacesStats, CoursePricing } from "@/lib/api";
 import { trackFunnelStep } from "@/lib/analytics";
+import { getExperiment } from "@/lib/experiments";
 
 interface HeroProps {
   onOpenPayment?: () => void;
@@ -44,6 +45,14 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroPro
     pricing.vip_price,
   ].filter((p): p is number => typeof p === "number" && p > 0);
   const minPrice = validPrices.length > 0 ? Math.min(...validPrices) : 3990;
+
+  const ctaVariant = getExperiment("hero_cta_copy");
+  const ctaLabel =
+    ctaVariant === "benefit"
+      ? `Начать подготовку от ${formatRub(minPrice)} ₽`
+      : ctaVariant === "diagnostic"
+        ? "Пройти диагностику и выбрать тариф"
+        : `Выбрать тариф от ${formatRub(minPrice)} ₽`;
 
   return (
     <section id="hero-canvas" className="relative w-full max-w-[1520px] mx-auto px-3 sm:px-6 pt-24 sm:pt-28 pb-8">
@@ -134,7 +143,7 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroPro
                   onClick={() => trackFunnelStep("pricing_select_tier", { source: "hero_cta" })}
                   className="btn-primary-mono px-8 py-4 text-sm sm:text-base flex items-center justify-center gap-2.5 active:scale-95 group shadow-2xl font-bold"
                 >
-                  <span>Выбрать тариф от {formatRub(minPrice)} ₽</span>
+                  <span>{ctaLabel}</span>
                   <ArrowUpRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 stroke-[2.5]" />
                 </a>
 

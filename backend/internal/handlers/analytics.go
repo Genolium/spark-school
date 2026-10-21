@@ -10,6 +10,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/spark-school/backend/internal/models"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 // Client-emitted funnel steps. Server-only steps (payment_confirmed, access
@@ -59,6 +60,13 @@ type analyticsTrackRequest struct {
 	Tier             string                 `json:"tier"`
 	PromoCode        string                 `json:"promo_code"`
 	Metadata         map[string]interface{} `json:"metadata"`
+	Experiments      map[string]string      `json:"experiments"`
+}
+
+// Only these experiments and variants may be assigned by the browser.
+var allowedExperiments = map[string]map[string]struct{}{
+	"hero_cta_copy":    {"control": {}, "benefit": {}, "diagnostic": {}},
+	"pricing_cta_copy": {"control": {}, "action": {}},
 }
 
 // TrackAnalytics ingests a whitelisted client funnel event.
@@ -126,6 +134,26 @@ func TrackAnalytics(db *gorm.DB) gin.HandlerFunc {
 			Metadata:         string(metaBytes),
 			CreatedAt:        time.Now(),
 		}
+		for name, variant := range req.Experiments {
+			variants, ok := allowedExperiments[name]
+			if !ok {
+				continue
+			}
+			if _, ok := variants[variant]; !ok {
+				continue
+			}
+			if visitorID == "" {
+				continue
+			}
+			_ = db.Clauses(clause.OnConflict{DoNothing: true}).Create(&models.ExperimentAssignment{
+				Experiment:       name,
+				Variant:          variant,
+				VisitorID:        visitorID,
+				AttributionToken: attributionToken,
+				CreatedAt:        time.Now(),
+			}).Error
+		}
+
 		if err := db.Create(&event).Error; err != nil {
 			log.Printf("[Analytics] failed to persist step %q: %v", step, err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "analytics event was not recorded"})
@@ -252,5 +280,70 @@ func GetFunnel(db *gorm.DB) gin.HandlerFunc {
 				"source":  "payment_transactions",
 			},
 		})
+	}
+}
+
+type experimentRow struct {
+	Experiment string  `json:"experiment"`
+	Variant    string  `json:"variant"`
+	Visitors   int64   `json:"visitors"`
+	BotLeads   int64   `json:"bot_leads"`
+	Orders     int64   `json:"orders"`
+	Payers     int64   `json:"payers"`
+	Revenue    float64 `json:"revenue"`
+	Conversion float64 `json:"conversion"`
+}
+
+// GetExperiments reports A/B results. The success metric is a confirmed
+// payment in payment_transactions, not a click or an event.
+func GetExperiments(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if db == nil {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "database is unavailable"})
+			return
+		}
+		var rows []experimentRow
+		err := db.Raw(`
+			WITH assignments AS (
+				SELECT DISTINCT experiment, variant, visitor_id
+				FROM experiment_assignments
+				WHERE visitor_id IS NOT NULL AND visitor_id <> ''
+			),
+			events AS (
+				SELECT visitor_id,
+				       BOOL_OR(step = 'bot_lead') AS has_lead,
+				       BOOL_OR(step = 'order_created') AS has_order
+				FROM analytics_events
+				WHERE visitor_id IS NOT NULL AND visitor_id <> ''
+				GROUP BY visitor_id
+			),
+			payments AS (
+				SELECT visitor_id, COUNT(*) AS payments, SUM(amount) AS revenue
+				FROM payment_transactions
+				WHERE status = 'SUCCESS' AND visitor_id IS NOT NULL AND visitor_id <> ''
+				GROUP BY visitor_id
+			)
+			SELECT a.experiment, a.variant,
+			       COUNT(*) AS visitors,
+			       COUNT(*) FILTER (WHERE COALESCE(e.has_lead, FALSE)) AS bot_leads,
+			       COUNT(*) FILTER (WHERE COALESCE(e.has_order, FALSE)) AS orders,
+			       COUNT(*) FILTER (WHERE COALESCE(p.payments, 0) > 0) AS payers,
+			       COALESCE(SUM(p.revenue), 0) AS revenue
+			FROM assignments a
+			LEFT JOIN events e ON e.visitor_id = a.visitor_id
+			LEFT JOIN payments p ON p.visitor_id = a.visitor_id
+			GROUP BY a.experiment, a.variant
+			ORDER BY a.experiment, a.variant`).Scan(&rows).Error
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "experiment query failed"})
+			return
+		}
+		for i := range rows {
+			if rows[i].Visitors > 0 {
+				rows[i].Conversion = roundAmount(float64(rows[i].Payers) / float64(rows[i].Visitors) * 100)
+			}
+			rows[i].Revenue = roundAmount(rows[i].Revenue)
+		}
+		c.JSON(http.StatusOK, gin.H{"experiments": rows})
 	}
 }

@@ -281,6 +281,7 @@ func main() {
 		{
 			adminGroup.GET("/stats", adminHandler.GetStats)
 			adminGroup.GET("/analytics/funnel", handlers.GetFunnel(db))
+			adminGroup.GET("/analytics/experiments", handlers.GetExperiments(db))
 			adminGroup.GET("/users", adminHandler.ListUsers)
 			adminGroup.POST("/users", adminHandler.CreateUser)
 			adminGroup.PUT("/users/:id", adminHandler.UpdateUser)
