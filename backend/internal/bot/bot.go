@@ -1625,7 +1625,7 @@ func (s *BotService) sendAccessNotificationToStudent(studentTelegramID int64, st
 	}
 
 	// Step 6: Pure plain unformatted text
-	plainText := fmt.Sprintf("Поздравляем! Оплата подтверждена.\n\nДобро пожаловать в проект «так называемый SPARK»!\nТвоя ссылка для входа в закрытый канал потока:\n%s\n\nСсылка является персональной и одноразовой.", inviteLink)
+	plainText := fmt.Sprintf("Поздравляем! Оплата подтверждена.\n\nДобро пожаловать в проект «так называемый SPARK»!\nТвоя ссылка для входа в закрытый канал потока:\n%s\n\nЧто дальше:\n1. Зайди в канал по ссылке.\n2. Иль напишет тебе в личку с несколькими вопросами — ответь, пожалуйста.\n3. Все задания и материалы — в канале.\n\nСсылка является персональной и одноразовой.", inviteLink)
 	plainMsg := tu.Message(studentChatID, plainText)
 
 	if _, err6 := s.bot.SendMessage(plainMsg); err6 == nil {

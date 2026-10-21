@@ -969,7 +969,7 @@ func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 				inviteLink = ""
 			}
 			if h.notifyFunc != nil {
-				msg := "🎉 Поздравляем! Ваш доступ к закрытому Telegram-каналу и комьюнити проекта «так называемый SPARK» успешно активирован.\n\nСсылка-приглашение в канал: " + inviteLink
+				msg := "🎉 Поздравляем! Ваш доступ к закрытому Telegram-каналу и комьюнити проекта «так называемый SPARK» успешно активирован.\n\nСсылка-приглашение в канал: " + inviteLink + "\n\nЧто дальше:\n1. Зайдите в канал по ссылке.\n2. Иль напишет вам в личку с несколькими вопросами — ответьте, пожалуйста.\n3. Все задания и материалы — в канале."
 				_ = h.notifyFunc(12345678, msg)
 			}
 		}
@@ -1101,7 +1101,7 @@ func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 				inviteLink = "https://t.me/+so_called_spark_private"
 			}
 			generatedInviteLink = inviteLink
-			msg := "🎉 Поздравляем! Ваш доступ к закрытому Telegram-каналу и комьюнити проекта «так называемый SPARK» успешно активирован.\n\nСсылка-приглашение в канал: " + inviteLink
+			msg := "🎉 Поздравляем! Ваш доступ к закрытому Telegram-каналу и комьюнити проекта «так называемый SPARK» успешно активирован.\n\nСсылка-приглашение в канал: " + inviteLink + "\n\nЧто дальше:\n1. Зайдите в канал по ссылке.\n2. Иль напишет вам в личку с несколькими вопросами — ответьте, пожалуйста.\n3. Все задания и материалы — в канале."
 			errSend := h.notifyFunc(user.TelegramID, msg)
 			if errSend != nil {
 				// Resilient fallback: enqueue to Outbox table for background retries

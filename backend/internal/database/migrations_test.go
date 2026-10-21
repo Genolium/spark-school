@@ -46,8 +46,8 @@ func TestPostgresMigrations_EmptyDatabaseAndRerun(t *testing.T) {
 	if err := sqlDB.QueryRow("SELECT MAX(version_id) FROM goose_db_version").Scan(&version); err != nil {
 		t.Fatalf("goose version: %v", err)
 	}
-	if version < 10 {
-		t.Fatalf("expected at least migration 10, got %d", version)
+	if version < 11 {
+		t.Fatalf("expected at least migration 11, got %d", version)
 	}
 
 	for _, table := range []string{
@@ -67,14 +67,6 @@ func TestPostgresMigrations_EmptyDatabaseAndRerun(t *testing.T) {
 		}
 	}
 
-	var onboardingColumns int
-	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='users' AND column_name IN ('onboarding_status','intro_sent_at','onboarding_replied_at','onboarding_completed_at','onboarding_notes')`).Scan(&onboardingColumns); err != nil {
-		t.Fatal(err)
-	}
-	if onboardingColumns != 5 {
-		t.Errorf("expected onboarding columns, got %d", onboardingColumns)
-	}
-
 	var kopecksColumns int
 	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='public' AND column_name='amount_kopecks' AND table_name IN ('payment_receipts','payment_transactions','payment_orders','referral_transactions','payout_requests')`).Scan(&kopecksColumns); err != nil {
 		t.Fatal(err)
@@ -88,6 +80,14 @@ func TestPostgresMigrations_EmptyDatabaseAndRerun(t *testing.T) {
 	}
 	if paidKopecks != 2 {
 		t.Errorf("expected user kopeck/anonymization columns, got %d", paidKopecks)
+	}
+
+	var onboardingColumns int
+	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='users' AND column_name IN ('onboarding_status','intro_sent_at','onboarding_replied_at','onboarding_completed_at','onboarding_notes')`).Scan(&onboardingColumns); err != nil {
+		t.Fatal(err)
+	}
+	if onboardingColumns != 0 {
+		t.Errorf("onboarding columns should be removed, got %d", onboardingColumns)
 	}
 
 	var recoveryColumns int

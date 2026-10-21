@@ -12,14 +12,12 @@ import { PricingSettingsTable } from "@/components/Admin/PricingSettingsTable";
 import { RevenueAnalyticsCharts } from "@/components/Admin/RevenueAnalyticsCharts";
 import { FunnelAnalytics } from "@/components/Admin/FunnelAnalytics";
 import { ExperimentsReport } from "@/components/Admin/ExperimentsReport";
-import { OnboardingBoard } from "@/components/Admin/OnboardingBoard";
 import { api, AdminStats, UserProfile, PayoutRequest, PromoCode } from "@/lib/api";
 import {
   ShieldCheck,
   RefreshCw,
   LogOut,
   Users,
-  UserCheck,
   DollarSign,
   Tag,
   Send,
@@ -27,7 +25,7 @@ import {
   BarChart3,
 } from "lucide-react";
 
-type AdminTab = "students" | "onboarding" | "analytics" | "promos" | "pricing" | "payouts";
+type AdminTab = "students" | "analytics" | "promos" | "pricing" | "payouts";
 
 export default function AdminPage() {
   const [unlocked, setUnlocked] = useState(false);
@@ -229,18 +227,6 @@ export default function AdminPage() {
               </button>
 
               <button
-                onClick={() => setActiveTab("onboarding")}
-                className={`px-5 py-2.5 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
-                  activeTab === "onboarding"
-                    ? "bg-sky-500 text-black shadow-lg"
-                    : "text-slate-700 dark:text-slate-300 hover:text-black dark:hover:text-white hover:bg-slate-300/70 dark:hover:bg-white/10"
-                }`}
-              >
-                <UserCheck className="w-4 h-4" />
-                <span>Онбординг</span>
-              </button>
-
-              <button
                 onClick={() => setActiveTab("analytics")}
                 className={`px-5 py-2.5 rounded-xl text-xs font-mono font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
                   activeTab === "analytics"
@@ -297,12 +283,6 @@ export default function AdminPage() {
             )}
 
             {/* Tab 2: Full Revenue Analytics */}
-            {activeTab === "onboarding" && (
-              <div>
-                <OnboardingBoard />
-              </div>
-            )}
-
             {activeTab === "analytics" && (
               <div>
                 <FunnelAnalytics />
