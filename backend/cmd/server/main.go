@@ -79,7 +79,7 @@ func main() {
 	defer outboxDispatcher.Stop()
 
 	metrics := security.NewMetrics()
-	monitor := monitoring.New(db, cfg.AdminTelegramID, botService.SendNotification, metrics)
+	monitor := monitoring.New(db, cfg.MonitoringTelegramID, botService.SendNotification, metrics)
 	monitor.Start()
 	defer monitor.Stop()
 

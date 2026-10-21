@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -229,6 +230,16 @@ func (d *Dispatcher) processPendingEvents() {
 	}
 }
 
+func isPermanentDeliveryError(err error) bool {
+	if err == nil {
+		return false
+	}
+	message := strings.ToLower(err.Error())
+	return strings.Contains(message, "chat not found") ||
+		strings.Contains(message, "bot was blocked by the user") ||
+		strings.Contains(message, "user is deactivated")
+}
+
 func (d *Dispatcher) processSingleEvent(event models.OutboxEvent) {
 	var procErr error
 
@@ -270,7 +281,12 @@ func (d *Dispatcher) processSingleEvent(event models.OutboxEvent) {
 		} else {
 			newCount := event.RetryCount + 1
 			newStatus := "pending"
-			if newCount >= event.MaxRetries {
+			if isPermanentDeliveryError(procErr) {
+				// Telegram will never accept this chat: retrying only creates
+				// repeated failed deliveries and monitoring noise.
+				newStatus = "ignored"
+				newCount = event.MaxRetries
+			} else if newCount >= event.MaxRetries {
 				newStatus = "failed"
 			}
 			// Exponential backoff: 30s, 1m, 2m, 4m ... capped at one hour.

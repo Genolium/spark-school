@@ -22,6 +22,7 @@ type Config struct {
 	TelegramChannelID      int64
 	JWTSecret              string
 	AdminTelegramID        int64
+	MonitoringTelegramID   int64
 	AdminUsername          string
 	AdminPassword          string
 	AdminTOTPSecret        string
@@ -58,6 +59,8 @@ func Load() *Config {
 	_ = godotenv.Load()
 
 	adminTGID, _ := strconv.ParseInt(getEnv("ADMIN_TELEGRAM_ID", "0"), 10, 64)
+	// 0 disables Telegram delivery for monitoring alerts; they still go to logs.
+	monitoringTGID, _ := strconv.ParseInt(getEnv("MONITORING_TELEGRAM_ID", "0"), 10, 64)
 	tgChannelID, _ := strconv.ParseInt(getEnv("TELEGRAM_CHANNEL_ID", "0"), 10, 64)
 	digestHour, _ := strconv.Atoi(getEnv("DIGEST_HOUR", "21"))
 	if digestHour < 0 || digestHour > 23 {
@@ -80,6 +83,7 @@ func Load() *Config {
 		TelegramChannelID:      tgChannelID,
 		JWTSecret:              strings.TrimSpace(os.Getenv("JWT_SECRET")),
 		AdminTelegramID:        adminTGID,
+		MonitoringTelegramID:   monitoringTGID,
 		AdminUsername:          getEnv("ADMIN_USERNAME", "admin"),
 		AdminPassword:          os.Getenv("ADMIN_PASSWORD"),
 		AdminTOTPSecret:        strings.TrimSpace(os.Getenv("ADMIN_TOTP_SECRET")),

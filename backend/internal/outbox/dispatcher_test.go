@@ -6,7 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/glebarez/sqlite"
 	"github.com/spark-school/backend/internal/models"
+	"gorm.io/gorm"
+	"gorm.io/gorm/logger"
 )
 
 func TestOutbox_ProcessSingleEvent_NotificationSuccess(t *testing.T) {
@@ -79,6 +82,47 @@ func TestOutbox_ProcessSingleEvent_AdminCardSuccess(t *testing.T) {
 	}
 	if sentAlert.ReceiptID != 42 || sentAlert.Amount != 6900.0 {
 		t.Errorf("unexpected payload: %+v", sentAlert)
+	}
+}
+
+func TestOutbox_PermanentChatNotFoundIsIgnored(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:outbox_permanent?mode=memory&cache=shared"), &gorm.Config{
+		Logger: logger.Default.LogMode(logger.Silent),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.AutoMigrate(&models.OutboxEvent{}); err != nil {
+		t.Fatal(err)
+	}
+
+	dispatcher := NewDispatcher(db, func(tgID int64, msg string) error {
+		return errors.New(`telego: sendMessage(): api: 400 "Bad Request: chat not found"`)
+	}, nil)
+
+	payloadBytes, _ := json.Marshal(TelegramNotificationPayload{
+		TelegramID: 876975569,
+		Message:    "Access granted",
+	})
+	event := models.OutboxEvent{
+		EventType:  "telegram_notification",
+		Payload:    string(payloadBytes),
+		Status:     "pending",
+		MaxRetries: 5,
+		CreatedAt:  time.Now(),
+	}
+	if err := db.Create(&event).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	dispatcher.processSingleEvent(event)
+
+	var reloaded models.OutboxEvent
+	if err := db.First(&reloaded, event.ID).Error; err != nil {
+		t.Fatal(err)
+	}
+	if reloaded.Status != "ignored" {
+		t.Fatalf("permanent chat-not-found must be ignored, got %q", reloaded.Status)
 	}
 }
 

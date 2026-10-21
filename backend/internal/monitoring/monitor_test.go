@@ -58,6 +58,27 @@ func TestMonitor_AlertsAndCooldown(t *testing.T) {
 	}
 }
 
+func TestMonitor_TelegramDeliveryDisabled(t *testing.T) {
+	db := testMonitorDB(t)
+	if err := db.Create(&models.OutboxEvent{EventType: "telegram_notification", Status: "failed", MaxRetries: 5}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	calls := 0
+	monitor := New(db, 0, func(int64, string) error {
+		calls++
+		return nil
+	}, security.NewMetrics(), func(context.Context) error { return nil })
+
+	alerts := monitor.CheckOnce(context.Background())
+	if len(alerts) == 0 {
+		t.Fatal("expected alerts to still be produced for logs")
+	}
+	if calls != 0 {
+		t.Fatalf("monitoring must not send Telegram messages when disabled, got %d calls", calls)
+	}
+}
+
 func TestMonitor_HealthyStateHasNoAlerts(t *testing.T) {
 	db := testMonitorDB(t)
 	now := time.Now()
