@@ -231,3 +231,38 @@ func TestPostgresMigrations_ReadinessChecksVersion(t *testing.T) {
 		t.Fatalf("expected version >= %d, got %d", RequiredSchemaVersion, version)
 	}
 }
+
+func TestPostgresMigrations_PartitionPreservesData(t *testing.T) {
+	sqlDB := migrationTestSQLDB(t)
+	goose.SetBaseFS(embedMigrations)
+	if err := goose.SetDialect("postgres"); err != nil {
+		t.Fatal(err)
+	}
+	if err := goose.UpTo(sqlDB, "migrations", 11); err != nil {
+		t.Fatalf("apply pre-partition schema: %v", err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO analytics_events (visitor_id, step, metadata, created_at)
+		VALUES ('visitor-old', 'landing_view', '{}', NOW() - INTERVAL '2 days')`); err != nil {
+		t.Fatal(err)
+	}
+	if err := goose.Up(sqlDB, "migrations"); err != nil {
+		t.Fatalf("apply partition migration: %v", err)
+	}
+	var count int
+	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM analytics_events WHERE visitor_id='visitor-old'`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 1 {
+		t.Fatalf("old analytics event was lost, got %d", count)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO analytics_events (visitor_id, step, created_at) VALUES ('visitor-new','landing_view',NOW())`); err != nil {
+		t.Fatal(err)
+	}
+	var partition string
+	if err := sqlDB.QueryRow(`SELECT tableoid::regclass::text FROM analytics_events WHERE visitor_id='visitor-new'`).Scan(&partition); err != nil {
+		t.Fatal(err)
+	}
+	if partition == "analytics_events_default" {
+		t.Fatalf("new event landed in default partition")
+	}
+}
