@@ -67,6 +67,10 @@ nano .env
 backend/frontend/caddy, проверяет `/health/ready` (PostgreSQL + версия миграций)
 и откатывается на предыдущие образы при ошибке.
 
+> После `git pull` пересоздай контейнеры, которые читают конфиги через bind mount:
+> `docker compose up -d --force-recreate caddy postgres_backup`.
+> Иначе Docker может продолжить использовать старый inode `Caddyfile`/`backup.sh`.
+
 > ⚠️ **TLS:** Caddy работает с `auto_https off` и слушает HTTP. Production-трафик
 > обязан приходить через внешний TLS-терминатор (Nginx, cloud load balancer или
 > отдельный Caddy с сертификатом). Без него сайт доступен только по HTTP.
