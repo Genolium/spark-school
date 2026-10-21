@@ -118,6 +118,17 @@ go run ./cmd/server
 будущего Mini App: отдельный клиент сможет работать с тем же JWT, платежами и
 правами, без второго backend.
 
+## 🔐 TLS и backup перед миграцией
+
+- TLS завершается внешним Nginx: `TLS.md` и `scripts/setup-tls.sh`.
+  Caddy слушает только `127.0.0.1:38080`.
+- `deploy.sh` перед сборкой и миграциями запускает
+  `scripts/predeploy-backup.sh`: проверяет `pg_dump`, gzip и наличие
+  `public.users`. Если backup не удался — деплой останавливается, рабочая
+  версия не трогается.
+- Backup складывается в `./backups/predeploy_*.sql.gz` с SHA-256 и хранит
+  последние 10 копий.
+
 ## 🧪 CI, ошибки и staging
 
 - `.github/workflows/ci.yml` запускает Go race tests на PostgreSQL, frontend

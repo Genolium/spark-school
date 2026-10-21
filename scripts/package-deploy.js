@@ -87,7 +87,8 @@ const rootFiles = [
   'MAIN.MD',
   'STAGING.md',
   'PITR.md',
-  'API.md'
+  'API.md',
+  'TLS.md'
 ];
 rootFiles.forEach(f => copyFileSafe(f));
 
@@ -95,6 +96,9 @@ rootFiles.forEach(f => copyFileSafe(f));
 console.log('📜 Copying deployment scripts...');
 copyFileSafe('scripts/backup.sh');
 copyFileSafe('scripts/restore-drill.sh');
+copyFileSafe('scripts/predeploy-backup.sh');
+copyFileSafe('scripts/nginx-spark.conf.template');
+copyFileSafe('scripts/setup-tls.sh');
 
 // (Do not copy .env to deploy folder - server keeps its own .env or uses .env.example)
 
@@ -192,6 +196,12 @@ fi
 # Refuse to deploy with the placeholder secrets shipped in .env.example.
 if grep -Eq '^(JWT_SECRET|ADMIN_PASSWORD|POSTGRES_PASSWORD|TELEGRAM_WEBHOOK_SECRET)=$' .env; then
     echo "❌ .env contains empty required secrets. Deployment aborted before touching running containers."
+    exit 1
+fi
+
+echo "💾 Creating a verified pre-deploy database backup..."
+if ! DOCKER_COMPOSE="$DOCKER_COMPOSE" sh ./scripts/predeploy-backup.sh; then
+    echo "❌ Pre-deploy backup failed. Deployment aborted; running containers were not touched."
     exit 1
 fi
 

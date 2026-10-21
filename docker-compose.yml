@@ -4,7 +4,8 @@ services:
     container_name: spark_caddy
     restart: unless-stopped
     ports:
-      - "${PORT_HTTP:-38080}:80"
+      # Only host Nginx/load balancer should reach Caddy.
+      - "127.0.0.1:${PORT_HTTP:-38080}:80"
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
