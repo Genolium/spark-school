@@ -1,6 +1,8 @@
 package database
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -12,7 +14,8 @@ import (
 
 func setupTestDB(t *testing.T) *gorm.DB {
 	t.Helper()
-	db, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{
+	dsn := fmt.Sprintf("file:%s?mode=memory&cache=shared", strings.ReplaceAll(t.Name(), "/", "_"))
+	db, err := gorm.Open(sqlite.Open(dsn), &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Silent),
 	})
 	if err != nil {
@@ -62,6 +65,41 @@ func TestReconcileHistoricalSales_PureUser(t *testing.T) {
 	}
 	if txs[0].Status != "SUCCESS" {
 		t.Errorf("expected transaction status SUCCESS, got %s", txs[0].Status)
+	}
+}
+
+func TestReconcileHistoricalSales_ReceiptPreservesPromoCode(t *testing.T) {
+	db := setupTestDB(t)
+
+	user := models.User{
+		TelegramID: 333333,
+		Username:   "promo_student",
+		Tier:       "accelerator",
+		PromoCode:  "SPARK5",
+		PaidAmount: 10440.50,
+		Role:       "student",
+	}
+	db.Create(&user)
+
+	receipt := models.PaymentReceipt{
+		TelegramID: user.TelegramID,
+		Username:   user.Username,
+		Amount:     10440.50,
+		Tier:       "accelerator",
+		Status:     "approved",
+		PromoCode:  "SPARK5",
+		CreatedAt:  time.Now(),
+	}
+	db.Create(&receipt)
+
+	ReconcileHistoricalSales(db)
+
+	var tx models.PaymentTransaction
+	if err := db.Where("payment_id = ?", fmt.Sprintf("RECEIPT_%d", receipt.ID)).First(&tx).Error; err != nil {
+		t.Fatal(err)
+	}
+	if tx.PromoCode != "SPARK5" {
+		t.Fatalf("expected promo_code SPARK5 on receipt transaction, got %q", tx.PromoCode)
 	}
 }
 

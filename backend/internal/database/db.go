@@ -19,7 +19,7 @@ var DB *gorm.DB
 
 // RequiredSchemaVersion is the migration version a process needs before it is
 // considered ready to serve traffic.
-const RequiredSchemaVersion int64 = 17
+const RequiredSchemaVersion int64 = 18
 
 // MigrationVersion returns the latest applied Goose version.
 func MigrationVersion(db *gorm.DB) (int64, error) {
@@ -203,6 +203,7 @@ func ReconcileHistoricalSales(db *gorm.DB) {
 				Status:     "SUCCESS",
 				PayMethod:  "sbp_receipt",
 				Source:     "sbp_receipt",
+				PromoCode:  pr.PromoCode,
 				CreatedAt:  pr.CreatedAt,
 			}
 			db.Create(&pt)
