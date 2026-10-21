@@ -121,13 +121,18 @@ func TestPostgres_ParallelReceiptApproval(t *testing.T) {
 		}
 	}
 
-	var txCount int64
-	db.Model(&models.PaymentTransaction{}).Where("payment_id = ?", fmt.Sprintf("RECEIPT_%d", receipt.ID)).Count(&txCount)
-	if txCount != 1 {
-		t.Fatalf("expected exactly one payment transaction, got %d", txCount)
+	var tx models.PaymentTransaction
+	if err := db.Where("payment_id = ?", fmt.Sprintf("RECEIPT_%d", receipt.ID)).First(&tx).Error; err != nil {
+		t.Fatal(err)
+	}
+	if tx.AmountKopecks != 690000 {
+		t.Fatalf("transaction must store integer kopecks, got %d", tx.AmountKopecks)
 	}
 	var user models.User
 	db.Where("telegram_id = ?", 1001).First(&user)
+	if user.PaidAmountKopecks != 690000 {
+		t.Fatalf("expected 690000 kopecks, got %d", user.PaidAmountKopecks)
+	}
 	if user.PaidAmount != 6900 || !user.HasAccess || user.Tier != "accelerator" {
 		t.Fatalf("unexpected user after parallel approval: %+v", user)
 	}
@@ -205,6 +210,9 @@ func TestPostgres_InitialPurchaseAndUpgrade(t *testing.T) {
 	if user.Tier != "vip" {
 		t.Fatalf("expected vip after upgrade, got %s", user.Tier)
 	}
+	if user.PaidAmountKopecks != 1499000 {
+		t.Fatalf("expected 1499000 kopecks, got %d", user.PaidAmountKopecks)
+	}
 	if user.PaidAmount != 14990 {
 		t.Fatalf("expected cumulative paid amount 14990, got %f", user.PaidAmount)
 	}
@@ -232,6 +240,9 @@ func TestPostgres_TwoEssayAudits(t *testing.T) {
 	db.Where("telegram_id = ?", 4001).First(&user)
 	if user.AuditCredits != 2 {
 		t.Fatalf("expected two audit credits, got %d", user.AuditCredits)
+	}
+	if user.PaidAmountKopecks != 380000 {
+		t.Fatalf("expected 380000 kopecks for two audits, got %d", user.PaidAmountKopecks)
 	}
 	var txCount int64
 	db.Model(&models.PaymentTransaction{}).Where("telegram_id = ?", 4001).Count(&txCount)
@@ -414,5 +425,10 @@ func TestPostgres_AffiliateCommissionOncePerPayment(t *testing.T) {
 	db.Where("user_id = ?", referrer.ID).First(&profile)
 	if profile.CurrentBalance != 1035 {
 		t.Fatalf("expected 1035 commission, got %f", profile.CurrentBalance)
+	}
+	var commission models.ReferralTransaction
+	db.Where("payment_id = ?", "aff-1").First(&commission)
+	if commission.AmountKopecks != 103500 {
+		t.Fatalf("expected integer commission 103500, got %d", commission.AmountKopecks)
 	}
 }

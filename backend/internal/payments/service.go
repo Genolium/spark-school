@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/spark-school/backend/internal/models"
+	"github.com/spark-school/backend/internal/money"
 	"github.com/spark-school/backend/internal/outbox"
 	"github.com/spark-school/backend/internal/services"
 	"gorm.io/gorm"
@@ -39,6 +40,7 @@ type ConfirmInput struct {
 	FirstName        string
 	Tier             string
 	Amount           float64
+	AmountKopecks    int64
 	Currency         string
 	PayMethod        string
 	PromoCode        string
@@ -58,6 +60,7 @@ type Result struct {
 	TelegramID       int64
 	Tier             string
 	Amount           float64
+	AmountKopecks    int64
 	AuditCredits     int
 	AlreadyProcessed bool
 	AccessGranted    bool
@@ -116,6 +119,9 @@ func (s *Service) confirmTx(tx *gorm.DB, in ConfirmInput) (*Result, error) {
 		in.Currency = "RUB"
 	}
 	in.Amount = roundMoney(in.Amount)
+	if in.AmountKopecks <= 0 {
+		in.AmountKopecks = int64(money.FromRubles(in.Amount))
+	}
 	if in.PaymentID == "" {
 		return nil, fmt.Errorf("payment id is required")
 	}
@@ -130,11 +136,12 @@ func (s *Service) confirmTx(tx *gorm.DB, in ConfirmInput) (*Result, error) {
 	}
 
 	result := &Result{
-		PaymentID:    in.PaymentID,
-		TelegramID:   in.TelegramID,
-		Tier:         in.Tier,
-		Amount:       in.Amount,
-		AuditCredits: in.AuditCredits,
+		PaymentID:     in.PaymentID,
+		TelegramID:    in.TelegramID,
+		Tier:          in.Tier,
+		Amount:        in.Amount,
+		AmountKopecks: in.AmountKopecks,
+		AuditCredits:  in.AuditCredits,
 	}
 	if err := s.applyConfirmation(tx, in, result, tierProvided, amountProvided); err != nil {
 		return nil, err
@@ -211,6 +218,7 @@ func (s *Service) applyConfirmation(tx *gorm.DB, in ConfirmInput, result *Result
 		Username:         in.Username,
 		Tier:             in.Tier,
 		Amount:           in.Amount,
+		AmountKopecks:    in.AmountKopecks,
 		OriginalAmount:   in.Amount,
 		Status:           "SUCCESS",
 		Currency:         in.Currency,
@@ -340,7 +348,13 @@ func (s *Service) applyConfirmation(tx *gorm.DB, in ConfirmInput, result *Result
 	} else if wasNew || rank(in.Tier) >= rank(user.Tier) {
 		user.Tier = in.Tier
 	}
-	user.PaidAmount = roundMoney(user.PaidAmount + in.Amount)
+	paidKopecks := money.Kopecks(user.PaidAmountKopecks)
+	if paidKopecks == 0 {
+		paidKopecks = money.FromRubles(user.PaidAmount)
+	}
+	paidKopecks += money.Kopecks(in.AmountKopecks)
+	user.PaidAmountKopecks = int64(paidKopecks)
+	user.PaidAmount = paidKopecks.ToRubles()
 	if err := tx.Save(&user).Error; err != nil {
 		return err
 	}

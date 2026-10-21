@@ -13,30 +13,32 @@ import (
 )
 
 type Config struct {
-	Env                   string
-	Port                  string
-	DatabaseURL           string
-	TelegramBotToken      string
-	TelegramAPIServer     string
-	TelegramInviteLink    string
-	TelegramChannelID     int64
-	JWTSecret             string
-	AdminTelegramID       int64
-	AdminUsername         string
-	AdminPassword         string
-	Domain                string
-	FrontendURL           string
-	AntilopayPublicKey    string
-	AntilopaySecretID     string
-	TributeAPIKey         string
-	EnotSecretKey         string
-	EnotShopID            string
-	YooKassaShopID        string
-	YooKassaSecretKey     string
-	TelegramBotUsername   string
-	TelegramWebhookSecret string
-	DigestHour            int
-	ZoomMeetingURL        string
+	Env                    string
+	Port                   string
+	DatabaseURL            string
+	TelegramBotToken       string
+	TelegramAPIServer      string
+	TelegramInviteLink     string
+	TelegramChannelID      int64
+	JWTSecret              string
+	AdminTelegramID        int64
+	AdminUsername          string
+	AdminPassword          string
+	Domain                 string
+	FrontendURL            string
+	AntilopayPublicKey     string
+	AntilopaySecretID      string
+	TributeAPIKey          string
+	EnotSecretKey          string
+	EnotShopID             string
+	YooKassaShopID         string
+	YooKassaSecretKey      string
+	TelegramBotUsername    string
+	TelegramWebhookSecret  string
+	DigestHour             int
+	ZoomMeetingURL         string
+	TrustedProxies         []string
+	AnalyticsRetentionDays int
 }
 
 // Known insecure production defaults that must never be used.
@@ -66,30 +68,32 @@ func Load() *Config {
 	}
 
 	return &Config{
-		Env:                   env,
-		Port:                  getEnv("PORT", "8080"),
-		DatabaseURL:           strings.TrimSpace(os.Getenv("DATABASE_URL")),
-		TelegramBotToken:      strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN")),
-		TelegramBotUsername:   getEnv("NEXT_PUBLIC_BOT_USERNAME", getEnv("TELEGRAM_BOT_USERNAME", "spark_prep_bot")),
-		TelegramAPIServer:     getEnv("TELEGRAM_API_SERVER", ""),
-		TelegramInviteLink:    getEnv("TELEGRAM_INVITE_LINK", ""),
-		TelegramChannelID:     tgChannelID,
-		JWTSecret:             strings.TrimSpace(os.Getenv("JWT_SECRET")),
-		AdminTelegramID:       adminTGID,
-		AdminUsername:         getEnv("ADMIN_USERNAME", "admin"),
-		AdminPassword:         os.Getenv("ADMIN_PASSWORD"),
-		Domain:                getEnv("DOMAIN", "localhost"),
-		FrontendURL:           getEnv("FRONTEND_URL", "http://localhost:3000"),
-		AntilopayPublicKey:    getEnv("ANTILOPAY_PUBLIC_KEY", ""),
-		AntilopaySecretID:     getEnv("ANTILOPAY_SECRET_ID", ""),
-		TributeAPIKey:         getEnv("TRIBUTE_API_KEY", ""),
-		EnotSecretKey:         getEnv("ENOT_SECRET_KEY", ""),
-		EnotShopID:            getEnv("ENOT_SHOP_ID", ""),
-		YooKassaShopID:        getEnv("YOOKASSA_SHOP_ID", "1491540"),
-		YooKassaSecretKey:     getEnv("YOOKASSA_SECRET_KEY", ""),
-		TelegramWebhookSecret: strings.TrimSpace(os.Getenv("TELEGRAM_WEBHOOK_SECRET")),
-		DigestHour:            digestHour,
-		ZoomMeetingURL:        getEnv("ZOOM_MEETING_URL", ""),
+		Env:                    env,
+		Port:                   getEnv("PORT", "8080"),
+		DatabaseURL:            strings.TrimSpace(os.Getenv("DATABASE_URL")),
+		TelegramBotToken:       strings.TrimSpace(os.Getenv("TELEGRAM_BOT_TOKEN")),
+		TelegramBotUsername:    getEnv("NEXT_PUBLIC_BOT_USERNAME", getEnv("TELEGRAM_BOT_USERNAME", "spark_prep_bot")),
+		TelegramAPIServer:      getEnv("TELEGRAM_API_SERVER", ""),
+		TelegramInviteLink:     getEnv("TELEGRAM_INVITE_LINK", ""),
+		TelegramChannelID:      tgChannelID,
+		JWTSecret:              strings.TrimSpace(os.Getenv("JWT_SECRET")),
+		AdminTelegramID:        adminTGID,
+		AdminUsername:          getEnv("ADMIN_USERNAME", "admin"),
+		AdminPassword:          os.Getenv("ADMIN_PASSWORD"),
+		Domain:                 getEnv("DOMAIN", "localhost"),
+		FrontendURL:            getEnv("FRONTEND_URL", "http://localhost:3000"),
+		AntilopayPublicKey:     getEnv("ANTILOPAY_PUBLIC_KEY", ""),
+		AntilopaySecretID:      getEnv("ANTILOPAY_SECRET_ID", ""),
+		TributeAPIKey:          getEnv("TRIBUTE_API_KEY", ""),
+		EnotSecretKey:          getEnv("ENOT_SECRET_KEY", ""),
+		EnotShopID:             getEnv("ENOT_SHOP_ID", ""),
+		YooKassaShopID:         getEnv("YOOKASSA_SHOP_ID", "1491540"),
+		YooKassaSecretKey:      getEnv("YOOKASSA_SECRET_KEY", ""),
+		TelegramWebhookSecret:  strings.TrimSpace(os.Getenv("TELEGRAM_WEBHOOK_SECRET")),
+		DigestHour:             digestHour,
+		ZoomMeetingURL:         getEnv("ZOOM_MEETING_URL", ""),
+		TrustedProxies:         parseList(getEnv("TRUSTED_PROXIES", "127.0.0.1,::1")),
+		AnalyticsRetentionDays: parseIntEnv("ANALYTICS_RETENTION_DAYS", 180),
 	}
 }
 
@@ -206,6 +210,24 @@ func (c *Config) Warnings() []string {
 		}
 	}
 	return warnings
+}
+
+func parseList(raw string) []string {
+	var out []string
+	for _, part := range strings.Split(raw, ",") {
+		if value := strings.TrimSpace(part); value != "" {
+			out = append(out, value)
+		}
+	}
+	return out
+}
+
+func parseIntEnv(key string, fallback int) int {
+	value, err := strconv.Atoi(strings.TrimSpace(os.Getenv(key)))
+	if err != nil || value <= 0 {
+		return fallback
+	}
+	return value
 }
 
 func isKnownInsecure(value string) bool {

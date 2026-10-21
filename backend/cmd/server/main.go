@@ -19,7 +19,9 @@ import (
 	"github.com/spark-school/backend/internal/database"
 	"github.com/spark-school/backend/internal/handlers"
 	"github.com/spark-school/backend/internal/models"
+	"github.com/spark-school/backend/internal/monitoring"
 	"github.com/spark-school/backend/internal/outbox"
+	"github.com/spark-school/backend/internal/privacy"
 	"github.com/spark-school/backend/internal/security"
 	"github.com/spark-school/backend/internal/services"
 	"gorm.io/gorm"
@@ -59,6 +61,15 @@ func main() {
 	outboxDispatcher.Start()
 	defer outboxDispatcher.Stop()
 
+	metrics := security.NewMetrics()
+	monitor := monitoring.New(db, cfg.AdminTelegramID, botService.SendNotification, metrics)
+	monitor.Start()
+	defer monitor.Stop()
+
+	cleaner := privacy.NewCleaner(db, cfg.AnalyticsRetentionDays)
+	cleaner.Start()
+	defer cleaner.Stop()
+
 	// Note: Standalone Telegram bot worker runs via cmd/bot/main.go.
 	// If RUN_EMBEDDED_BOT=true is set, run it embedded for simple development.
 	if os.Getenv("RUN_EMBEDDED_BOT") == "true" {
@@ -94,6 +105,11 @@ func main() {
 
 	// Gin Router
 	router := gin.New()
+	// Only these proxies may supply X-Forwarded-For. Without this, a client
+	// could spoof ClientIP and bypass per-IP rate limits.
+	if err := router.SetTrustedProxies(cfg.TrustedProxies); err != nil {
+		log.Fatalf("[FATAL] invalid TRUSTED_PROXIES: %v", err)
+	}
 	router.Use(gin.Logger())
 	router.Use(gin.Recovery())
 
@@ -121,12 +137,12 @@ func main() {
 	webhookLimiter := security.RateLimitMiddleware(60, 1*time.Minute, "Превышен лимит запросов к платежному шлюзу. Пожалуйста, подождите.")
 
 	// Top-level direct webhook routes (matches reverse proxy for /api/payments/*)
-	router.Any("/api/payments/webhook", webhookLimiter, paymentWebhookHandler.HandleAntilopayWebhook)
-	router.Any("/payments/webhook", webhookLimiter, paymentWebhookHandler.HandleAntilopayWebhook)
-	router.Any("/api/payments/tribute", webhookLimiter, paymentWebhookHandler.HandleTributeWebhook)
-	router.Any("/payments/tribute", webhookLimiter, paymentWebhookHandler.HandleTributeWebhook)
-	router.Any("/api/payments/yookassa", webhookLimiter, yooKassaHandler.HandleWebhook)
-	router.Any("/payments/yookassa", webhookLimiter, yooKassaHandler.HandleWebhook)
+	router.Any("/api/payments/webhook", security.WebhookMetricsMiddleware(metrics), webhookLimiter, paymentWebhookHandler.HandleAntilopayWebhook)
+	router.Any("/payments/webhook", security.WebhookMetricsMiddleware(metrics), webhookLimiter, paymentWebhookHandler.HandleAntilopayWebhook)
+	router.Any("/api/payments/tribute", security.WebhookMetricsMiddleware(metrics), webhookLimiter, paymentWebhookHandler.HandleTributeWebhook)
+	router.Any("/payments/tribute", security.WebhookMetricsMiddleware(metrics), webhookLimiter, paymentWebhookHandler.HandleTributeWebhook)
+	router.Any("/api/payments/yookassa", security.WebhookMetricsMiddleware(metrics), webhookLimiter, yooKassaHandler.HandleWebhook)
+	router.Any("/payments/yookassa", security.WebhookMetricsMiddleware(metrics), webhookLimiter, yooKassaHandler.HandleWebhook)
 
 	// Kubernetes/Compose probe endpoints (also reachable directly, not only through Caddy).
 	router.GET("/health/live", func(c *gin.Context) {
@@ -137,6 +153,7 @@ func main() {
 		defer cancel()
 		version, err := database.Ready(ctx, db)
 		if err != nil {
+			metrics.RecordReadinessFailure()
 			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready", "migration_version": version, "error": err.Error()})
 			return
 		}
@@ -159,6 +176,7 @@ func main() {
 			defer cancel()
 			version, err := database.Ready(ctx, db)
 			if err != nil {
+				metrics.RecordReadinessFailure()
 				c.JSON(http.StatusServiceUnavailable, gin.H{
 					"status":            "not_ready",
 					"migration_version": version,
@@ -208,13 +226,14 @@ func main() {
 		// metadata, no PII and an explicit error when persistence fails.
 		analyticsLimiter := security.RateLimitMiddleware(60, 1*time.Minute, "Слишком много событий аналитики.")
 		api.POST("/analytics/track", analyticsLimiter, handlers.TrackAnalytics(db))
+		api.POST("/analytics/experiments", analyticsLimiter, handlers.AssignExperiments(db))
 
 		// Telegram Bot Webhook endpoint. Authentication, a persistent
 		// claim/lease and idempotent business operations protect against
 		// duplicate delivery across any number of backend instances.
 		updateClaimStore := bot.NewUpdateClaimStore(db, 5*time.Minute)
 
-		api.POST("/bot/webhook", func(c *gin.Context) {
+		api.POST("/bot/webhook", security.WebhookMetricsMiddleware(metrics), func(c *gin.Context) {
 			if cfg.TelegramWebhookSecret == "" {
 				c.JSON(http.StatusServiceUnavailable, gin.H{"error": "telegram webhook secret is not configured"})
 				return
@@ -262,14 +281,14 @@ func main() {
 		})
 
 		// Payment Webhook endpoints (handles verification pings, callbacks, HMAC validation & access grant)
-		api.Any("/payments/webhook", paymentWebhookHandler.HandleAntilopayWebhook)
-		api.Any("/payments/tribute", paymentWebhookHandler.HandleTributeWebhook)
+		api.Any("/payments/webhook", security.WebhookMetricsMiddleware(metrics), paymentWebhookHandler.HandleAntilopayWebhook)
+		api.Any("/payments/tribute", security.WebhookMetricsMiddleware(metrics), paymentWebhookHandler.HandleTributeWebhook)
 
 		// YooKassa Payment Endpoints with strict per-IP rate limiting
 		yooKassaCreateLimiter := security.RateLimitMiddleware(20, 1*time.Minute, "Слишком много запросов на создание платежа. Пожалуйста, подождите 60 секунд.")
 		yooKassaWebhookLimiter := security.RateLimitMiddleware(60, 1*time.Minute, "Превышен лимит запросов к вебхуку.")
 		api.POST("/payments/yookassa/create", yooKassaCreateLimiter, yooKassaHandler.CreateCheckout)
-		api.Any("/payments/yookassa", yooKassaWebhookLimiter, yooKassaHandler.HandleWebhook)
+		api.Any("/payments/yookassa", security.WebhookMetricsMiddleware(metrics), yooKassaWebhookLimiter, yooKassaHandler.HandleWebhook)
 
 		// Admin Public Login (Username + Password -> JWT) with strict brute-force rate limiting (5 req/min)
 		adminLoginLimiter := security.RateLimitMiddleware(5, 1*time.Minute, "Слишком много попыток входа (максимум 5 в минуту). Пожалуйста, подождите 60 секунд.")
@@ -286,6 +305,7 @@ func main() {
 			adminGroup.POST("/users", adminHandler.CreateUser)
 			adminGroup.PUT("/users/:id", adminHandler.UpdateUser)
 			adminGroup.DELETE("/users/:id", adminHandler.DeleteUser)
+			adminGroup.POST("/users/:id/erase", adminHandler.EraseUser)
 			adminGroup.POST("/users/:id/access", adminHandler.ToggleAccess)
 			adminGroup.POST("/users/:id/receipt-issued", adminHandler.ToggleReceiptIssued)
 			adminGroup.POST("/users/:id/issue-receipt", adminHandler.IssueReceipt)

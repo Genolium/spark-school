@@ -39,5 +39,8 @@ func setupHandlerDB(t *testing.T) *gorm.DB {
 	); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
 	}
+	if err := db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_experiment_visitor_unique ON experiment_assignments(experiment, visitor_id) WHERE visitor_id <> ''").Error; err != nil {
+		t.Fatalf("failed to create experiment index: %v", err)
+	}
 	return db
 }

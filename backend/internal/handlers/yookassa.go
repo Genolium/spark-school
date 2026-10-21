@@ -16,6 +16,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/spark-school/backend/internal/config"
 	"github.com/spark-school/backend/internal/models"
+	"github.com/spark-school/backend/internal/money"
 	"github.com/spark-school/backend/internal/payments"
 	"github.com/spark-school/backend/internal/services"
 	"gorm.io/gorm"
@@ -171,6 +172,7 @@ func (h *YooKassaHandler) CreateCheckout(c *gin.Context) {
 		Username:         cleanUsername,
 		Tier:             tier,
 		Amount:           roundAmount(finalPrice),
+		AmountKopecks:    int64(money.FromRubles(finalPrice)),
 		Currency:         "RUB",
 		PromoCode:        cleanPromo,
 		Provider:         "yookassa",

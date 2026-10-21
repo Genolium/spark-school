@@ -1,6 +1,7 @@
 "use client";
 
-import { getVisitorId } from "./analytics";
+import { getAttributionToken, getVisitorId } from "./analytics";
+import { API_BASE } from "./api";
 
 export type ExperimentName = "hero_cta_copy" | "pricing_cta_copy";
 
@@ -41,6 +42,33 @@ export function getExperiment(name: ExperimentName): string {
     return variant;
   } catch {
     return definition.variants[0];
+  }
+}
+
+/**
+ * Ask the server for the canonical buckets and persist them locally. The local
+ * deterministic fallback is only for the first paint; the server assignment is
+ * what analytics and the experiment report use.
+ */
+export async function syncServerExperiments(): Promise<Record<string, string>> {
+  if (typeof window === "undefined") return {};
+  const visitorId = getVisitorId();
+  if (!visitorId) return {};
+  try {
+    const res = await fetch(`${API_BASE}/analytics/experiments`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ visitor_id: visitorId, attribution_token: getAttributionToken() }),
+    });
+    if (!res.ok) return {};
+    const json = (await res.json()) as { experiments?: Record<string, string> };
+    const assignments = json.experiments || {};
+    for (const [name, variant] of Object.entries(assignments)) {
+      localStorage.setItem(STORAGE_PREFIX + name, variant);
+    }
+    return assignments;
+  } catch {
+    return {};
   }
 }
 

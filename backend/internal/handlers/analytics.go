@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"log"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -63,10 +64,31 @@ type analyticsTrackRequest struct {
 	Experiments      map[string]string      `json:"experiments"`
 }
 
-// Only these experiments and variants may be assigned by the browser.
-var allowedExperiments = map[string]map[string]struct{}{
-	"hero_cta_copy":    {"control": {}, "benefit": {}, "diagnostic": {}},
-	"pricing_cta_copy": {"control": {}, "action": {}},
+// Server-side experiment definitions. The browser never chooses a variant:
+// the server derives it deterministically from the anonymous visitor id.
+var experimentVariants = map[string][]string{
+	"hero_cta_copy":    {"control", "benefit", "diagnostic"},
+	"pricing_cta_copy": {"control", "action"},
+}
+
+func assignVariant(visitorID, experiment string) string {
+	variants, ok := experimentVariants[experiment]
+	if !ok || len(variants) == 0 {
+		return ""
+	}
+	h := fnv32a(visitorID + ":" + experiment)
+	return variants[int(h%uint32(len(variants)))]
+}
+
+// fnv32a matches the FNV-1a implementation used by the frontend so the first
+// paint shows the same bucket the server stores.
+func fnv32a(input string) uint32 {
+	var hash uint32 = 2166136261
+	for i := 0; i < len(input); i++ {
+		hash ^= uint32(input[i])
+		hash *= 16777619
+	}
+	return hash
 }
 
 // TrackAnalytics ingests a whitelisted client funnel event.
@@ -134,24 +156,20 @@ func TrackAnalytics(db *gorm.DB) gin.HandlerFunc {
 			Metadata:         string(metaBytes),
 			CreatedAt:        time.Now(),
 		}
-		for name, variant := range req.Experiments {
-			variants, ok := allowedExperiments[name]
-			if !ok {
-				continue
+		if visitorID != "" {
+			for name := range experimentVariants {
+				variant := assignVariant(visitorID, name)
+				if variant == "" {
+					continue
+				}
+				_ = db.Clauses(clause.OnConflict{DoNothing: true}).Create(&models.ExperimentAssignment{
+					Experiment:       name,
+					Variant:          variant,
+					VisitorID:        visitorID,
+					AttributionToken: attributionToken,
+					CreatedAt:        time.Now(),
+				}).Error
 			}
-			if _, ok := variants[variant]; !ok {
-				continue
-			}
-			if visitorID == "" {
-				continue
-			}
-			_ = db.Clauses(clause.OnConflict{DoNothing: true}).Create(&models.ExperimentAssignment{
-				Experiment:       name,
-				Variant:          variant,
-				VisitorID:        visitorID,
-				AttributionToken: attributionToken,
-				CreatedAt:        time.Now(),
-			}).Error
 		}
 
 		if err := db.Create(&event).Error; err != nil {
@@ -160,6 +178,39 @@ func TrackAnalytics(db *gorm.DB) gin.HandlerFunc {
 			return
 		}
 		c.JSON(http.StatusOK, gin.H{"ok": true})
+	}
+}
+
+// AssignExperiments returns and persists the server-side A/B buckets for a
+// visitor. The client uses it only for display; the database is canonical.
+func AssignExperiments(db *gorm.DB) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		var req struct {
+			VisitorID        string `json:"visitor_id"`
+			AttributionToken string `json:"attribution_token"`
+		}
+		if err := c.ShouldBindJSON(&req); err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid assignment payload"})
+			return
+		}
+		visitorID := sanitizeToken(req.VisitorID, 64)
+		if visitorID == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "visitor_id is required"})
+			return
+		}
+		assignments := make(map[string]string, len(experimentVariants))
+		for name := range experimentVariants {
+			variant := assignVariant(visitorID, name)
+			assignments[name] = variant
+			_ = db.Clauses(clause.OnConflict{DoNothing: true}).Create(&models.ExperimentAssignment{
+				Experiment:       name,
+				Variant:          variant,
+				VisitorID:        visitorID,
+				AttributionToken: sanitizeToken(req.AttributionToken, 64),
+				CreatedAt:        time.Now(),
+			}).Error
+		}
+		c.JSON(http.StatusOK, gin.H{"experiments": assignments})
 	}
 }
 
@@ -284,14 +335,19 @@ func GetFunnel(db *gorm.DB) gin.HandlerFunc {
 }
 
 type experimentRow struct {
-	Experiment string  `json:"experiment"`
-	Variant    string  `json:"variant"`
-	Visitors   int64   `json:"visitors"`
-	BotLeads   int64   `json:"bot_leads"`
-	Orders     int64   `json:"orders"`
-	Payers     int64   `json:"payers"`
-	Revenue    float64 `json:"revenue"`
-	Conversion float64 `json:"conversion"`
+	Experiment       string  `json:"experiment"`
+	Variant          string  `json:"variant"`
+	Visitors         int64   `json:"visitors"`
+	BotLeads         int64   `json:"bot_leads"`
+	Orders           int64   `json:"orders"`
+	Payers           int64   `json:"payers"`
+	Revenue          float64 `json:"revenue"`
+	Conversion       float64 `json:"conversion"`
+	UpliftPercent    float64 `json:"uplift_percent"`
+	PValue           float64 `json:"p_value"`
+	Significant      bool    `json:"significant"`
+	MinSampleReached bool    `json:"min_sample_reached"`
+	RequiredSample   int64   `json:"required_sample_per_variant"`
 }
 
 // GetExperiments reports A/B results. The success metric is a confirmed
@@ -344,6 +400,86 @@ func GetExperiments(db *gorm.DB) gin.HandlerFunc {
 			}
 			rows[i].Revenue = roundAmount(rows[i].Revenue)
 		}
-		c.JSON(http.StatusOK, gin.H{"experiments": rows})
+		applyExperimentStatistics(rows)
+		c.JSON(http.StatusOK, gin.H{"experiments": rows, "min_sample_per_variant": experimentMinSample})
 	}
+}
+
+const experimentMinSample int64 = 100
+
+// applyExperimentStatistics compares each non-control variant with control using
+// a two-proportion z-test. With a small sample the result is reported but not
+// marked significant, so a decision is not made on the first few payments.
+func applyExperimentStatistics(rows []experimentRow) {
+	byExperiment := make(map[string][]int)
+	for i, row := range rows {
+		byExperiment[row.Experiment] = append(byExperiment[row.Experiment], i)
+	}
+	for _, indexes := range byExperiment {
+		controlIdx := -1
+		for _, idx := range indexes {
+			if rows[idx].Variant == "control" {
+				controlIdx = idx
+				break
+			}
+		}
+		if controlIdx < 0 {
+			continue
+		}
+		control := rows[controlIdx]
+		for _, idx := range indexes {
+			row := &rows[idx]
+			row.MinSampleReached = control.Visitors >= experimentMinSample && row.Visitors >= experimentMinSample
+			row.RequiredSample = requiredSamplePerVariant(control)
+			if row.Variant == "control" || control.Visitors == 0 || row.Visitors == 0 {
+				continue
+			}
+			baseRate := float64(control.Payers) / float64(control.Visitors)
+			variantRate := float64(row.Payers) / float64(row.Visitors)
+			if baseRate > 0 {
+				row.UpliftPercent = roundAmount((variantRate - baseRate) / baseRate * 100)
+			}
+			row.PValue = roundAmount(twoProportionPValue(control.Payers, control.Visitors, row.Payers, row.Visitors)*10000) / 10000
+			row.Significant = row.MinSampleReached && row.PValue < 0.05
+		}
+	}
+}
+
+func twoProportionPValue(x1, n1, x2, n2 int64) float64 {
+	if n1 == 0 || n2 == 0 {
+		return 1
+	}
+	p1 := float64(x1) / float64(n1)
+	p2 := float64(x2) / float64(n2)
+	pooled := float64(x1+x2) / float64(n1+n2)
+	se := math.Sqrt(pooled * (1 - pooled) * (1/float64(n1) + 1/float64(n2)))
+	if se == 0 {
+		return 1
+	}
+	z := math.Abs(p1-p2) / se
+	return math.Erfc(z / math.Sqrt2)
+}
+
+func requiredSamplePerVariant(control experimentRow) int64 {
+	p1 := 0.05
+	if control.Visitors > 0 && control.Payers > 0 {
+		p1 = float64(control.Payers) / float64(control.Visitors)
+	}
+	if p1 < 0.01 {
+		p1 = 0.01
+	}
+	if p1 > 0.9 {
+		p1 = 0.9
+	}
+	p2 := math.Min(0.99, p1+0.01)
+	pooled := (p1 + p2) / 2
+	numerator := math.Pow(1.96*math.Sqrt(2*pooled*(1-pooled))+0.84*math.Sqrt(p1*(1-p1)+p2*(1-p2)), 2)
+	sample := int64(math.Ceil(numerator / math.Pow(p2-p1, 2)))
+	if sample < experimentMinSample {
+		sample = experimentMinSample
+	}
+	if sample > 100000 {
+		sample = 100000
+	}
+	return sample
 }

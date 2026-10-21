@@ -11,6 +11,7 @@ import (
 	"github.com/mymmrac/telego"
 	tu "github.com/mymmrac/telego/telegoutil"
 	"github.com/spark-school/backend/internal/models"
+	"github.com/spark-school/backend/internal/money"
 )
 
 // HandleReceiptUpload processes receipt screenshot from user with SHA-256 deduplication and fraud prevention.
@@ -128,16 +129,17 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) error {
 	username = strings.TrimPrefix(username, "@")
 
 	receipt := models.PaymentReceipt{
-		FileHash:     fileHash,
-		FileUniqueID: fileUniqueID,
-		TelegramID:   msg.Chat.ID,
-		Username:     username,
-		FileID:       fileID,
-		Tier:         chosenTier,
-		Amount:       amount,
-		Status:       "pending",
-		PromoCode:    session.PromoCode,
-		CreatedAt:    time.Now(),
+		FileHash:      fileHash,
+		FileUniqueID:  fileUniqueID,
+		TelegramID:    msg.Chat.ID,
+		Username:      username,
+		FileID:        fileID,
+		Tier:          chosenTier,
+		Amount:        amount,
+		AmountKopecks: int64(money.FromRubles(amount)),
+		Status:        "pending",
+		PromoCode:     session.PromoCode,
+		CreatedAt:     time.Now(),
 	}
 
 	if err := s.db.Create(&receipt).Error; err != nil {

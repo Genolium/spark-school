@@ -17,6 +17,7 @@ type User struct {
 	AccessGrantedAt                 *time.Time `json:"access_granted_at"`
 	Tier                            string     `gorm:"size:32;default:'accelerator'" json:"tier"` // 'accelerator', 'vip'
 	PaidAmount                      float64    `gorm:"type:numeric(10,2);default:0.00" json:"paid_amount"`
+	PaidAmountKopecks               int64      `gorm:"default:0" json:"paid_amount_kopecks"`
 	PromoCode                       string     `gorm:"size:32" json:"promo_code"`
 	ReceiptStatus                   string     `gorm:"-" json:"receipt_status,omitempty"`
 	ReceiptIssued                   bool       `gorm:"default:false;index" json:"receipt_issued"`
@@ -32,6 +33,7 @@ type User struct {
 	RemindersOptOut                 bool       `gorm:"default:false;index" json:"reminders_opt_out"`
 	DiagnosticStartedReminderSent   bool       `gorm:"default:false;index" json:"diagnostic_started_reminder_sent"`
 	DiagnosticCompletedReminderSent bool       `gorm:"default:false;index" json:"diagnostic_completed_reminder_sent"`
+	AnonymizedAt                    *time.Time `json:"anonymized_at,omitempty"`
 	CreatedAt                       time.Time  `json:"created_at"`
 	UpdatedAt                       time.Time  `json:"updated_at"`
 
@@ -60,13 +62,14 @@ type AffiliateProfile struct {
 
 // ReferralTransaction logs commission payouts for transparency.
 type ReferralTransaction struct {
-	ID          uint      `gorm:"primaryKey" json:"id"`
-	AffiliateID uint      `gorm:"not null;index" json:"affiliate_id"`
-	BuyerID     uint      `gorm:"not null" json:"buyer_id"`
-	Level       int       `gorm:"not null" json:"level"` // 1 or 2
-	PaymentID   string    `gorm:"size:64;index" json:"payment_id,omitempty"`
-	Amount      float64   `gorm:"type:numeric(10,2);not null" json:"amount"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID            uint      `gorm:"primaryKey" json:"id"`
+	AffiliateID   uint      `gorm:"not null;index" json:"affiliate_id"`
+	BuyerID       uint      `gorm:"not null" json:"buyer_id"`
+	Level         int       `gorm:"not null" json:"level"` // 1 or 2
+	PaymentID     string    `gorm:"size:64;index" json:"payment_id,omitempty"`
+	Amount        float64   `gorm:"type:numeric(10,2);not null" json:"amount"`
+	AmountKopecks int64     `gorm:"default:0" json:"amount_kopecks"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 // PayoutRequest represents an affiliate withdrawal request.
@@ -74,6 +77,7 @@ type PayoutRequest struct {
 	ID             uint       `gorm:"primaryKey" json:"id"`
 	UserID         uint       `gorm:"not null;index" json:"user_id"`
 	Amount         float64    `gorm:"type:numeric(10,2);not null" json:"amount"`
+	AmountKopecks  int64      `gorm:"default:0" json:"amount_kopecks"`
 	PaymentDetails string     `gorm:"type:text;not null" json:"payment_details"`
 	Status         string     `gorm:"size:20;default:'pending'" json:"status"` // 'pending', 'paid', 'rejected'
 	CreatedAt      time.Time  `json:"created_at"`
@@ -98,19 +102,20 @@ type PromoCode struct {
 
 // PaymentReceipt stores submitted payment receipts with hash deduplication to prevent fraud/reuse.
 type PaymentReceipt struct {
-	ID           uint       `gorm:"primaryKey" json:"id"`
-	FileHash     string     `gorm:"uniqueIndex;size:64;not null" json:"file_hash"`
-	FileUniqueID string     `gorm:"index;size:64" json:"file_unique_id"`
-	TelegramID   int64      `gorm:"index" json:"telegram_id"`
-	Username     string     `gorm:"size:64" json:"username"`
-	FileID       string     `gorm:"size:255" json:"file_id"`
-	Tier         string     `gorm:"size:32;default:'accelerator'" json:"tier"` // 'accelerator', 'vip'
-	Amount       float64    `gorm:"type:numeric(10,2)" json:"amount"`
-	Status       string     `gorm:"size:20;default:'pending'" json:"status"` // 'pending', 'approved', 'rejected'
-	PromoCode    string     `gorm:"size:32" json:"promo_code,omitempty"`
-	ConfirmedAt  *time.Time `json:"confirmed_at,omitempty"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
+	ID            uint       `gorm:"primaryKey" json:"id"`
+	FileHash      string     `gorm:"uniqueIndex;size:64;not null" json:"file_hash"`
+	FileUniqueID  string     `gorm:"index;size:64" json:"file_unique_id"`
+	TelegramID    int64      `gorm:"index" json:"telegram_id"`
+	Username      string     `gorm:"size:64" json:"username"`
+	FileID        string     `gorm:"size:255" json:"file_id"`
+	Tier          string     `gorm:"size:32;default:'accelerator'" json:"tier"` // 'accelerator', 'vip'
+	Amount        float64    `gorm:"type:numeric(10,2)" json:"amount"`
+	AmountKopecks int64      `gorm:"default:0" json:"amount_kopecks"`
+	Status        string     `gorm:"size:20;default:'pending'" json:"status"` // 'pending', 'approved', 'rejected'
+	PromoCode     string     `gorm:"size:32" json:"promo_code,omitempty"`
+	ConfirmedAt   *time.Time `json:"confirmed_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
+	UpdatedAt     time.Time  `json:"updated_at"`
 }
 
 // OutboxEvent provides reliable asynchronous delivery of critical system events (notifications, invite links).
@@ -137,6 +142,7 @@ type PaymentTransaction struct {
 	Username         string     `gorm:"size:64" json:"username"`
 	Tier             string     `gorm:"size:32;default:'accelerator'" json:"tier"`
 	Amount           float64    `gorm:"type:numeric(10,2);not null" json:"amount"`
+	AmountKopecks    int64      `gorm:"default:0" json:"amount_kopecks"`
 	OriginalAmount   float64    `gorm:"type:numeric(10,2)" json:"original_amount"`
 	Fee              float64    `gorm:"type:numeric(10,2)" json:"fee"`
 	Status           string     `gorm:"size:32;not null" json:"status"` // 'SUCCESS', 'FAIL', 'PENDING'
@@ -165,6 +171,7 @@ type PaymentOrder struct {
 	Username          string    `gorm:"size:64" json:"username"`
 	Tier              string    `gorm:"size:32;not null" json:"tier"`
 	Amount            float64   `gorm:"type:numeric(10,2);not null" json:"amount"`
+	AmountKopecks     int64     `gorm:"default:0" json:"amount_kopecks"`
 	Currency          string    `gorm:"size:10;default:'RUB'" json:"currency"`
 	PromoCode         string    `gorm:"size:32" json:"promo_code,omitempty"`
 	Provider          string    `gorm:"size:32;not null" json:"provider"`
@@ -300,8 +307,17 @@ type AnalyticsEvent struct {
 	Campaign         string    `gorm:"size:80;index" json:"campaign,omitempty"`
 	Tier             string    `gorm:"size:32;index" json:"tier,omitempty"`
 	PromoCode        string    `gorm:"size:32;index" json:"promo_code,omitempty"`
+	PaymentID        string    `gorm:"size:64;index" json:"payment_id,omitempty"`
 	Metadata         string    `gorm:"type:text" json:"metadata,omitempty"`
 	IP               string    `gorm:"size:45" json:"ip,omitempty"`
 	UserAgent        string    `gorm:"size:255" json:"user_agent,omitempty"`
 	CreatedAt        time.Time `gorm:"index" json:"created_at"`
+}
+
+// BackupHeartbeat is written by scripts/backup.sh after a verified dump.
+type BackupHeartbeat struct {
+	ID            int       `gorm:"primaryKey" json:"id"`
+	LastSuccessAt time.Time `json:"last_success_at"`
+	FileName      string    `gorm:"size:255" json:"file_name,omitempty"`
+	SizeBytes     int64     `json:"size_bytes,omitempty"`
 }

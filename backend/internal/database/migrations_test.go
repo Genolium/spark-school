@@ -46,8 +46,8 @@ func TestPostgresMigrations_EmptyDatabaseAndRerun(t *testing.T) {
 	if err := sqlDB.QueryRow("SELECT MAX(version_id) FROM goose_db_version").Scan(&version); err != nil {
 		t.Fatalf("goose version: %v", err)
 	}
-	if version < 7 {
-		t.Fatalf("expected at least migration 7, got %d", version)
+	if version < 8 {
+		t.Fatalf("expected at least migration 8, got %d", version)
 	}
 
 	for _, table := range []string{
@@ -55,7 +55,7 @@ func TestPostgresMigrations_EmptyDatabaseAndRerun(t *testing.T) {
 		"outbox_events", "referral_transactions", "student_submissions",
 		"student_progress", "call_bookings", "analytics_events",
 		"processed_telegram_updates", "course_pricings", "app_meta",
-		"order_intents", "experiment_assignments",
+		"order_intents", "experiment_assignments", "backup_heartbeat",
 	} {
 		var exists bool
 		if err := sqlDB.QueryRow("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=$1)", table).Scan(&exists); err != nil {
@@ -64,6 +64,21 @@ func TestPostgresMigrations_EmptyDatabaseAndRerun(t *testing.T) {
 		if !exists {
 			t.Errorf("expected table %s", table)
 		}
+	}
+
+	var kopecksColumns int
+	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='public' AND column_name='amount_kopecks' AND table_name IN ('payment_receipts','payment_transactions','payment_orders','referral_transactions','payout_requests')`).Scan(&kopecksColumns); err != nil {
+		t.Fatal(err)
+	}
+	if kopecksColumns != 5 {
+		t.Errorf("expected amount_kopecks on five financial tables, got %d", kopecksColumns)
+	}
+	var paidKopecks int
+	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='users' AND column_name IN ('paid_amount_kopecks','anonymized_at')`).Scan(&paidKopecks); err != nil {
+		t.Fatal(err)
+	}
+	if paidKopecks != 2 {
+		t.Errorf("expected user kopeck/anonymization columns, got %d", paidKopecks)
 	}
 
 	var recoveryColumns int

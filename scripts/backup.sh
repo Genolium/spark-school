@@ -27,7 +27,22 @@ if ! gzip -t "${BACKUP_FILE}"; then
 fi
 
 FILE_SIZE=$(du -h "${BACKUP_FILE}" | cut -f1)
+FILE_BYTES=$(wc -c < "${BACKUP_FILE}" | tr -d ' ')
 echo "[$(date -Iseconds)] Backup created successfully: ${BACKUP_FILE} (${FILE_SIZE})"
+
+# Heartbeat for the backend monitoring worker. Keep financial/backup data even
+# if this write fails, but the stale heartbeat will raise an alert.
+PGPASSWORD="${POSTGRES_PASSWORD}" psql -h "${POSTGRES_HOST:-postgres}" -U "${POSTGRES_USER:-spark_user}" -d "${POSTGRES_DB:-spark_db}" -v ON_ERROR_STOP=1 <<SQL || echo "[WARN] Failed to write backup heartbeat"
+CREATE TABLE IF NOT EXISTS backup_heartbeat (
+    id INT PRIMARY KEY,
+    last_success_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    file_name VARCHAR(255),
+    size_bytes BIGINT
+);
+INSERT INTO backup_heartbeat (id, last_success_at, file_name, size_bytes)
+VALUES (1, NOW(), '${BACKUP_FILE}', ${FILE_BYTES})
+ON CONFLICT (id) DO UPDATE SET last_success_at = NOW(), file_name = EXCLUDED.file_name, size_bytes = EXCLUDED.size_bytes;
+SQL
 
 # Retain backups for 14 days, remove older dumps
 find "${BACKUP_DIR}" -name "spark_db_*.sql.gz" -type f -mtime +14 -delete

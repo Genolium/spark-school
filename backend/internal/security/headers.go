@@ -24,16 +24,29 @@ func SecurityHeadersMiddleware() gin.HandlerFunc {
 		// Restrict dangerous browser features
 		c.Header("Permissions-Policy", "camera=(), microphone=(), geolocation=(), payment=()")
 
-		// Content Security Policy permitting YouTube embeds & YooKassa acquiring
+		// Content Security Policy. 'unsafe-eval' is only needed by the Next.js
+		// development runtime; production builds work without it.
+		scriptSrc := "'self' 'unsafe-inline' https://telegram.org https://yookassa.ru https://*.yookassa.ru"
+		if gin.Mode() != gin.ReleaseMode {
+			scriptSrc += " 'unsafe-eval'"
+		}
 		csp := "default-src 'self'; " +
+			"base-uri 'self'; object-src 'none'; " +
 			"img-src 'self' data: https: https://*.telegram.org https://*.yoomoney.ru https://*.yookassa.ru; " +
-			"script-src 'self' 'unsafe-inline' 'unsafe-eval' https://telegram.org https://yookassa.ru https://*.yookassa.ru; " +
+			"script-src " + scriptSrc + "; " +
 			"style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
 			"font-src 'self' data: https://fonts.gstatic.com; " +
-			"frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://yookassa.ru https://*.yookassa.ru; " +
+			"frame-src 'self' https://www.youtube.com https://www.youtube-nocookie.com https://telegram.org https://oauth.telegram.org https://yookassa.ru https://*.yookassa.ru; " +
 			"frame-ancestors 'self'; " +
-			"connect-src 'self' http://localhost:* https://*.sparkprep.ru https://sparkprep.ru https://so-called-spark.ru https://*.so-called-spark.ru https://api.yookassa.ru https://yookassa.ru;"
+			"form-action 'self' https://yookassa.ru https://*.yookassa.ru; " +
+			"connect-src 'self' http://localhost:* https://*.sparkprep.ru https://sparkprep.ru https://so-called-spark.ru https://*.so-called-spark.ru https://api.yookassa.ru https://yookassa.ru https://api.telegram.org;"
 		c.Header("Content-Security-Policy", csp)
+		c.Header("Cross-Origin-Opener-Policy", "same-origin-allow-popups")
+		c.Header("Cross-Origin-Resource-Policy", "same-site")
+		if gin.Mode() == gin.ReleaseMode {
+			c.Header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+			c.Header("Content-Security-Policy", csp+"; upgrade-insecure-requests")
+		}
 
 		c.Next()
 	}

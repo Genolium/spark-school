@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/spark-school/backend/internal/models"
+	"github.com/spark-school/backend/internal/money"
 	"gorm.io/gorm"
 )
 
@@ -124,15 +125,16 @@ func (h *ReceiptHandler) VerifyOrSubmit(c *gin.Context) {
 		}
 
 		receipt := models.PaymentReceipt{
-			FileHash:     cleanHash,
-			FileUniqueID: cleanUniqueID,
-			TelegramID:   req.TelegramID,
-			Username:     req.Username,
-			FileID:       cleanFileID,
-			Tier:         tier,
-			Amount:       req.Amount,
-			Status:       "pending",
-			CreatedAt:    time.Now(),
+			FileHash:      cleanHash,
+			FileUniqueID:  cleanUniqueID,
+			TelegramID:    req.TelegramID,
+			Username:      req.Username,
+			FileID:        cleanFileID,
+			Tier:          tier,
+			Amount:        req.Amount,
+			AmountKopecks: int64(money.FromRubles(req.Amount)),
+			Status:        "pending",
+			CreatedAt:     time.Now(),
 		}
 
 		if err := h.db.Create(&receipt).Error; err != nil {
@@ -159,15 +161,16 @@ func (h *ReceiptHandler) VerifyOrSubmit(c *gin.Context) {
 			tier = "accelerator"
 		}
 		receipt := models.PaymentReceipt{
-			FileHash:     cleanHash,
-			FileUniqueID: cleanUniqueID,
-			TelegramID:   req.TelegramID,
-			Username:     req.Username,
-			FileID:       cleanFileID,
-			Tier:         tier,
-			Amount:       req.Amount,
-			Status:       "pending",
-			CreatedAt:    time.Now(),
+			FileHash:      cleanHash,
+			FileUniqueID:  cleanUniqueID,
+			TelegramID:    req.TelegramID,
+			Username:      req.Username,
+			FileID:        cleanFileID,
+			Tier:          tier,
+			Amount:        req.Amount,
+			AmountKopecks: int64(money.FromRubles(req.Amount)),
+			Status:        "pending",
+			CreatedAt:     time.Now(),
 		}
 		if err := h.saveReceiptFunc(&receipt); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка сохранения чека"})

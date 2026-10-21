@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/spark-school/backend/internal/models"
+	"github.com/spark-school/backend/internal/money"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
@@ -66,6 +67,12 @@ func (s *AffiliateService) ProcessCoursePurchaseTx(tx *gorm.DB, buyerID uint, co
 // payment. The uniqueness of (payment_id, level) at the database level is the
 // final guard against two concurrent confirmations of the same purchase.
 func (s *AffiliateService) ProcessCoursePurchaseForPaymentTx(tx *gorm.DB, buyerID uint, paymentID string, coursePrice float64) error {
+	return s.ProcessCoursePurchaseForPaymentTxKopecks(tx, buyerID, paymentID, money.FromRubles(coursePrice))
+}
+
+// ProcessCoursePurchaseForPaymentTxKopecks distributes commission using
+// integer kopecks; the old ruble method is a thin compatibility wrapper.
+func (s *AffiliateService) ProcessCoursePurchaseForPaymentTxKopecks(tx *gorm.DB, buyerID uint, paymentID string, coursePrice money.Kopecks) error {
 	if tx == nil {
 		return nil
 	}
@@ -94,14 +101,16 @@ func (s *AffiliateService) ProcessCoursePurchaseForPaymentTx(tx *gorm.DB, buyerI
 
 	// Level 1: 15% Commission (1 035 ₽ on 6 900 ₽ base)
 	if ref.ReferredByID != nil {
-		l1Amount := coursePrice * 0.15
+		l1AmountK := coursePrice.Percent(15)
+		l1Amount := l1AmountK.ToRubles()
 		tx1 := models.ReferralTransaction{
-			AffiliateID: *ref.ReferredByID,
-			BuyerID:     buyerID,
-			Level:       1,
-			PaymentID:   paymentID,
-			Amount:      l1Amount,
-			CreatedAt:   time.Now(),
+			AffiliateID:   *ref.ReferredByID,
+			BuyerID:       buyerID,
+			Level:         1,
+			PaymentID:     paymentID,
+			Amount:        l1Amount,
+			AmountKopecks: int64(l1AmountK),
+			CreatedAt:     time.Now(),
 		}
 		if err := tx.Create(&tx1).Error; err != nil {
 			return err
@@ -119,14 +128,16 @@ func (s *AffiliateService) ProcessCoursePurchaseForPaymentTx(tx *gorm.DB, buyerI
 
 	// Level 2: 5% Commission (345 ₽ on 6 900 ₽ base)
 	if ref.ParentReferrerID != nil {
-		l2Amount := coursePrice * 0.05
+		l2AmountK := coursePrice.Percent(5)
+		l2Amount := l2AmountK.ToRubles()
 		tx2 := models.ReferralTransaction{
-			AffiliateID: *ref.ParentReferrerID,
-			BuyerID:     buyerID,
-			Level:       2,
-			PaymentID:   paymentID,
-			Amount:      l2Amount,
-			CreatedAt:   time.Now(),
+			AffiliateID:   *ref.ParentReferrerID,
+			BuyerID:       buyerID,
+			Level:         2,
+			PaymentID:     paymentID,
+			Amount:        l2Amount,
+			AmountKopecks: int64(l2AmountK),
+			CreatedAt:     time.Now(),
 		}
 		if err := tx.Create(&tx2).Error; err != nil {
 			return err
@@ -187,6 +198,7 @@ func (s *AffiliateService) RequestPayout(userID uint, amount float64, details st
 		payout = models.PayoutRequest{
 			UserID:         userID,
 			Amount:         amount,
+			AmountKopecks:  int64(money.FromRubles(amount)),
 			PaymentDetails: details,
 			Status:         "pending",
 			CreatedAt:      time.Now(),

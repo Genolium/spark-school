@@ -18,6 +18,7 @@ import { ReferralTracker } from "@/components/ReferralTracker";
 import { RecoveryBanner } from "@/components/RecoveryBanner";
 import { DemoLessonSection } from "@/components/DemoLessonSection";
 import { trackFunnelStep, getAttributionToken } from "@/lib/analytics";
+import { syncServerExperiments } from "@/lib/experiments";
 
 export default function HomePage() {
   const [isChancesOpen, setIsChancesOpen] = useState(false);
@@ -55,6 +56,8 @@ export default function HomePage() {
   };
 
   useEffect(() => {
+    // Server is the canonical source of A/B buckets.
+    syncServerExperiments();
     trackFunnelStep("landing_view");
     const scrollToHash = () => {
       if (typeof window !== "undefined" && window.location.hash) {

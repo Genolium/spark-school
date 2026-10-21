@@ -15,6 +15,8 @@ import (
 	"github.com/spark-school/backend/internal/auth"
 	"github.com/spark-school/backend/internal/config"
 	"github.com/spark-school/backend/internal/models"
+	"github.com/spark-school/backend/internal/money"
+	"github.com/spark-school/backend/internal/privacy"
 	"github.com/spark-school/backend/internal/services"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -202,13 +204,15 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 	}
 
 	var preMonthRevenue float64
+	var grossKopecks money.Kopecks
 
 	// 1. Gather all actual confirmed financial operations
 	type TransactionRecord struct {
-		Amount    float64
-		Tier      string
-		CreatedAt time.Time
-		PromoCode string
+		Amount        float64
+		AmountKopecks int64
+		Tier          string
+		CreatedAt     time.Time
+		PromoCode     string
 	}
 	var txRecords []TransactionRecord
 
@@ -219,11 +223,16 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 		if t == "" {
 			t = "accelerator"
 		}
+		kopecks := pt.AmountKopecks
+		if kopecks == 0 {
+			kopecks = int64(money.FromRubles(pt.Amount))
+		}
 		txRecords = append(txRecords, TransactionRecord{
-			Amount:    pt.Amount,
-			Tier:      t,
-			CreatedAt: pt.CreatedAt,
-			PromoCode: pt.PromoCode,
+			Amount:        money.Kopecks(kopecks).ToRubles(),
+			AmountKopecks: kopecks,
+			Tier:          t,
+			CreatedAt:     pt.CreatedAt,
+			PromoCode:     pt.PromoCode,
 		})
 	}
 
@@ -238,6 +247,7 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 	}
 
 	for _, tx := range txRecords {
+		grossKopecks += money.Kopecks(tx.AmountKopecks)
 		grossVolume += tx.Amount
 		switch tx.Tier {
 		case "vip":
@@ -322,6 +332,7 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 
 	c.JSON(http.StatusOK, gin.H{
 		"gross_volume":          grossVolume,
+		"gross_volume_kopecks":  int64(grossKopecks),
 		"active_students":       activeStudents,
 		"free_access_count":     freeAccessCount,
 		"total_registered":      totalUsers,
@@ -866,6 +877,29 @@ func (h *AdminHandler) IssueReceipt(c *gin.Context) {
 	})
 }
 
+// EraseUser anonymizes a user and deletes their analytics data while keeping
+// financial transactions for accounting.
+func (h *AdminHandler) EraseUser(c *gin.Context) {
+	id, err := strconv.ParseUint(c.Param("id"), 10, 32)
+	if err != nil || id == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+		return
+	}
+	if h.db == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "database is unavailable"})
+		return
+	}
+	if err := privacy.EraseUser(h.db, uint(id)); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			c.JSON(http.StatusNotFound, gin.H{"error": "Пользователь не найден"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Не удалось удалить персональные данные"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"success": true, "message": "Персональные данные удалены, финансовые операции сохранены"})
+}
+
 // DeleteUser removes a user
 func (h *AdminHandler) DeleteUser(c *gin.Context) {
 	id := c.Param("id")
@@ -969,17 +1003,18 @@ func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 			// a second financial operation for the same manual payment.
 			paymentID := fmt.Sprintf("MANUAL_%d_%s_%d", user.ID, strings.ToLower(user.Tier), int64(user.PaidAmount*100))
 			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "payment_id"}}, DoNothing: true}).Create(&models.PaymentTransaction{
-				PaymentID:  paymentID,
-				OrderID:    paymentID,
-				TelegramID: user.TelegramID,
-				Username:   user.Username,
-				Amount:     user.PaidAmount,
-				Currency:   "RUB",
-				Tier:       user.Tier,
-				Status:     "SUCCESS",
-				PayMethod:  "admin_manual",
-				PromoCode:  user.PromoCode,
-				CreatedAt:  time.Now(),
+				PaymentID:     paymentID,
+				OrderID:       paymentID,
+				TelegramID:    user.TelegramID,
+				Username:      user.Username,
+				Amount:        user.PaidAmount,
+				AmountKopecks: int64(money.FromRubles(user.PaidAmount)),
+				Currency:      "RUB",
+				Tier:          user.Tier,
+				Status:        "SUCCESS",
+				PayMethod:     "admin_manual",
+				PromoCode:     user.PromoCode,
+				CreatedAt:     time.Now(),
 			}).Error; err != nil {
 				return err
 			}

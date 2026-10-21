@@ -126,3 +126,19 @@ func TestDatabasePassword(t *testing.T) {
 		}
 	}
 }
+
+func TestConfigTrustedProxiesAndRetention(t *testing.T) {
+	t.Setenv("TRUSTED_PROXIES", "127.0.0.1, 172.16.0.0/12, ::1")
+	t.Setenv("ANALYTICS_RETENTION_DAYS", "90")
+	cfg := Load()
+	if len(cfg.TrustedProxies) != 3 {
+		t.Fatalf("expected three trusted proxies, got %v", cfg.TrustedProxies)
+	}
+	if cfg.AnalyticsRetentionDays != 90 {
+		t.Fatalf("expected 90-day retention, got %d", cfg.AnalyticsRetentionDays)
+	}
+	t.Setenv("ANALYTICS_RETENTION_DAYS", "invalid")
+	if got := Load().AnalyticsRetentionDays; got != 180 {
+		t.Fatalf("invalid retention must fall back to 180, got %d", got)
+	}
+}

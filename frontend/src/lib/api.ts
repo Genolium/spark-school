@@ -232,6 +232,11 @@ export interface ExperimentMetric {
   payers: number;
   revenue: number;
   conversion: number;
+  uplift_percent: number;
+  p_value: number;
+  significant: boolean;
+  min_sample_reached: boolean;
+  required_sample_per_variant: number;
 }
 
 export interface FunnelData {
