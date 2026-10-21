@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import Script from "next/script";
 import localFont from "next/font/local";
 import { IBM_Plex_Mono, Spectral, Golos_Text } from "next/font/google";
@@ -283,11 +284,12 @@ import { ReferralTracker } from "@/components/ReferralTracker";
 import { YandexMetrikaTracker } from "@/components/YandexMetrikaTracker";
 import { ErrorReporter } from "@/components/ErrorReporter";
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const nonce = (await headers()).get("x-nonce") || undefined;
   return (
     <html
       lang="ru"
@@ -299,6 +301,7 @@ export default function RootLayout({
         <meta name="apay-tag" content="RG3T2FTEIA5IEW5UUDHP7BMRODEY2BHG" />
         <meta name="enot" content="4f507993" />
         <script
+          nonce={nonce}
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
@@ -317,6 +320,7 @@ export default function RootLayout({
           }}
         />
         <script
+          nonce={nonce}
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
@@ -325,6 +329,7 @@ export default function RootLayout({
         {/* Yandex.Metrika counter */}
         <Script
           id="yandex-metrika"
+          nonce={nonce}
           strategy="lazyOnload"
           dangerouslySetInnerHTML={{
             __html: `
