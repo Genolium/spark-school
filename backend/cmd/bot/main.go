@@ -15,6 +15,9 @@ func main() {
 	log.Println("Starting Standalone проект «так называемый SPARK» Telegram Bot Service...")
 
 	cfg := config.Load()
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("[FATAL] Refusing to start bot: %v", err)
+	}
 	if cfg.TelegramBotToken == "" {
 		log.Println("WARNING: TELEGRAM_BOT_TOKEN is empty. Set it in .env or environment variables.")
 	}

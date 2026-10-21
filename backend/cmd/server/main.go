@@ -15,7 +15,6 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/mymmrac/telego"
-	"gorm.io/gorm"
 	"github.com/spark-school/backend/internal/auth"
 	"github.com/spark-school/backend/internal/bot"
 	"github.com/spark-school/backend/internal/config"
@@ -25,18 +24,21 @@ import (
 	"github.com/spark-school/backend/internal/outbox"
 	"github.com/spark-school/backend/internal/security"
 	"github.com/spark-school/backend/internal/services"
+	"gorm.io/gorm"
 )
 
 func main() {
 	cfg := config.Load()
 
-	// Validate production security configuration
-	for _, warning := range cfg.Validate() {
-		log.Println("[SECURITY ALERT]", warning)
+	// Fail closed: production must never start with missing or known default secrets.
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("[FATAL] Refusing to start: %v", err)
+	}
+	for _, warning := range cfg.Warnings() {
+		log.Println("[SECURITY WARNING]", warning)
 	}
 
-	// Disable verbose debug mode in production
-	isProd := os.Getenv("ENV") == "production" || os.Getenv("GIN_MODE") == "release" || (cfg.Domain != "localhost" && cfg.Domain != "127.0.0.1")
+	isProd := cfg.IsProduction()
 	if isProd {
 		gin.SetMode(gin.ReleaseMode)
 	}

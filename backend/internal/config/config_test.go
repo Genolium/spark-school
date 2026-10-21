@@ -1,14 +1,16 @@
 package config
 
 import (
-	"os"
+	"strings"
 	"testing"
 )
 
-func TestConfigLoadDefaults(t *testing.T) {
-	// Clear any overrides
-	os.Unsetenv("TELEGRAM_INVITE_LINK")
-	os.Unsetenv("PORT")
+func TestConfigLoadDefaults_NoWorkingSecrets(t *testing.T) {
+	t.Setenv("TELEGRAM_INVITE_LINK", "")
+	t.Setenv("PORT", "")
+	t.Setenv("JWT_SECRET", "")
+	t.Setenv("ADMIN_PASSWORD", "")
+	t.Setenv("DATABASE_URL", "")
 
 	cfg := Load()
 	if cfg.Port != "8080" {
@@ -17,12 +19,20 @@ func TestConfigLoadDefaults(t *testing.T) {
 	if cfg.TelegramInviteLink != "" {
 		t.Errorf("expected empty default invite link, got %s", cfg.TelegramInviteLink)
 	}
+	if cfg.JWTSecret != "" {
+		t.Errorf("JWT_SECRET must not have a built-in default, got %q", cfg.JWTSecret)
+	}
+	if cfg.AdminPassword != "" {
+		t.Errorf("ADMIN_PASSWORD must not have a built-in default, got %q", cfg.AdminPassword)
+	}
+	if cfg.DatabaseURL != "" {
+		t.Errorf("DATABASE_URL must not have a built-in default, got %q", cfg.DatabaseURL)
+	}
 }
 
 func TestConfigCustomInviteLink(t *testing.T) {
 	customLink := "https://t.me/+custom_private_invite_2027"
-	os.Setenv("TELEGRAM_INVITE_LINK", customLink)
-	defer os.Unsetenv("TELEGRAM_INVITE_LINK")
+	t.Setenv("TELEGRAM_INVITE_LINK", customLink)
 
 	cfg := Load()
 	if cfg.TelegramInviteLink != customLink {
@@ -30,37 +40,89 @@ func TestConfigCustomInviteLink(t *testing.T) {
 	}
 }
 
-func TestConfigValidateProduction(t *testing.T) {
+func validProductionConfig() *Config {
+	return &Config{
+		Env:                   "production",
+		DatabaseURL:           "postgres://spark_user:a-very-strong-postgres-password@postgres:5432/spark_db?sslmode=disable",
+		JWTSecret:             strings.Repeat("a", 48),
+		AdminPassword:         strings.Repeat("b", 20),
+		TelegramBotToken:      "123456:AAExampleTelegramBotTokenHere",
+		TelegramWebhookSecret: strings.Repeat("c", 32),
+		Domain:                "sparkprep.ru",
+		YooKassaShopID:        "1491540",
+		YooKassaSecretKey:     "live_example_key",
+	}
+}
+
+func TestConfigValidate_ProductionAcceptsStrongConfig(t *testing.T) {
+	cfg := validProductionConfig()
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("expected valid production config, got: %v", err)
+	}
+}
+
+func TestConfigValidate_ProductionRejectsDefaultsAndMissingSecrets(t *testing.T) {
+	cases := []struct {
+		name   string
+		mutate func(*Config)
+		want   string
+	}{
+		{"default jwt", func(c *Config) { c.JWTSecret = "super-secret-spark-jwt-key-2027" }, "JWT_SECRET"},
+		{"short jwt", func(c *Config) { c.JWTSecret = "short" }, "JWT_SECRET"},
+		{"missing admin password", func(c *Config) { c.AdminPassword = "" }, "ADMIN_PASSWORD"},
+		{"default admin password", func(c *Config) { c.AdminPassword = "SparkAdmin2026!" }, "ADMIN_PASSWORD"},
+		{"missing postgres password", func(c *Config) {
+			c.DatabaseURL = "postgres://spark_user@postgres:5432/spark_db?sslmode=disable"
+		}, "POSTGRES_PASSWORD"},
+		{"default postgres password", func(c *Config) {
+			c.DatabaseURL = "postgres://spark_user:StrongPassword2026@postgres:5432/spark_db?sslmode=disable"
+		}, "POSTGRES_PASSWORD"},
+		{"missing webhook secret", func(c *Config) { c.TelegramWebhookSecret = "" }, "TELEGRAM_WEBHOOK_SECRET"},
+		{"missing bot token", func(c *Config) { c.TelegramBotToken = "" }, "TELEGRAM_BOT_TOKEN"},
+		{"no payment provider", func(c *Config) {
+			c.YooKassaSecretKey = ""
+			c.TributeAPIKey = ""
+			c.AntilopayPublicKey = ""
+		}, "payment provider"},
+		{"yookassa without shop id", func(c *Config) { c.YooKassaShopID = "" }, "YOOKASSA_SHOP_ID"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg := validProductionConfig()
+			tc.mutate(cfg)
+			err := cfg.Validate()
+			if err == nil {
+				t.Fatalf("expected error containing %q, got nil", tc.want)
+			}
+			if !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("expected error containing %q, got %q", tc.want, err.Error())
+			}
+		})
+	}
+}
+
+func TestConfigValidate_DevelopmentAllowsMissingPaymentProviders(t *testing.T) {
 	cfg := &Config{
-		Domain:           "sparkprep.ru",
-		JWTSecret:        "super-secret-spark-jwt-key-2027",
-		AdminPassword:    "SparkAdmin2026!",
-		TelegramBotToken: "",
+		Env:           "development",
+		DatabaseURL:   "postgres://spark_user:localdev@localhost:5432/spark_db?sslmode=disable",
+		JWTSecret:     strings.Repeat("a", 40),
+		AdminPassword: "local-dev-password",
 	}
-
-	warnings := cfg.Validate()
-	if len(warnings) == 0 {
-		t.Fatal("expected security warnings for default credentials in production domain")
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("development config should be accepted: %v", err)
 	}
+}
 
-	hasJWTWarning := false
-	hasPassWarning := false
-	hasBotWarning := false
-	for _, w := range warnings {
-		if len(w) > 0 {
-			if w[:24] == "SECURITY WARNING: JWT_SE" {
-				hasJWTWarning = true
-			}
-			if w[:24] == "SECURITY WARNING: ADMIN_" {
-				hasPassWarning = true
-			}
-			if w[:24] == "SECURITY WARNING: TELEGR" {
-				hasBotWarning = true
-			}
+func TestDatabasePassword(t *testing.T) {
+	cases := map[string]string{
+		"postgres://user:pass@host:5432/db": "pass",
+		"postgres://user@host:5432/db":      "",
+		"not-a-url":                         "",
+	}
+	for input, want := range cases {
+		if got := databasePassword(input); got != want {
+			t.Errorf("databasePassword(%q) = %q, want %q", input, got, want)
 		}
-	}
-
-	if !hasJWTWarning || !hasPassWarning || !hasBotWarning {
-		t.Errorf("missing expected warnings: JWT=%v, Pass=%v, Bot=%v", hasJWTWarning, hasPassWarning, hasBotWarning)
 	}
 }
