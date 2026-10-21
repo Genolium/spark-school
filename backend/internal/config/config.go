@@ -85,7 +85,7 @@ func Load() *Config {
 		TributeAPIKey:         getEnv("TRIBUTE_API_KEY", ""),
 		EnotSecretKey:         getEnv("ENOT_SECRET_KEY", ""),
 		EnotShopID:            getEnv("ENOT_SHOP_ID", ""),
-		YooKassaShopID:        getEnv("YOOKASSA_SHOP_ID", ""),
+		YooKassaShopID:        getEnv("YOOKASSA_SHOP_ID", "1491540"),
 		YooKassaSecretKey:     getEnv("YOOKASSA_SECRET_KEY", ""),
 		TelegramWebhookSecret: strings.TrimSpace(os.Getenv("TELEGRAM_WEBHOOK_SECRET")),
 		DigestHour:            digestHour,

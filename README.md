@@ -9,7 +9,7 @@
 ```text
 spark-school/
 ├── docker-compose.yml         # Оркестрация Caddy 2, Go Backend, Next.js Frontend, PostgreSQL 16
-├── Caddyfile                  # Авто-SSL, Reverse Proxy, сжатие gzip/zstd, заголовки безопасности
+├── Caddyfile                  # HTTP Reverse Proxy (TLS — на внешнем Nginx/балансировщике)
 ├── .env.example               # Образец всех необходимых переменных окружения
 ├── seed.sql                   # SQL-дамп со схемой базы данных и индексами
 │
@@ -59,13 +59,26 @@ cd /opt/spark-school
 cp .env.example .env
 nano .env
 
-# Запустите весь контур одной командой
-docker compose up -d --build
+# Соберите образы и запустите контур с проверкой health
+./deploy.sh
 ```
 
-Caddy автоматически выпустит бесплатный SSL-сертификат Let's Encrypt и распределит трафик:
-* `https://so-called-spark.ru` ➔ Next.js фронтенд (`:3000`)
-* `https://so-called-spark.ru/api/*` ➔ Go бэкенд (`:8080`)
+`deploy.sh` собирает образы **до** остановки текущей версии, ждёт healthy-статусы
+backend/frontend/caddy, проверяет `/health/ready` (PostgreSQL + версия миграций)
+и откатывается на предыдущие образы при ошибке.
+
+> ⚠️ **TLS:** Caddy работает с `auto_https off` и слушает HTTP. Production-трафик
+> обязан приходить через внешний TLS-терминатор (Nginx, cloud load balancer или
+> отдельный Caddy с сертификатом). Без него сайт доступен только по HTTP.
+>
+> Backend в production **не запустится**, если не заданы сильные `JWT_SECRET`,
+> `ADMIN_PASSWORD`, `POSTGRES_PASSWORD`, `TELEGRAM_WEBHOOK_SECRET`,
+> `TELEGRAM_BOT_TOKEN` и ключ хотя бы одного платёжного провайдера.
+
+Маршрутизация:
+* `/` ➔ Next.js фронтенд (`:3000`)
+* `/api/*` ➔ Go бэкенд (`:8080`)
+* `/health/live`, `/health/ready` ➔ пробы backend
 
 ---
 
