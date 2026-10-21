@@ -300,7 +300,7 @@ func (s *BotService) sendDripMessageWithFallback(chatID telego.ChatID, text stri
 
 // processDueBasicUpsells automatically offers the 1900 RUB essay audit order bump to students on 'basic' tier after 3 days.
 func (s *BotService) processDueBasicUpsells() {
-	if s.db == nil || s.bot == nil {
+	if s.db == nil || s.bot == nil || !learningToolsEnabled {
 		return
 	}
 

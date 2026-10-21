@@ -901,6 +901,10 @@ func (s *BotService) handleYooKassaPayment(chatID telego.ChatID, from *telego.Us
 }
 
 func (s *BotService) handleAuditUpsellPayment(chatID telego.ChatID, from *telego.User) {
+	if !learningToolsEnabled {
+		s.sendFeaturePaused(chatID, "Аудит эссе")
+		return
+	}
 	session := s.getSession(chatID.ID)
 	session.State = StateWaitingReceipt
 	session.SelectedTier = "audit_essay"
