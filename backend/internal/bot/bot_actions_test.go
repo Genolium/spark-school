@@ -280,8 +280,8 @@ func TestBot_MainMenuKeyboard_UpgradeForActiveUsers(t *testing.T) {
 	if !hasUpgradeBtn {
 		t.Error("expected action_upgrade button in main menu for user with access")
 	}
-	if !hasStatusBtn {
-		t.Error("expected action_status button in main menu for user with access")
+	if hasStatusBtn != learningToolsEnabled {
+		t.Errorf("action_status button presence must match learningToolsEnabled=%v", learningToolsEnabled)
 	}
 }
 

@@ -6,31 +6,34 @@ import (
 
 // User represents a registered student or administrator.
 type User struct {
-	ID                uint       `gorm:"primaryKey" json:"id"`
-	TelegramID        int64      `gorm:"unique;not null" json:"telegram_id"`
-	Username          string     `gorm:"size:64" json:"username"`
-	FirstName         string     `gorm:"size:128;not null" json:"first_name"`
-	LastName          string     `gorm:"size:128" json:"last_name"`
-	PhotoURL          string     `json:"photo_url"`
-	Role              string     `gorm:"size:20;default:'student'" json:"role"` // 'student', 'admin'
-	HasAccess         bool       `gorm:"default:false" json:"has_access"`
-	AccessGrantedAt   *time.Time `json:"access_granted_at"`
-	Tier              string     `gorm:"size:32;default:'accelerator'" json:"tier"` // 'accelerator', 'vip'
-	PaidAmount        float64    `gorm:"type:numeric(10,2);default:0.00" json:"paid_amount"`
-	PromoCode         string     `gorm:"size:32" json:"promo_code"`
-	ReceiptStatus     string     `gorm:"-" json:"receipt_status,omitempty"`
-	ReceiptIssued     bool       `gorm:"default:false;index" json:"receipt_issued"`
-	ReceiptIssuedAt   *time.Time `json:"receipt_issued_at,omitempty"`
-	ReceiptURL        string     `gorm:"size:512" json:"receipt_url,omitempty"`
-	ReceiptNumber     string     `gorm:"size:64" json:"receipt_number,omitempty"`
-	UpsellAuditSent   bool       `gorm:"default:false;index" json:"upsell_audit_sent"`
-	UpsellAuditSentAt *time.Time `json:"upsell_audit_sent_at,omitempty"`
-	HasAuditUpsell    bool       `gorm:"default:false;index" json:"has_audit_upsell"`
-	AuditCredits      int        `gorm:"default:0" json:"audit_credits"`
-	AttributionToken  string     `gorm:"size:64;index" json:"attribution_token,omitempty"`
-	VisitorID         string     `gorm:"size:64;index" json:"visitor_id,omitempty"`
-	CreatedAt         time.Time  `json:"created_at"`
-	UpdatedAt         time.Time  `json:"updated_at"`
+	ID                              uint       `gorm:"primaryKey" json:"id"`
+	TelegramID                      int64      `gorm:"unique;not null" json:"telegram_id"`
+	Username                        string     `gorm:"size:64" json:"username"`
+	FirstName                       string     `gorm:"size:128;not null" json:"first_name"`
+	LastName                        string     `gorm:"size:128" json:"last_name"`
+	PhotoURL                        string     `json:"photo_url"`
+	Role                            string     `gorm:"size:20;default:'student'" json:"role"` // 'student', 'admin'
+	HasAccess                       bool       `gorm:"default:false" json:"has_access"`
+	AccessGrantedAt                 *time.Time `json:"access_granted_at"`
+	Tier                            string     `gorm:"size:32;default:'accelerator'" json:"tier"` // 'accelerator', 'vip'
+	PaidAmount                      float64    `gorm:"type:numeric(10,2);default:0.00" json:"paid_amount"`
+	PromoCode                       string     `gorm:"size:32" json:"promo_code"`
+	ReceiptStatus                   string     `gorm:"-" json:"receipt_status,omitempty"`
+	ReceiptIssued                   bool       `gorm:"default:false;index" json:"receipt_issued"`
+	ReceiptIssuedAt                 *time.Time `json:"receipt_issued_at,omitempty"`
+	ReceiptURL                      string     `gorm:"size:512" json:"receipt_url,omitempty"`
+	ReceiptNumber                   string     `gorm:"size:64" json:"receipt_number,omitempty"`
+	UpsellAuditSent                 bool       `gorm:"default:false;index" json:"upsell_audit_sent"`
+	UpsellAuditSentAt               *time.Time `json:"upsell_audit_sent_at,omitempty"`
+	HasAuditUpsell                  bool       `gorm:"default:false;index" json:"has_audit_upsell"`
+	AuditCredits                    int        `gorm:"default:0" json:"audit_credits"`
+	AttributionToken                string     `gorm:"size:64;index" json:"attribution_token,omitempty"`
+	VisitorID                       string     `gorm:"size:64;index" json:"visitor_id,omitempty"`
+	RemindersOptOut                 bool       `gorm:"default:false;index" json:"reminders_opt_out"`
+	DiagnosticStartedReminderSent   bool       `gorm:"default:false;index" json:"diagnostic_started_reminder_sent"`
+	DiagnosticCompletedReminderSent bool       `gorm:"default:false;index" json:"diagnostic_completed_reminder_sent"`
+	CreatedAt                       time.Time  `json:"created_at"`
+	UpdatedAt                       time.Time  `json:"updated_at"`
 
 	AffiliateProfile *AffiliateProfile `gorm:"foreignKey:UserID" json:"affiliate_profile,omitempty"`
 }
@@ -257,6 +260,34 @@ type ProcessedTelegramUpdate struct {
 	LastError   string     `gorm:"type:text" json:"last_error,omitempty"`
 	CreatedAt   time.Time  `json:"created_at"`
 	UpdatedAt   time.Time  `json:"updated_at"`
+}
+
+// OrderIntent records an unpaid checkout intention so abandoned orders can be
+// recovered with a bounded number of reminders and an opt-out.
+type OrderIntent struct {
+	ID             uint       `gorm:"primaryKey" json:"id"`
+	UserID         uint       `gorm:"index" json:"user_id"`
+	TelegramID     int64      `gorm:"index;not null" json:"telegram_id"`
+	Tier           string     `gorm:"size:32;not null" json:"tier"`
+	Amount         float64    `gorm:"type:numeric(10,2);not null" json:"amount"`
+	PromoCode      string     `gorm:"size:32" json:"promo_code,omitempty"`
+	Source         string     `gorm:"size:32" json:"source,omitempty"`
+	Status         string     `gorm:"size:20;default:'pending';index" json:"status"` // pending, paid, superseded, cancelled
+	PaymentID      string     `gorm:"size:64;index" json:"payment_id,omitempty"`
+	ReminderCount  int        `gorm:"default:0" json:"reminder_count"`
+	LastReminderAt *time.Time `json:"last_reminder_at,omitempty"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+}
+
+// ExperimentAssignment is a sticky A/B bucket for an anonymous visitor.
+type ExperimentAssignment struct {
+	ID               uint      `gorm:"primaryKey" json:"id"`
+	Experiment       string    `gorm:"size:64;not null;index" json:"experiment"`
+	Variant          string    `gorm:"size:64;not null" json:"variant"`
+	VisitorID        string    `gorm:"size:64;index" json:"visitor_id,omitempty"`
+	AttributionToken string    `gorm:"size:64;index" json:"attribution_token,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 // AnalyticsEvent stores full-funnel conversion events.

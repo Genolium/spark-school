@@ -46,8 +46,8 @@ func TestPostgresMigrations_EmptyDatabaseAndRerun(t *testing.T) {
 	if err := sqlDB.QueryRow("SELECT MAX(version_id) FROM goose_db_version").Scan(&version); err != nil {
 		t.Fatalf("goose version: %v", err)
 	}
-	if version < 6 {
-		t.Fatalf("expected at least migration 6, got %d", version)
+	if version < 7 {
+		t.Fatalf("expected at least migration 7, got %d", version)
 	}
 
 	for _, table := range []string{
@@ -55,6 +55,7 @@ func TestPostgresMigrations_EmptyDatabaseAndRerun(t *testing.T) {
 		"outbox_events", "referral_transactions", "student_submissions",
 		"student_progress", "call_bookings", "analytics_events",
 		"processed_telegram_updates", "course_pricings", "app_meta",
+		"order_intents", "experiment_assignments",
 	} {
 		var exists bool
 		if err := sqlDB.QueryRow("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=$1)", table).Scan(&exists); err != nil {
@@ -63,6 +64,14 @@ func TestPostgresMigrations_EmptyDatabaseAndRerun(t *testing.T) {
 		if !exists {
 			t.Errorf("expected table %s", table)
 		}
+	}
+
+	var recoveryColumns int
+	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='users' AND column_name IN ('reminders_opt_out','diagnostic_started_reminder_sent','diagnostic_completed_reminder_sent')`).Scan(&recoveryColumns); err != nil {
+		t.Fatal(err)
+	}
+	if recoveryColumns != 3 {
+		t.Errorf("expected recovery columns on users, got %d", recoveryColumns)
 	}
 
 	var reminderColumns int

@@ -117,7 +117,7 @@ func (s *BotService) processDueDripLeads() {
 		// Double check if student has purchased
 		var user models.User
 		if err := s.db.Where("telegram_id = ?", lead.TelegramID).First(&user).Error; err == nil {
-			if user.HasAccess {
+			if user.HasAccess || user.RemindersOptOut {
 				lead.IsCompleted = true
 				lead.Stage = -1
 				s.db.Save(&lead)

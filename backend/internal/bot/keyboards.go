@@ -57,13 +57,17 @@ func MainMenuKeyboard(frontendURL string, options ...any) *telego.InlineKeyboard
 	if canUpgrade {
 		rows = append(rows, []telego.InlineKeyboardButton{
 			tu.InlineKeyboardButton("🚀 Апгрейд тарифа").WithCallbackData("action_upgrade"),
+		})
+	}
+	if learningToolsEnabled {
+		rows = append(rows, []telego.InlineKeyboardButton{
 			tu.InlineKeyboardButton("🎓 Мой статус").WithCallbackData("action_status"),
+			tu.InlineKeyboardButton("📋 План подготовки").WithCallbackData("action_plan"),
 		})
 	}
 
 	rows = append(rows,
 		[]telego.InlineKeyboardButton{
-			tu.InlineKeyboardButton("📋 План подготовки").WithCallbackData("action_plan"),
 			tu.InlineKeyboardButton("🎙 Тренажёр интервью").WithCallbackData("action_interview"),
 		},
 		[]telego.InlineKeyboardButton{

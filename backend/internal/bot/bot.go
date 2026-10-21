@@ -80,8 +80,10 @@ func NewBotService(cfg *config.Config, db *gorm.DB) *BotService {
 	// Start daily curator digest cron worker
 	go s.startDigestWorker()
 
-	// Start Zoom reminder worker (24h and 1h before the call)
-	go s.startReminderWorker()
+	// Zoom reminders are part of the paused learning workflow.
+	if zoomToolsEnabled {
+		go s.startReminderWorker()
+	}
 
 	return s
 }
@@ -519,25 +521,25 @@ func (s *BotService) handleMessage(msg *telego.Message) error {
 		return nil
 	}
 
-	if strings.HasPrefix(text, "/status") || strings.HasPrefix(text, "/orders") {
-		s.SendOrdersHistory(chatID, msg.From)
-		return nil
-	}
-
-	if strings.HasPrefix(text, "/plan") {
-		s.SendPreparationPlan(chatID, msg.From)
-		return nil
-	}
-
-	if strings.HasPrefix(text, "/done_step") {
-		parts := strings.Fields(text)
-		stepNum := 1
-		if len(parts) > 1 {
-			if num, err := strconv.Atoi(parts[1]); err == nil {
-				stepNum = num
-			}
+	if strings.HasPrefix(text, "/status") || strings.HasPrefix(text, "/orders") ||
+		strings.HasPrefix(text, "/plan") || strings.HasPrefix(text, "/done_step") {
+		if !learningToolsEnabled {
+			return s.sendFeaturePaused(chatID, "Учебный кабинет")
 		}
-		s.TogglePlanStep(chatID, msg.From, stepNum)
+		if strings.HasPrefix(text, "/plan") {
+			s.SendPreparationPlan(chatID, msg.From)
+		} else if strings.HasPrefix(text, "/done_step") {
+			parts := strings.Fields(text)
+			stepNum := 1
+			if len(parts) > 1 {
+				if num, err := strconv.Atoi(parts[1]); err == nil {
+					stepNum = num
+				}
+			}
+			s.TogglePlanStep(chatID, msg.From, stepNum)
+		} else {
+			s.SendOrdersHistory(chatID, msg.From)
+		}
 		return nil
 	}
 
@@ -560,6 +562,9 @@ func (s *BotService) handleMessage(msg *telego.Message) error {
 	}
 
 	if strings.HasPrefix(text, "/queue") {
+		if !learningToolsEnabled {
+			return s.sendFeaturePaused(chatID, "Очередь куратора")
+		}
 		if msg.From != nil && s.IsAdmin(msg.From.ID) {
 			s.SendCuratorQueue(chatID)
 		} else {
@@ -585,6 +590,14 @@ func (s *BotService) handleMessage(msg *telego.Message) error {
 			return nil
 		}
 	*/
+
+	if strings.HasPrefix(text, "/notifications_off") || strings.HasPrefix(text, "/stop_reminders") {
+		return s.setRemindersOptOut(chatID, msg.From, true)
+	}
+
+	if strings.HasPrefix(text, "/notifications_on") || strings.HasPrefix(text, "/start_reminders") {
+		return s.setRemindersOptOut(chatID, msg.From, false)
+	}
 
 	if strings.HasPrefix(text, "/upgrade") {
 		s.sendUpgradeOptions(chatID, msg.From)
@@ -874,6 +887,8 @@ func (s *BotService) handleSbpPayment(chatID telego.ChatID, from *telego.User, t
 		),
 	)
 
+	s.recordOrderIntent(from, tier, float64(price), session.PromoCode, "telegram_sbp")
+
 	m := tu.Message(chatID, sbpText).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
 	if _, sendErr := s.bot.SendMessage(m); sendErr != nil {
 		cleanMsg := tu.Message(chatID, StripTgEmoji(sbpText)).WithParseMode(telego.ModeHTML).WithReplyMarkup(kb)
@@ -902,6 +917,8 @@ func (s *BotService) handleAuditUpsellPayment(chatID telego.ChatID, from *telego
 	if strings.TrimSpace(bankName) == "" {
 		bankName = "БСПБ (Банк «Санкт-Петербург»)"
 	}
+
+	s.recordOrderIntent(from, "audit_essay", 1900, session.PromoCode, "telegram_sbp")
 
 	text := fmt.Sprintf(`✍️ <b>Оплата текстового аудита эссе — 1 900 ₽</b>
 
@@ -1187,6 +1204,11 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) error {
 	}
 
 	// Curator submission reviews from queue
+	if strings.HasPrefix(data, "sub_review_") || strings.HasPrefix(data, "sub_changes_") {
+		if !learningToolsEnabled {
+			return s.sendFeaturePaused(chatID, "Проверка работ")
+		}
+	}
 	if strings.HasPrefix(data, "sub_review_") {
 		if s.IsAdmin(query.From.ID) {
 			idStr := strings.TrimPrefix(data, "sub_review_")
@@ -1233,35 +1255,21 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) error {
 		s.sendWelcomeMenu(chatID, &query.From)
 		return nil
 
-	case "action_status":
-		s.SendOrdersHistory(chatID, &query.From)
-		return nil
-
-	case "action_orders":
-		s.SendOrdersHistory(chatID, &query.From)
-		return nil
-
-	case "action_plan":
-		s.SendPreparationPlan(chatID, &query.From)
-		return nil
-
-	case "plan_toggle_1":
-		s.TogglePlanStep(chatID, &query.From, 1)
-		return nil
-	case "plan_toggle_2":
-		s.TogglePlanStep(chatID, &query.From, 2)
-		return nil
-	case "plan_toggle_3":
-		s.TogglePlanStep(chatID, &query.From, 3)
-		return nil
-	case "plan_toggle_4":
-		s.TogglePlanStep(chatID, &query.From, 4)
-		return nil
-	case "plan_toggle_5":
-		s.TogglePlanStep(chatID, &query.From, 5)
-		return nil
-	case "plan_toggle_6":
-		s.TogglePlanStep(chatID, &query.From, 6)
+	case "action_status", "action_orders", "action_plan",
+		"plan_toggle_1", "plan_toggle_2", "plan_toggle_3",
+		"plan_toggle_4", "plan_toggle_5", "plan_toggle_6":
+		if !learningToolsEnabled {
+			return s.sendFeaturePaused(chatID, "Учебный кабинет")
+		}
+		switch data {
+		case "action_status", "action_orders":
+			s.SendOrdersHistory(chatID, &query.From)
+		case "action_plan":
+			s.SendPreparationPlan(chatID, &query.From)
+		default:
+			step, _ := strconv.Atoi(strings.TrimPrefix(data, "plan_toggle_"))
+			s.TogglePlanStep(chatID, &query.From, step)
+		}
 		return nil
 
 	// [Временно приостановлено: Сценарий 2 (Сдача работ) и Сценарий 3 (Запись на Zoom-созвон 1-на-1)]
@@ -1290,6 +1298,9 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) error {
 		return nil
 
 	case "admin_queue":
+		if !learningToolsEnabled {
+			return s.sendFeaturePaused(chatID, "Очередь куратора")
+		}
 		if s.IsAdmin(query.From.ID) {
 			s.SendCuratorQueue(chatID)
 			return nil
@@ -1689,6 +1700,14 @@ func (s *BotService) processReceiptApproval(query *telego.CallbackQuery, idStr s
 		})
 	}
 	return nil
+}
+
+func (s *BotService) sendFeaturePaused(chatID telego.ChatID, feature string) error {
+	msg := fmt.Sprintf("ℹ️ <b>%s</b> временно недоступен.\n\nДоступны выбор тарифа, оплата, промокод и диагностика.", feature)
+	return s.send(tu.Message(chatID, msg).WithParseMode(telego.ModeHTML).WithReplyMarkup(tu.InlineKeyboard(
+		tu.InlineKeyboardRow(tu.InlineKeyboardButton("💳 Выбрать тариф").WithCallbackData("action_payment")),
+		tu.InlineKeyboardRow(tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu")),
+	)))
 }
 
 func (s *BotService) answerCallback(query *telego.CallbackQuery, text string, alert bool) {
@@ -2382,6 +2401,8 @@ func (s *BotService) handleUpgradePayment(chatID telego.ChatID, from *telego.Use
 	if strings.TrimSpace(bankName) == "" {
 		bankName = "БСПБ (Банк «Санкт-Петербург»)"
 	}
+
+	s.recordOrderIntent(from, targetTier, amountDiff, session.PromoCode, "telegram_sbp")
 
 	text := fmt.Sprintf(`🚀 <b>Оплата апгрейда до тарифа «%s»</b>
 
