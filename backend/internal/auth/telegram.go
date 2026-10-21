@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -190,4 +191,53 @@ func AdminMiddleware(jwtSecret string) gin.HandlerFunc {
 		c.Set("has_access", claims.HasAccess)
 		c.Next()
 	}
+}
+
+// VerifyTelegramWebApp validates Telegram Mini App initData.
+func VerifyTelegramWebApp(initData, botToken string) (map[string]string, bool) {
+	if initData == "" || botToken == "" {
+		return nil, false
+	}
+	values, err := url.ParseQuery(initData)
+	if err != nil {
+		return nil, false
+	}
+	receivedHash := values.Get("hash")
+	if receivedHash == "" {
+		return nil, false
+	}
+	values.Del("hash")
+
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts = append(parts, key+"="+values.Get(key))
+	}
+	dataCheckString := strings.Join(parts, "\n")
+
+	secret := hmac.New(sha256.New, []byte("WebAppData"))
+	secret.Write([]byte(botToken))
+	mac := hmac.New(sha256.New, secret.Sum(nil))
+	mac.Write([]byte(dataCheckString))
+	expected := hex.EncodeToString(mac.Sum(nil))
+	if !hmac.Equal([]byte(expected), []byte(receivedHash)) {
+		return nil, false
+	}
+
+	if authDateStr := values.Get("auth_date"); authDateStr != "" {
+		authDate, err := strconv.ParseInt(authDateStr, 10, 64)
+		if err != nil || time.Now().Unix()-authDate > 86400 {
+			return nil, false
+		}
+	}
+
+	result := make(map[string]string, len(values))
+	for key := range values {
+		result[key] = values.Get(key)
+	}
+	return result, true
 }

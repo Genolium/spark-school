@@ -111,6 +111,13 @@ go run ./cmd/server
 Отдельной анкеты, очереди онбординга и автоматических напоминаний студенту нет:
 дальнейшая коммуникация идёт с личного аккаунта.
 
+## 📱 API для Mini App
+
+`API.md` описывает вход через Telegram `initData` и студенческие endpoints
+`/api/v1/student/me` и `/api/v1/student/orders`. Это API-first база для
+будущего Mini App: отдельный клиент сможет работать с тем же JWT, платежами и
+правами, без второго backend.
+
 ## 🧪 CI, ошибки и staging
 
 - `.github/workflows/ci.yml` запускает Go race tests на PostgreSQL, frontend

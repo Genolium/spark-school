@@ -86,7 +86,8 @@ const rootFiles = [
   'README.md',
   'MAIN.MD',
   'STAGING.md',
-  'PITR.md'
+  'PITR.md',
+  'API.md'
 ];
 rootFiles.forEach(f => copyFileSafe(f));
 

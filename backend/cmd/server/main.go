@@ -109,6 +109,7 @@ func main() {
 	})
 	promoHandler := handlers.NewPromoHandler(db)
 	pricingHandler := handlers.NewPricingHandler(db)
+	studentHandler := handlers.NewStudentHandler(db, cfg)
 	statsHandler := handlers.NewStatsHandler(db)
 	receiptHandler := handlers.NewReceiptHandler(db, func(receipt *models.PaymentReceipt) error {
 		if cfg.AdminTelegramID != 0 {
@@ -319,6 +320,18 @@ func main() {
 		yooKassaWebhookLimiter := limit(60, 1*time.Minute, "yookassa_webhook", "Превышен лимит запросов к вебхуку.")
 		api.POST("/payments/yookassa/create", yooKassaCreateLimiter, yooKassaHandler.CreateCheckout)
 		api.Any("/payments/yookassa", security.WebhookMetricsMiddleware(metrics), yooKassaWebhookLimiter, yooKassaHandler.HandleWebhook)
+
+		// Student API for a future Telegram Mini App. The same JWT is used by
+		// the web API, so the Mini App is an API client rather than a separate
+		// backend.
+		studentGroup := api.Group("/student")
+		studentGroup.POST("/auth", authLimiter, studentHandler.TelegramAuth)
+		studentAuth := studentGroup.Group("")
+		studentAuth.Use(auth.AuthMiddleware(cfg.JWTSecret))
+		{
+			studentAuth.GET("/me", studentHandler.Me)
+			studentAuth.GET("/orders", studentHandler.Orders)
+		}
 
 		// Admin Public Login (Username + Password -> JWT) with strict brute-force rate limiting (5 req/min)
 		adminLoginLimiter := security.DatabaseRateLimitMiddleware(db, 5, 1*time.Minute, "admin_login", "Слишком много попыток входа (максимум 5 в минуту). Пожалуйста, подождите 60 секунд.")
