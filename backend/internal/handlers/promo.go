@@ -174,6 +174,7 @@ func (h *PromoHandler) Create(c *gin.Context) {
 type PromoWithStats struct {
 	models.PromoCode
 	TotalRevenue float64  `json:"total_revenue"`
+	PaidUses     int64    `json:"paid_uses"`
 	Students     []string `json:"students"`
 }
 
@@ -185,18 +186,40 @@ func (h *PromoHandler) List(c *gin.Context) {
 		return
 	}
 
+	// Revenue and paid uses come from the financial ledger, not from the
+	// activation counter or a user's lifetime paid amount.
+	type promoAggregate struct {
+		PromoCode string
+		Revenue   float64
+		Uses      int64
+	}
+	var aggregates []promoAggregate
+	h.db.Model(&models.PaymentTransaction{}).
+		Select("UPPER(promo_code) AS promo_code, COALESCE(SUM(amount), 0) AS revenue, COUNT(*) AS uses").
+		Where("status = ? AND promo_code <> ''", "SUCCESS").
+		Group("UPPER(promo_code)").
+		Scan(&aggregates)
+
+	byCode := make(map[string]promoAggregate, len(aggregates))
+	for _, agg := range aggregates {
+		byCode[strings.ToUpper(strings.TrimSpace(agg.PromoCode))] = agg
+	}
+
 	// Fetch all students who used a promo code
 	var studentsWithPromo []models.User
 	h.db.Where("promo_code != '' AND promo_code IS NOT NULL").Find(&studentsWithPromo)
 
 	result := make([]PromoWithStats, len(promos))
 	for i, promo := range promos {
+		cleanCode := strings.ToUpper(promo.Code)
+		agg := byCode[cleanCode]
 		result[i] = PromoWithStats{
-			PromoCode: promo,
-			Students:  make([]string, 0),
+			PromoCode:    promo,
+			TotalRevenue: agg.Revenue,
+			PaidUses:     agg.Uses,
+			Students:     make([]string, 0),
 		}
 
-		cleanCode := strings.ToUpper(promo.Code)
 		for _, s := range studentsWithPromo {
 			if strings.ToUpper(s.PromoCode) == cleanCode {
 				studentDesc := s.FirstName
@@ -209,21 +232,6 @@ func (h *PromoHandler) List(c *gin.Context) {
 					studentDesc += fmt.Sprintf(" (ID: %d)", s.TelegramID)
 				}
 				result[i].Students = append(result[i].Students, studentDesc)
-
-				if s.PaidAmount > 0 {
-					result[i].TotalRevenue += s.PaidAmount
-				} else if s.HasAccess {
-					pct := promo.DiscountPercent
-					if pct <= 0 {
-						pct = 5
-					}
-					factor := 1.0 - float64(pct)/100.0
-					if strings.ToLower(s.Tier) == "vip" {
-						result[i].TotalRevenue += 14900.0 * factor
-					} else {
-						result[i].TotalRevenue += 6900.0 * factor
-					}
-				}
 			}
 		}
 	}

@@ -104,6 +104,7 @@ export interface PromoCode {
   is_active: boolean;
   created_at: string;
   total_revenue?: number;
+  paid_uses?: number;
   students?: string[];
 }
 

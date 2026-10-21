@@ -35,6 +35,60 @@ func TestPromoValidate_BadRequestOnEmpty(t *testing.T) {
 	}
 }
 
+func TestPromoList_RevenueComesFromPaymentLedger(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	db := setupHandlerDB(t)
+
+	promo := models.PromoCode{Code: "SPARK5", DiscountPercent: 5, UsesCount: 1, IsActive: true}
+	if err := db.Create(&promo).Error; err != nil {
+		t.Fatal(err)
+	}
+	// Activation alone is not revenue: the user may never have paid with it.
+	if err := db.Create(&models.User{
+		TelegramID: 101, Username: "activated", PromoCode: "SPARK5",
+		PaidAmount: 6900, Tier: "accelerator", HasAccess: true,
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&models.PaymentTransaction{
+		PaymentID: "RECEIPT_1", TelegramID: 101, Amount: 6555, AmountKopecks: 655500,
+		PromoCode: "SPARK5", Status: "SUCCESS", Tier: "accelerator",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Create(&models.PaymentTransaction{
+		PaymentID: "UPGRADE_1", TelegramID: 101, Amount: 345,
+		PromoCode: "", Status: "SUCCESS", Tier: "accelerator",
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	handler := NewPromoHandler(db)
+	router := gin.New()
+	router.GET("/promos", handler.List)
+
+	req, _ := http.NewRequest(http.MethodGet, "/promos", nil)
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var result []PromoWithStats
+	if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+		t.Fatal(err)
+	}
+	if len(result) != 1 {
+		t.Fatalf("expected one promo, got %d", len(result))
+	}
+	if result[0].TotalRevenue != 6555 {
+		t.Fatalf("revenue must use successful promo transactions, got %.2f", result[0].TotalRevenue)
+	}
+	if result[0].PaidUses != 1 {
+		t.Fatalf("expected one paid promo use, got %d", result[0].PaidUses)
+	}
+}
+
 func TestPromoCreate_BadRequestOnEmptyCode(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	handler := NewPromoHandler(nil)

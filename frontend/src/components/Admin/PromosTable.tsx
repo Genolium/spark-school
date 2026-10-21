@@ -48,16 +48,11 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
     }).catch(() => {});
   }, []);
 
-  // Aggregated analytics calculation
+  // Aggregated analytics calculation. Revenue comes only from the payment
+  // ledger returned by the backend; never estimate it from activations.
   const totalUses = promos.reduce((sum, p) => sum + (p.uses_count || 0), 0);
-  const totalRevenue = promos.reduce((sum, p) => {
-    if (typeof p.total_revenue === "number" && p.total_revenue > 0) {
-      return sum + p.total_revenue;
-    }
-    const pct = p.discount_percent || 5;
-    const price = Math.round(coursePricing.accelerator_price * (1 - pct / 100));
-    return sum + (p.uses_count || 0) * price;
-  }, 0);
+  const totalPaidUses = promos.reduce((sum, p) => sum + (p.paid_uses || 0), 0);
+  const totalRevenue = promos.reduce((sum, p) => sum + (p.total_revenue || 0), 0);
   const totalRewards = promos.reduce(
     (sum, p) => sum + (p.uses_count || 0) * (p.reward_amount || 0),
     0
@@ -166,7 +161,7 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
         <div className="p-5 rounded-2xl bg-white/80 dark:bg-black/40 border border-slate-200 dark:border-white/10 shadow-sm backdrop-blur-md relative overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-[11px] font-mono text-slate-500 uppercase tracking-wider">
-              Всего использований
+              Активаций промокода
             </span>
             <div className="w-8 h-8 rounded-xl bg-amber-500/10 text-amber-500 flex items-center justify-center">
               <Users className="w-4 h-4" />
@@ -176,7 +171,7 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
             {totalUses} <span className="text-sm font-normal text-slate-400">раз</span>
           </div>
           <p className="text-[11px] font-mono text-slate-500 mt-1">
-            Активаций студентами курса
+            Оплачено с промокодом: {totalPaidUses}
           </p>
         </div>
 
@@ -304,10 +299,7 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
                 const discountRub = Math.round(coursePricing.accelerator_price * (discountPct / 100));
                 const discountedPrice = coursePricing.accelerator_price - discountRub;
 
-                const promoRevenue =
-                  typeof promo.total_revenue === "number" && promo.total_revenue > 0
-                    ? promo.total_revenue
-                    : (promo.uses_count || 0) * discountedPrice;
+                const promoRevenue = promo.total_revenue || 0;
                 const partnerEarnings = (promo.uses_count || 0) * (promo.reward_amount || 0);
                 const studentsCount = promo.students?.length || 0;
 
