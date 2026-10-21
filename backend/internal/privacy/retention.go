@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/spark-school/backend/internal/database"
 	"github.com/spark-school/backend/internal/models"
 	"gorm.io/gorm"
 )
@@ -85,6 +86,9 @@ func (c *Cleaner) RunOnce(ctx context.Context) (int64, error) {
 	_ = c.db.WithContext(ctx).Where("expires_at < ?", time.Now()).Delete(&models.RevokedToken{}).Error
 	_ = c.db.WithContext(ctx).Where("expires_at < ?", time.Now()).Delete(&models.BotSession{}).Error
 	_ = c.db.WithContext(ctx).Where("expires_at < ?", time.Now()).Delete(&models.SchedulerLease{}).Error
+	if err := database.EnsureAnalyticsPartitions(c.db, time.Now()); err != nil {
+		log.Printf("[Privacy] failed to ensure analytics partitions: %v", err)
+	}
 	if deleted > 0 {
 		log.Printf("[Privacy] removed %d analytics rows older than %d days", deleted, c.days)
 	}

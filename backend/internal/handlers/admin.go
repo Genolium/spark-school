@@ -17,6 +17,7 @@ import (
 	"github.com/spark-school/backend/internal/models"
 	"github.com/spark-school/backend/internal/money"
 	"github.com/spark-school/backend/internal/privacy"
+	"github.com/spark-school/backend/internal/readmodels"
 	"github.com/spark-school/backend/internal/services"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -234,27 +235,53 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 		Tier          string
 		CreatedAt     time.Time
 		PromoCode     string
+		Purchases     int64
 	}
 	var txRecords []TransactionRecord
 
-	var pts []models.PaymentTransaction
-	h.db.Where("status = 'SUCCESS'").Order("created_at ASC").Find(&pts)
-	for _, pt := range pts {
-		t := strings.ToLower(strings.TrimSpace(pt.Tier))
-		if t == "" {
-			t = "accelerator"
+	// Prefer the pre-aggregated read model; fall back to the live ledger when
+	// it is unavailable (fresh install or SQLite tests).
+	var rollups []readmodels.RevenueDaily
+	usedRollup := false
+	if err := h.db.Table("admin_revenue_daily").Order("day ASC").Find(&rollups).Error; err == nil && len(rollups) > 0 {
+		usedRollup = true
+		for _, r := range rollups {
+			t := strings.ToLower(strings.TrimSpace(r.Tier))
+			if t == "" {
+				t = "accelerator"
+			}
+			day := time.Date(r.Day.Year(), r.Day.Month(), r.Day.Day(), 0, 0, 0, 0, msk)
+			txRecords = append(txRecords, TransactionRecord{
+				Amount:        money.Kopecks(r.RevenueKopecks).ToRubles(),
+				AmountKopecks: r.RevenueKopecks,
+				Tier:          t,
+				CreatedAt:     day,
+				PromoCode:     r.PromoCode,
+				Purchases:     r.Purchases,
+			})
 		}
-		kopecks := pt.AmountKopecks
-		if kopecks == 0 {
-			kopecks = int64(money.FromRubles(pt.Amount))
+	}
+	if !usedRollup {
+		var pts []models.PaymentTransaction
+		h.db.Where("status = 'SUCCESS'").Order("created_at ASC").Find(&pts)
+		for _, pt := range pts {
+			t := strings.ToLower(strings.TrimSpace(pt.Tier))
+			if t == "" {
+				t = "accelerator"
+			}
+			kopecks := pt.AmountKopecks
+			if kopecks == 0 {
+				kopecks = int64(money.FromRubles(pt.Amount))
+			}
+			txRecords = append(txRecords, TransactionRecord{
+				Amount:        money.Kopecks(kopecks).ToRubles(),
+				AmountKopecks: kopecks,
+				Tier:          t,
+				CreatedAt:     pt.CreatedAt,
+				PromoCode:     pt.PromoCode,
+				Purchases:     1,
+			})
 		}
-		txRecords = append(txRecords, TransactionRecord{
-			Amount:        money.Kopecks(kopecks).ToRubles(),
-			AmountKopecks: kopecks,
-			Tier:          t,
-			CreatedAt:     pt.CreatedAt,
-			PromoCode:     pt.PromoCode,
-		})
 	}
 
 	var activeUsers []models.User
@@ -267,23 +294,29 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 		}
 	}
 
+	totalPurchases := int64(0)
 	for _, tx := range txRecords {
 		grossKopecks += money.Kopecks(tx.AmountKopecks)
 		grossVolume += tx.Amount
+		purchases := tx.Purchases
+		if purchases <= 0 {
+			purchases = 1
+		}
+		totalPurchases += purchases
 		switch tx.Tier {
 		case "vip":
-			vipCount++
+			vipCount += int(purchases)
 			vipRevenue += tx.Amount
 		case "basic":
-			basicCount++
+			basicCount += int(purchases)
 			basicRevenue += tx.Amount
 		default:
-			acceleratorCount++
+			acceleratorCount += int(purchases)
 			acceleratorRevenue += tx.Amount
 		}
 
 		if tx.PromoCode != "" {
-			promoUsageCount++
+			promoUsageCount += int(purchases)
 			if tx.Tier == "vip" {
 				promoSavedAmount += pricing.VIPPrice * 0.05
 			} else if tx.Tier == "basic" {
@@ -296,7 +329,7 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 		opTime := tx.CreatedAt.In(msk)
 		if opTime.After(todayStart) || opTime.Equal(todayStart) {
 			todayRevenue += tx.Amount
-			todayPurchases++
+			todayPurchases += int(purchases)
 		}
 		if opTime.After(weekStart) || opTime.Equal(weekStart) {
 			weekRevenue += tx.Amount
@@ -308,14 +341,14 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 		dateKey := opTime.Format("2006-01-02")
 		if stat, ok := dailyMap[dateKey]; ok {
 			stat.Revenue += tx.Amount
-			stat.Purchases++
+			stat.Purchases += int(purchases)
 			switch tx.Tier {
 			case "vip":
-				stat.VIPCount++
+				stat.VIPCount += int(purchases)
 			case "basic":
-				stat.BasicCount++
+				stat.BasicCount += int(purchases)
 			default:
-				stat.AcceleratorCount++
+				stat.AcceleratorCount += int(purchases)
 			}
 		} else if opTime.Before(monthStart) {
 			preMonthRevenue += tx.Amount
@@ -333,8 +366,8 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 	}
 
 	averageOrderValue := 0.0
-	if len(txRecords) > 0 {
-		averageOrderValue = grossVolume / float64(len(txRecords))
+	if totalPurchases > 0 {
+		averageOrderValue = grossVolume / float64(totalPurchases)
 	}
 
 	conversionRate := 0.0

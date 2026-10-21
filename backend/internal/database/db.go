@@ -18,7 +18,7 @@ var DB *gorm.DB
 
 // RequiredSchemaVersion is the migration version a process needs before it is
 // considered ready to serve traffic.
-const RequiredSchemaVersion int64 = 11
+const RequiredSchemaVersion int64 = 13
 
 // MigrationVersion returns the latest applied Goose version.
 func MigrationVersion(db *gorm.DB) (int64, error) {
@@ -89,6 +89,9 @@ func Init(cfg *config.Config) *gorm.DB {
 	// Single canonical migration chain (embedded from internal/database/migrations).
 	if err := RunMigrations(sqlDB); err != nil {
 		log.Fatalf("Database migrations failed, refusing to start: %v", err)
+	}
+	if err := EnsureAnalyticsPartitions(db, time.Now()); err != nil {
+		log.Fatalf("Failed to prepare analytics partitions: %v", err)
 	}
 
 	DB = db

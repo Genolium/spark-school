@@ -46,8 +46,8 @@ func TestPostgresMigrations_EmptyDatabaseAndRerun(t *testing.T) {
 	if err := sqlDB.QueryRow("SELECT MAX(version_id) FROM goose_db_version").Scan(&version); err != nil {
 		t.Fatalf("goose version: %v", err)
 	}
-	if version < 11 {
-		t.Fatalf("expected at least migration 11, got %d", version)
+	if version < 13 {
+		t.Fatalf("expected at least migration 13, got %d", version)
 	}
 
 	for _, table := range []string{
@@ -57,6 +57,7 @@ func TestPostgresMigrations_EmptyDatabaseAndRerun(t *testing.T) {
 		"processed_telegram_updates", "course_pricings", "app_meta",
 		"order_intents", "experiment_assignments", "backup_heartbeat",
 		"revoked_tokens", "admin_audit_log", "rate_limits", "bot_sessions", "scheduler_leases",
+		"admin_revenue_daily",
 	} {
 		var exists bool
 		if err := sqlDB.QueryRow("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=$1)", table).Scan(&exists); err != nil {
@@ -105,6 +106,18 @@ func TestPostgresMigrations_EmptyDatabaseAndRerun(t *testing.T) {
 	if reminderColumns != 2 {
 		t.Errorf("expected both Zoom reminder columns, got %d", reminderColumns)
 	}
+
+	var partitionName string
+	if _, err := sqlDB.Exec(`INSERT INTO analytics_events (step, created_at) VALUES ('landing_view', NOW())`); err != nil {
+		t.Fatalf("insert into partitioned analytics: %v", err)
+	}
+	if err := sqlDB.QueryRow(`SELECT tableoid::regclass::text FROM analytics_events WHERE step='landing_view' ORDER BY created_at DESC LIMIT 1`).Scan(&partitionName); err != nil {
+		t.Fatal(err)
+	}
+	if partitionName == "analytics_events_default" {
+		t.Errorf("current event landed in the default partition")
+	}
+	t.Logf("analytics partition: %s", partitionName)
 
 	for _, index := range []string{
 		"idx_active_slot_key", "idx_active_user_booking",

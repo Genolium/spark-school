@@ -24,6 +24,7 @@ import (
 	"github.com/spark-school/backend/internal/monitoring"
 	"github.com/spark-school/backend/internal/outbox"
 	"github.com/spark-school/backend/internal/privacy"
+	"github.com/spark-school/backend/internal/readmodels"
 	"github.com/spark-school/backend/internal/security"
 	"github.com/spark-school/backend/internal/services"
 	"gorm.io/gorm"
@@ -85,6 +86,10 @@ func main() {
 	cleaner := privacy.NewCleaner(db, cfg.AnalyticsRetentionDays)
 	cleaner.Start()
 	defer cleaner.Stop()
+
+	revenueWorker := readmodels.NewRevenueWorker(db)
+	revenueWorker.Start()
+	defer revenueWorker.Stop()
 
 	// Note: Standalone Telegram bot worker runs via cmd/bot/main.go.
 	// If RUN_EMBEDDED_BOT=true is set, run it embedded for simple development.
