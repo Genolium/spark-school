@@ -113,7 +113,7 @@ jobs:
       - run: docker build -t spark-backend:ci backend
       - run: docker build -t spark-frontend:ci frontend
       - name: Scan backend image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: spark-backend:ci
           format: table
@@ -122,7 +122,7 @@ jobs:
           vuln-type: os,library
           severity: CRITICAL,HIGH
       - name: Scan frontend image
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: spark-frontend:ci
           format: table
