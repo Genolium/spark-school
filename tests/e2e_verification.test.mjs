@@ -347,8 +347,13 @@ describe('Tier 3: Cross-Feature & Deep-Links', () => {
       'Calculator CTA button must link to https://t.me/spark_prep_bot?start=calc_...'
     );
 
-    // Check CTA copy mentions "так называемым Илем"
-    assert.match(calcContent, /Разобрать заявку с так называемым Илем в Telegram/i, 'Calculator CTA copy must invite user to discuss application with так называемым Илем');
+    // Check CTA copy invites the user to discuss the application with the curator.
+    // Both the short and the full brand form are valid.
+    assert.match(
+      calcContent,
+      /Разобрать заявку с (так называемым )?Илем в Telegram/i,
+      'Calculator CTA copy must invite user to discuss the application with the curator'
+    );
   });
 
   it('3.2 Payment Modal Deep-Link: Adheres to https://t.me/spark_prep_bot?start=pay_... with tiers and promo', () => {
