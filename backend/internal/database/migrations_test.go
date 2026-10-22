@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -275,6 +276,63 @@ func TestPostgresMigrations_RepairsLegacyCoursePricingSchema(t *testing.T) {
 	}
 	if err := ValidateSchema(db); err != nil {
 		t.Fatalf("schema validation after repair: %v", err)
+	}
+}
+
+func TestPostgresMigrations_BackfillsPaymentConfirmedEvents(t *testing.T) {
+	sqlDB := migrationTestSQLDB(t)
+	goose.SetBaseFS(embedMigrations)
+	if err := goose.SetDialect("postgres"); err != nil {
+		t.Fatal(err)
+	}
+	if err := goose.UpTo(sqlDB, "migrations", 20); err != nil {
+		t.Fatalf("apply schema up to 20: %v", err)
+	}
+
+	now := time.Now()
+	if _, err := sqlDB.Exec(`INSERT INTO users (telegram_id, first_name, visitor_id) VALUES (777, 'Legacy', 'visitor-legacy')`); err != nil {
+		t.Fatalf("seed legacy user: %v", err)
+	}
+	// A receipt reconciled by the legacy code path: a financial operation
+	// without the matching funnel event.
+	if _, err := sqlDB.Exec(`INSERT INTO payment_transactions
+		(payment_id, order_id, telegram_id, tier, amount, amount_kopecks, status, currency, pay_method, source, created_at)
+		VALUES ('RECEIPT_LEGACY', 'RECEIPT_LEGACY', 777, 'accelerator', 6900, 690000, 'SUCCESS', 'RUB', 'sbp_receipt', 'sbp_receipt', $1)`, now); err != nil {
+		t.Fatalf("seed legacy payment: %v", err)
+	}
+	// Manual grants are not funnel confirmations and must stay untouched.
+	if _, err := sqlDB.Exec(`INSERT INTO payment_transactions
+		(payment_id, telegram_id, tier, amount, status, currency, pay_method, source, created_at)
+		VALUES ('MANUAL_LEGACY', 777, 'accelerator', 6900, 'SUCCESS', 'RUB', 'admin_manual', 'manual', $1)`, now); err != nil {
+		t.Fatalf("seed manual payment: %v", err)
+	}
+
+	if err := goose.Up(sqlDB, "migrations"); err != nil {
+		t.Fatalf("upgrade to latest: %v", err)
+	}
+
+	var step, tier, visitorID, metadata string
+	if err := sqlDB.QueryRow(`SELECT step, tier, COALESCE(visitor_id,''), COALESCE(metadata,'')
+		FROM analytics_events WHERE payment_id='RECEIPT_LEGACY' AND step='payment_confirmed'`).
+		Scan(&step, &tier, &visitorID, &metadata); err != nil {
+		t.Fatalf("expected a backfilled payment_confirmed event: %v", err)
+	}
+	if tier != "accelerator" {
+		t.Errorf("expected tier accelerator on the backfilled event, got %q", tier)
+	}
+	if visitorID != "visitor-legacy" {
+		t.Errorf("expected the buyer attribution to be restored, got %q", visitorID)
+	}
+	if !strings.Contains(metadata, "RECEIPT_LEGACY") {
+		t.Errorf("expected payment id in metadata, got %q", metadata)
+	}
+
+	var manualEvents int
+	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM analytics_events WHERE payment_id='MANUAL_LEGACY'`).Scan(&manualEvents); err != nil {
+		t.Fatal(err)
+	}
+	if manualEvents != 0 {
+		t.Fatalf("manual grants must not become funnel events, got %d", manualEvents)
 	}
 }
 

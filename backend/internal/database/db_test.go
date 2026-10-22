@@ -103,6 +103,55 @@ func TestReconcileHistoricalSales_ReceiptPreservesPromoCode(t *testing.T) {
 	}
 }
 
+func TestReconcileHistoricalSales_ReceiptCreatesPaymentConfirmedEvent(t *testing.T) {
+	db := setupTestDB(t)
+
+	user := models.User{
+		TelegramID: 444444,
+		Username:   "receipt_student",
+		Tier:       "accelerator",
+		PaidAmount: 6900.0,
+		Role:       "student",
+	}
+	db.Create(&user)
+
+	receipt := models.PaymentReceipt{
+		TelegramID: user.TelegramID,
+		Username:   user.Username,
+		Amount:     6900.0,
+		Tier:       "accelerator",
+		Status:     "approved",
+		CreatedAt:  time.Now(),
+	}
+	db.Create(&receipt)
+
+	ReconcileHistoricalSales(db)
+
+	paymentID := fmt.Sprintf("RECEIPT_%d", receipt.ID)
+	var events []models.AnalyticsEvent
+	db.Where("step = ? AND payment_id = ?", "payment_confirmed", paymentID).Find(&events)
+	if len(events) != 1 {
+		t.Fatalf("expected 1 payment_confirmed event for %s, got %d", paymentID, len(events))
+	}
+	if events[0].Tier != "accelerator" {
+		t.Errorf("expected event tier accelerator, got %q", events[0].Tier)
+	}
+	if events[0].Source != "sbp_receipt" {
+		t.Errorf("expected event source sbp_receipt, got %q", events[0].Source)
+	}
+	if !strings.Contains(events[0].Metadata, paymentID) {
+		t.Errorf("expected event metadata to mention %s, got %q", paymentID, events[0].Metadata)
+	}
+
+	// Re-running the reconciliation must not duplicate the funnel event.
+	ReconcileHistoricalSales(db)
+	var eventsAfter []models.AnalyticsEvent
+	db.Where("step = ? AND payment_id = ?", "payment_confirmed", paymentID).Find(&eventsAfter)
+	if len(eventsAfter) != 1 {
+		t.Fatalf("expected idempotent reconciliation: got %d payment_confirmed events", len(eventsAfter))
+	}
+}
+
 func TestReconcileHistoricalSales_UpgradePreservesInitialPurchase(t *testing.T) {
 	db := setupTestDB(t)
 

@@ -3,10 +3,12 @@ package monitoring
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/glebarez/sqlite"
+	"github.com/spark-school/backend/internal/database"
 	"github.com/spark-school/backend/internal/models"
 	"github.com/spark-school/backend/internal/security"
 	"gorm.io/gorm"
@@ -21,7 +23,7 @@ func testMonitorDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.OutboxEvent{}, &models.PaymentTransaction{}, &models.AnalyticsEvent{}, &models.BackupHeartbeat{}); err != nil {
+	if err := db.AutoMigrate(&models.OutboxEvent{}, &models.PaymentTransaction{}, &models.AnalyticsEvent{}, &models.BackupHeartbeat{}, &models.User{}, &models.PaymentReceipt{}); err != nil {
 		t.Fatal(err)
 	}
 	return db
@@ -76,6 +78,35 @@ func TestMonitor_TelegramDeliveryDisabled(t *testing.T) {
 	}
 	if calls != 0 {
 		t.Fatalf("monitoring must not send Telegram messages when disabled, got %d calls", calls)
+	}
+}
+
+func TestMonitor_LegacyReconciledReceiptIsNotReportedAsUnconfirmed(t *testing.T) {
+	db := testMonitorDB(t)
+	now := time.Now()
+
+	user := models.User{TelegramID: 555, Username: "legacy_buyer", Tier: "accelerator", PaidAmount: 6900, Role: "student"}
+	db.Create(&user)
+	// A receipt approved by the legacy code path: the financial operation is
+	// reconciled from `payment_receipts`, so the funnel event has to be
+	// created together with it.
+	db.Create(&models.PaymentReceipt{
+		TelegramID: user.TelegramID,
+		Username:   user.Username,
+		Amount:     6900,
+		Tier:       "accelerator",
+		Status:     "approved",
+		CreatedAt:  now.Add(-time.Hour),
+	})
+	db.Create(&models.BackupHeartbeat{ID: 1, LastSuccessAt: now.Add(-time.Hour)})
+
+	database.ReconcileHistoricalSales(db)
+
+	monitor := New(db, 42, nil, security.NewMetrics(), func(context.Context) error { return nil })
+	for _, alert := range monitor.CheckOnce(context.Background()) {
+		if strings.Contains(alert, "payment_confirmed") {
+			t.Fatalf("reconciled receipt must not be reported as unconfirmed: %s", alert)
+		}
 	}
 }
 

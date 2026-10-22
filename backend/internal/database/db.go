@@ -19,7 +19,7 @@ var DB *gorm.DB
 
 // RequiredSchemaVersion is the migration version a process needs before it is
 // considered ready to serve traffic.
-const RequiredSchemaVersion int64 = 20
+const RequiredSchemaVersion int64 = 21
 
 // MigrationVersion returns the latest applied Goose version.
 func MigrationVersion(db *gorm.DB) (int64, error) {
@@ -235,21 +235,36 @@ func ReconcileHistoricalSales(db *gorm.DB) {
 			if tier == "" {
 				tier = "accelerator"
 			}
-			pt := models.PaymentTransaction{
-				PaymentID:     receiptPID,
-				TelegramID:    pr.TelegramID,
-				Username:      pr.Username,
-				Amount:        pr.Amount,
-				AmountKopecks: int64(money.FromRubles(pr.Amount)),
-				Currency:      "RUB",
-				Tier:          tier,
-				Status:        "SUCCESS",
-				PayMethod:     "sbp_receipt",
-				Source:        "sbp_receipt",
-				PromoCode:     pr.PromoCode,
-				CreatedAt:     pr.CreatedAt,
+			// The receipt itself carries no visitor attribution, but the buyer
+			// does: linking them keeps the funnel connected to the payment.
+			var owner models.User
+			visitorID := ""
+			attributionToken := ""
+			if err := db.Where("telegram_id = ?", pr.TelegramID).First(&owner).Error; err == nil {
+				visitorID = owner.VisitorID
+				attributionToken = owner.AttributionToken
 			}
-			db.Create(&pt)
+			pt := models.PaymentTransaction{
+				PaymentID:        receiptPID,
+				TelegramID:       pr.TelegramID,
+				Username:         pr.Username,
+				Amount:           pr.Amount,
+				AmountKopecks:    int64(money.FromRubles(pr.Amount)),
+				Currency:         "RUB",
+				Tier:             tier,
+				Status:           "SUCCESS",
+				PayMethod:        "sbp_receipt",
+				Source:           "sbp_receipt",
+				PromoCode:        pr.PromoCode,
+				VisitorID:        visitorID,
+				AttributionToken: attributionToken,
+				CreatedAt:        pr.CreatedAt,
+			}
+			if err := db.Create(&pt).Error; err == nil {
+				// A financial operation without a funnel event is reported by
+				// the monitoring check as an unconfirmed payment.
+				EnsurePaymentConfirmedEvent(db, pt)
+			}
 		}
 	}
 
