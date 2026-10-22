@@ -49,10 +49,13 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
 COPY --from=prod-deps --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 
-RUN chmod -R a+rX /app/public /app/.next
+# The runtime only needs Next.js. npm bundles vulnerable packages
+# (brace-expansion, pacote, sigstore) that are not used to serve the app.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx \
+    && chmod -R a+rX /app/public /app/.next
 
 USER nextjs
 
 EXPOSE 3000
 
-CMD ["npm", "run", "start", "--", "-p", "3000"]
+CMD ["./node_modules/.bin/next", "start", "-p", "3000"]
