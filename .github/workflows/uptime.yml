@@ -16,10 +16,23 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.UPTIME_TELEGRAM_CHAT_ID }}
         run: |
           set -eu
-          URL="${UPTIME_URL%/}/health/ready"
+          # The canonical production domain is the source of truth. The secret
+          # only allows pointing the check at another host (mirror, staging).
+          CANONICAL="https://so-called-spark.ru"
+          URL="${CANONICAL}/health/ready"
+          if [ -n "${UPTIME_URL:-}" ]; then
+            URL="${UPTIME_URL%/}/health/ready"
+          fi
           if curl -fsS --max-time 15 "$URL" >/tmp/ready.json; then
             echo "OK: $(cat /tmp/ready.json)"
             exit 0
+          fi
+          if [ "$URL" != "${CANONICAL}/health/ready" ]; then
+            echo "Configured UPTIME_URL is unreachable ($URL), checking ${CANONICAL}/health/ready"
+            if curl -fsS --max-time 15 "${CANONICAL}/health/ready" >/tmp/ready.json; then
+              echo "::warning title=Uptime URL is misconfigured::UPTIME_URL points to an unreachable host, but ${CANONICAL} is healthy. Update the repository secret to stop the warning."
+              exit 0
+            fi
           fi
           echo "Readiness check failed for $URL"
           if [ -n "${TELEGRAM_BOT_TOKEN:-}" ] && [ -n "${TELEGRAM_CHAT_ID:-}" ]; then
