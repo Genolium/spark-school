@@ -4,7 +4,8 @@ import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ShieldCheck, ArrowUpRight, QrCode, CreditCard, Send, Check, Tag, Sparkles } from "lucide-react";
 import { api, PromoValidationResult, PlacesStats } from "@/lib/api";
-import { trackFunnelStep } from "@/lib/analytics";
+import { getAttributionToken, getVisitorId, trackFunnelStep } from "@/lib/analytics";
+import { getExperiment } from "@/lib/experiments";
 
 export type PricingTier = "basic" | "accelerator" | "vip";
 
@@ -140,6 +141,8 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
         tier,
         telegram_username: tgUsername.trim(),
         promo_code: promoResult?.valid ? promoResult.code : undefined,
+        visitor_id: getVisitorId(),
+        attribution_token: getAttributionToken(),
       });
     } catch {
       // Safe fallback
@@ -178,14 +181,18 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
   const pPart = appliedPromo.slice(0, 16);
   const rPart = refCode.slice(0, 12);
 
-  let startParam = `pay_${tier}`;
-  if (pPart) {
-    startParam = `pay_${tier}_${pPart}`;
-  } else if (rPart && uPart) {
-    startParam = `pay_${tier}_${uPart}_ref_${rPart}`;
-  } else if (uPart) {
-    startParam = `pay_${tier}_${uPart}`;
+  const startParts = [`pay_${tier}`];
+  if (getExperiment("pricing_price") === "lower") {
+    startParts.push("pe_lower");
   }
+  if (pPart) {
+    startParts.push(pPart);
+  } else if (rPart && uPart) {
+    startParts.push(uPart, "ref", rPart);
+  } else if (uPart) {
+    startParts.push(uPart);
+  }
+  const startParam = startParts.join("_");
   const botPayUrl = `https://t.me/spark_prep_bot?start=${startParam}`;
 
   if (!isOpen) return null;

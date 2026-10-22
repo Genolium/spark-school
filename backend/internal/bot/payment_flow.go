@@ -10,6 +10,18 @@ import (
 	"github.com/spark-school/backend/internal/models"
 )
 
+const lowerAcceleratorPrice = 9990.0
+
+// pricingForSession applies the landing price experiment to the bot price too,
+// so the amount shown on the site and the amount requested in Telegram match.
+func (s *BotService) pricingForSession(session *UserSession) models.CoursePricing {
+	pricing := s.getPricing()
+	if session != nil && session.PriceExperiment == "lower" {
+		pricing.AcceleratorPrice = lowerAcceleratorPrice
+	}
+	return pricing
+}
+
 func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User, withPromo bool) {
 	if s.bot == nil {
 		return
@@ -33,7 +45,7 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 	num3 := TgEmoji(EmojiNum3, "3️⃣")
 	paperclip := TgEmoji(EmojiPaperclip, "📎")
 
-	pricing := s.getPricing()
+	pricing := s.pricingForSession(session)
 	basicBase := int(pricing.BasicPrice)
 	accBase := int(pricing.AcceleratorPrice)
 	vipBase := int(pricing.VIPPrice)
@@ -133,7 +145,7 @@ func (s *BotService) handleSbpPayment(chatID telego.ChatID, from *telego.User, t
 
 	hasPromo := session.DiscountPct > 0 || session.PromoCode != ""
 
-	pricing := s.getPricing()
+	pricing := s.pricingForSession(session)
 	tierTitle := "Акселератор"
 	basePrice := int(pricing.AcceleratorPrice)
 	if tier == "basic" {

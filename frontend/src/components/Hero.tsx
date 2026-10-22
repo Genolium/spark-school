@@ -46,6 +46,34 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroPro
   ].filter((p): p is number => typeof p === "number" && p > 0);
   const minPrice = validPrices.length > 0 ? Math.min(...validPrices) : 3990;
 
+  const headlineVariant = getExperiment("hero_headline");
+  const headline =
+    headlineVariant === "benefit" ? (
+      <>
+        ПОСТУПИ В АМЕРИКАНСКИЙ
+        <br />
+        УНИВЕРСИТЕТ
+        <br />
+        С ГРАНТОМ $20,000
+      </>
+    ) : headlineVariant === "urgency" ? (
+      <>
+        УСПЕЙ В ПОТОК SPARK 2027
+        <br />
+        ГРАНТ $20,000
+        <br />
+        НА УЧЁБУ В США
+      </>
+    ) : (
+      <>
+        ВЫИГРАЙ ГРАНТ $20,000
+        <br />
+        НА УЧЁБУ В США
+        <br />
+        ЭТИМ ЛЕТОМ
+      </>
+    );
+
   const ctaVariant = getExperiment("hero_cta_copy");
   const ctaLabel =
     ctaVariant === "benefit"
@@ -124,11 +152,7 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroPro
               transition={{ duration: 0.6 }}
             >
               <h1 className="font-heading text-4xl sm:text-6xl lg:text-[76px] font-extrabold tracking-tight leading-[1.04] text-white">
-                ВЫИГРАЙ ГРАНТ $20,000
-                <br />
-                НА УЧЁБУ В США
-                <br />
-                ЭТИМ ЛЕТОМ
+                {headline}
               </h1>
 
               {/* Subtitle */}

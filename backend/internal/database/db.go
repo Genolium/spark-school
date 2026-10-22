@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/spark-school/backend/internal/config"
-	"github.com/spark-school/backend/internal/money"
 	"github.com/spark-school/backend/internal/models"
+	"github.com/spark-school/backend/internal/money"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -19,7 +19,7 @@ var DB *gorm.DB
 
 // RequiredSchemaVersion is the migration version a process needs before it is
 // considered ready to serve traffic.
-const RequiredSchemaVersion int64 = 18
+const RequiredSchemaVersion int64 = 20
 
 // MigrationVersion returns the latest applied Goose version.
 func MigrationVersion(db *gorm.DB) (int64, error) {
@@ -53,6 +53,46 @@ func Ready(ctx context.Context, db *gorm.DB) (int64, error) {
 		return version, fmt.Errorf("schema version %d is older than required %d", version, RequiredSchemaVersion)
 	}
 	return version, nil
+}
+
+// ValidateSchema fails fast when a critical column expected by the code is
+// missing. This catches schema drift that CREATE TABLE IF NOT EXISTS cannot
+// repair, with a message that names the exact table and column.
+func ValidateSchema(db *gorm.DB) error {
+	if db == nil {
+		return fmt.Errorf("database is nil")
+	}
+	checks := []struct {
+		table   string
+		columns []string
+	}{
+		{"users", []string{"telegram_id", "has_access", "tier", "paid_amount", "promo_code"}},
+		{"payment_transactions", []string{"payment_id", "amount", "status", "promo_code", "visitor_id", "source"}},
+		{"payment_receipts", []string{"amount", "status", "promo_code"}},
+		{"payment_orders", []string{"order_id", "amount", "status", "promo_code", "visitor_id"}},
+		{"course_pricings", []string{"basic_price", "basic_old_price", "accelerator_price", "accelerator_old_price", "vip_price", "vip_old_price", "bank_name"}},
+		{"outbox_events", []string{"event_type", "payload", "status", "last_error"}},
+		{"experiment_assignments", []string{"experiment", "variant", "visitor_id"}},
+		{"bot_sessions", []string{"telegram_id", "state", "price_experiment"}},
+	}
+	for _, check := range checks {
+		for _, column := range check.columns {
+			var exists bool
+			if err := db.Raw(
+				`SELECT EXISTS (
+					SELECT 1 FROM information_schema.columns
+					WHERE table_schema = current_schema()
+					  AND table_name = ? AND column_name = ?
+				)`, check.table, column,
+			).Scan(&exists).Error; err != nil {
+				return fmt.Errorf("schema check %s.%s failed: %w", check.table, column, err)
+			}
+			if !exists {
+				return fmt.Errorf("required column %s.%s is missing", check.table, column)
+			}
+		}
+	}
+	return nil
 }
 
 // Init connects to PostgreSQL, applies the canonical Goose migration chain and
@@ -90,6 +130,9 @@ func Init(cfg *config.Config) *gorm.DB {
 	// Single canonical migration chain (embedded from internal/database/migrations).
 	if err := RunMigrations(sqlDB); err != nil {
 		log.Fatalf("Database migrations failed, refusing to start: %v", err)
+	}
+	if err := ValidateSchema(db); err != nil {
+		log.Fatalf("Database schema validation failed, refusing to start: %v", err)
 	}
 	if err := EnsureAnalyticsPartitions(db, time.Now()); err != nil {
 		log.Fatalf("Failed to prepare analytics partitions: %v", err)
@@ -199,12 +242,12 @@ func ReconcileHistoricalSales(db *gorm.DB) {
 				Amount:        pr.Amount,
 				AmountKopecks: int64(money.FromRubles(pr.Amount)),
 				Currency:      "RUB",
-				Tier:       tier,
-				Status:     "SUCCESS",
-				PayMethod:  "sbp_receipt",
-				Source:     "sbp_receipt",
-				PromoCode:  pr.PromoCode,
-				CreatedAt:  pr.CreatedAt,
+				Tier:          tier,
+				Status:        "SUCCESS",
+				PayMethod:     "sbp_receipt",
+				Source:        "sbp_receipt",
+				PromoCode:     pr.PromoCode,
+				CreatedAt:     pr.CreatedAt,
 			}
 			db.Create(&pt)
 		}
@@ -243,12 +286,12 @@ func ReconcileHistoricalSales(db *gorm.DB) {
 					Amount:        diff,
 					AmountKopecks: int64(money.FromRubles(diff)),
 					Currency:      "RUB",
-					Tier:       tier,
-					Status:     "SUCCESS",
-					PayMethod:  "historical_access",
-					Source:     "historical",
-					PromoCode:  u.PromoCode,
-					CreatedAt:  txTime,
+					Tier:          tier,
+					Status:        "SUCCESS",
+					PayMethod:     "historical_access",
+					Source:        "historical",
+					PromoCode:     u.PromoCode,
+					CreatedAt:     txTime,
 				}
 				db.Create(&pt)
 			}

@@ -19,7 +19,7 @@ import { RecoveryBanner } from "@/components/RecoveryBanner";
 import { DemoLessonSection } from "@/components/DemoLessonSection";
 import { StudentReviews } from "@/components/StudentReviews";
 import { trackFunnelStep, getAttributionToken } from "@/lib/analytics";
-import { syncServerExperiments } from "@/lib/experiments";
+import { getExperiment, syncServerExperiments } from "@/lib/experiments";
 
 export default function HomePage() {
   const [isChancesOpen, setIsChancesOpen] = useState(false);
@@ -43,6 +43,9 @@ export default function HomePage() {
     const cleanRef = refCode.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 16);
     const attributionToken = getAttributionToken();
     let startParam = `pay_${tier}`;
+    if (getExperiment("pricing_price") === "lower") {
+      startParam += "_pe_lower";
+    }
     if (attributionToken) {
       startParam += `_a_${attributionToken}`;
     }

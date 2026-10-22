@@ -83,6 +83,15 @@ func TestPostgresMigrations_EmptyDatabaseAndRerun(t *testing.T) {
 		t.Errorf("expected user kopeck/anonymization columns, got %d", paidKopecks)
 	}
 
+	var priceExperimentColumns int
+	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM information_schema.columns
+		WHERE table_schema='public' AND table_name='bot_sessions' AND column_name='price_experiment'`).Scan(&priceExperimentColumns); err != nil {
+		t.Fatal(err)
+	}
+	if priceExperimentColumns != 1 {
+		t.Errorf("expected bot_sessions.price_experiment, got %d", priceExperimentColumns)
+	}
+
 	var onboardingColumns int
 	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='users' AND column_name IN ('onboarding_status','intro_sent_at','onboarding_replied_at','onboarding_completed_at','onboarding_notes')`).Scan(&onboardingColumns); err != nil {
 		t.Fatal(err)
@@ -214,6 +223,61 @@ func TestPostgresMigrations_UpgradeOldSchemaWithDuplicates(t *testing.T) {
 	}
 }
 
+func TestPostgresMigrations_RepairsLegacyCoursePricingSchema(t *testing.T) {
+	sqlDB := migrationTestSQLDB(t)
+	goose.SetBaseFS(embedMigrations)
+	if err := goose.SetDialect("postgres"); err != nil {
+		t.Fatal(err)
+	}
+	if err := goose.UpTo(sqlDB, "migrations", 3); err != nil {
+		t.Fatalf("apply old schema: %v", err)
+	}
+
+	// This is the production drift that broke the previous deploy: an old
+	// GORM-created table without vip_price. CREATE TABLE IF NOT EXISTS in
+	// migration 00004 does not add it, so migration 00019 must repair it.
+	if _, err := sqlDB.Exec(`CREATE TABLE course_pricings (
+		id BIGSERIAL PRIMARY KEY,
+		basic_price NUMERIC(10,2) DEFAULT 3990.00,
+		accelerator_price NUMERIC(10,2) DEFAULT 6900.00,
+		updated_at TIMESTAMPTZ DEFAULT NOW())`); err != nil {
+		t.Fatalf("create legacy pricing table: %v", err)
+	}
+	if _, err := sqlDB.Exec(`INSERT INTO course_pricings (basic_price, accelerator_price) VALUES (3990, 6900)`); err != nil {
+		t.Fatalf("seed legacy pricing row: %v", err)
+	}
+
+	if err := goose.Up(sqlDB, "migrations"); err != nil {
+		t.Fatalf("upgrade legacy pricing schema: %v", err)
+	}
+
+	var columns int
+	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM information_schema.columns
+		WHERE table_schema='public' AND table_name='course_pricings'
+		  AND column_name IN ('vip_price','vip_old_price','basic_old_price','accelerator_old_price','bank_name')`).Scan(&columns); err != nil {
+		t.Fatal(err)
+	}
+	if columns != 5 {
+		t.Fatalf("expected legacy pricing columns to be repaired, got %d/5", columns)
+	}
+
+	var vip float64
+	if err := sqlDB.QueryRow(`SELECT vip_price FROM course_pricings ORDER BY id LIMIT 1`).Scan(&vip); err != nil {
+		t.Fatal(err)
+	}
+	if vip <= 0 {
+		t.Fatalf("expected repaired vip_price, got %v", vip)
+	}
+
+	db, err := gorm.Open(postgres.Open(os.Getenv("TEST_DATABASE_URL")), &gorm.Config{Logger: logger.Default.LogMode(logger.Silent)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateSchema(db); err != nil {
+		t.Fatalf("schema validation after repair: %v", err)
+	}
+}
+
 func TestPostgresMigrations_ReadinessChecksVersion(t *testing.T) {
 	sqlDB := migrationTestSQLDB(t)
 	if err := RunMigrations(sqlDB); err != nil {
@@ -229,6 +293,9 @@ func TestPostgresMigrations_ReadinessChecksVersion(t *testing.T) {
 	}
 	if version < RequiredSchemaVersion {
 		t.Fatalf("expected version >= %d, got %d", RequiredSchemaVersion, version)
+	}
+	if err := ValidateSchema(db); err != nil {
+		t.Fatalf("expected schema validation to pass: %v", err)
 	}
 }
 

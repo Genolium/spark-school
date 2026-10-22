@@ -1,6 +1,8 @@
 "use client";
 
 import { API_BASE } from "./api-base";
+import { getVisitorId } from "./analytics";
+import { applyPriceExperiment } from "./experiments";
 import type { PlacesStats, CoursePricing, ValidatePromoResponse, UserProfile, AdminStats, PayoutRequest, PromoCode, AffiliateStats, ExperimentMetric, DeadOutboxEvent, FunnelData } from "./api-types";
 
 export const publicApi = {
@@ -22,9 +24,11 @@ export const publicApi = {
 
   async getCoursePricing(): Promise<CoursePricing> {
     try {
-      const res = await fetch(`${API_BASE}/pricing`);
+      const visitorId = getVisitorId();
+      const query = visitorId ? `?visitor_id=${encodeURIComponent(visitorId)}` : "";
+      const res = await fetch(`${API_BASE}/pricing${query}`);
       if (res.ok) {
-        const data = await res.json();
+        const data = applyPriceExperiment(await res.json());
         if (typeof window !== "undefined") {
           localStorage.setItem("spark_pricing", JSON.stringify(data));
         }
@@ -38,12 +42,12 @@ export const publicApi = {
       const saved = localStorage.getItem("spark_pricing");
       if (saved) {
         try {
-          return JSON.parse(saved);
+          return applyPriceExperiment(JSON.parse(saved));
         } catch {}
       }
     }
 
-    return {
+    return applyPriceExperiment({
       basic_price: 3990,
       basic_old_price: 5900,
       accelerator_price: 6900,
@@ -51,7 +55,7 @@ export const publicApi = {
       vip_price: 14900,
       vip_old_price: 19900,
       bank_name: "БСПБ (Банк «Санкт-Петербург»)",
-    };
+    });
   },
 
   async validatePromoCode(code: string, tier?: string, price?: number): Promise<ValidatePromoResponse> {
@@ -106,6 +110,8 @@ export const publicApi = {
     telegram_id?: number;
     promo_code?: string;
     email?: string;
+    visitor_id?: string;
+    attribution_token?: string;
   }): Promise<{ success: boolean; confirmation_url?: string; payment_id?: string; error?: string }> {
     try {
       const res = await fetch(`${API_BASE}/payments/yookassa/create`, {

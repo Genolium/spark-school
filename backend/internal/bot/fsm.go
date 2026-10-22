@@ -24,11 +24,12 @@ const (
 
 // UserSession holds state machine and temporary calculator or payment data.
 type UserSession struct {
-	State        BotState
-	SelectedTier string // "accelerator" or "vip"
-	PromoCode    string
-	DiscountPct  int
-	LastActivity time.Time
+	State           BotState
+	SelectedTier    string // "accelerator" or "vip"
+	PromoCode       string
+	DiscountPct     int
+	PriceExperiment string
+	LastActivity    time.Time
 
 	// Upgrade fields
 	IsUpgrade       bool
@@ -120,6 +121,7 @@ func (sm *SessionManager) loadFromDB(chatID int64) *UserSession {
 		SelectedTier:       record.SelectedTier,
 		PromoCode:          record.PromoCode,
 		DiscountPct:        record.DiscountPct,
+		PriceExperiment:    record.PriceExperiment,
 		LastActivity:       record.LastActivity,
 		IsUpgrade:          record.IsUpgrade,
 		UpgradeFromTier:    record.UpgradeFromTier,
@@ -150,6 +152,7 @@ func (sm *SessionManager) Save(chatID int64, session *UserSession) {
 		SelectedTier:       session.SelectedTier,
 		PromoCode:          session.PromoCode,
 		DiscountPct:        session.DiscountPct,
+		PriceExperiment:    session.PriceExperiment,
 		IsUpgrade:          session.IsUpgrade,
 		UpgradeFromTier:    session.UpgradeFromTier,
 		UpgradeToTier:      session.UpgradeToTier,

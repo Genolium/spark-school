@@ -72,7 +72,9 @@ type analyticsTrackRequest struct {
 // the server derives it deterministically from the anonymous visitor id.
 var experimentVariants = map[string][]string{
 	"hero_cta_copy":    {"control", "benefit", "diagnostic"},
+	"hero_headline":    {"control", "benefit", "urgency"},
 	"pricing_cta_copy": {"control", "action"},
+	"pricing_price":    {"control", "lower"},
 }
 
 func assignVariant(visitorID, experiment string) string {
@@ -82,6 +84,17 @@ func assignVariant(visitorID, experiment string) string {
 	}
 	h := fnv32a(visitorID + ":" + experiment)
 	return variants[int(h%uint32(len(variants)))]
+}
+
+const priceExperimentLower = 9990.0
+
+// acceleratorPriceForVariant keeps display and checkout on the same price.
+// Only the accelerator tier is part of the price test.
+func acceleratorPriceForVariant(base float64, variant string) float64 {
+	if variant == "lower" {
+		return priceExperimentLower
+	}
+	return base
 }
 
 // fnv32a matches the FNV-1a implementation used by the frontend so the first

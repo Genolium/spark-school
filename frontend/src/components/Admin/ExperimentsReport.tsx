@@ -5,14 +5,18 @@ import { api, ExperimentMetric } from "@/lib/api";
 
 const EXPERIMENT_LABELS: Record<string, string> = {
   hero_cta_copy: "Главный CTA",
+  hero_headline: "Заголовок первого экрана",
   pricing_cta_copy: "CTA в тарифах",
+  pricing_price: "Цена Акселератора",
 };
 
 const VARIANT_LABELS: Record<string, string> = {
   control: "Контроль",
   benefit: "Выгода",
   diagnostic: "Диагностика",
+  urgency: "Дедлайн",
   action: "Оплатить и начать",
+  lower: "9 990 ₽",
 };
 
 export function ExperimentsReport() {

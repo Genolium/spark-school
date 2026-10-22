@@ -185,6 +185,7 @@ services:
       sh -c "
         apk add --no-cache curl > /dev/null 2>&1 || true
         echo '0 3 * * * /scripts/backup.sh' > /etc/crontabs/root
+        echo '0 4 * * 0 /scripts/restore-drill.sh >> /proc/1/fd/1 2>&1' >> /etc/crontabs/root
         echo 'Running initial backup at startup...'
         /scripts/backup.sh || true
         echo 'Starting crond daemon for daily 03:00 UTC backups...'

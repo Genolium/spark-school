@@ -27,7 +27,13 @@ ENV NODE_ENV=production
 
 RUN npm run build
 
-# Stage 3: Runner
+# Stage 3: Production-only dependencies (no tailwind/eslint/dev tooling)
+FROM node:20-alpine AS prod-deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev
+
+# Stage 4: Runner
 FROM node:20-alpine AS runner
 WORKDIR /app
 
@@ -40,7 +46,7 @@ RUN adduser --system --uid 1001 nextjs
 
 COPY --from=builder --chown=nextjs:nodejs /app/public ./public
 COPY --from=builder --chown=nextjs:nodejs /app/.next ./.next
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
+COPY --from=prod-deps --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 
 RUN chmod -R a+rX /app/public /app/.next

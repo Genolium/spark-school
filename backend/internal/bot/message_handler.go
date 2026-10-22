@@ -103,6 +103,12 @@ func (s *BotService) handleMessage(msg *telego.Message) error {
 				payload = strings.TrimPrefix(payload, "_")
 			}
 			session.SelectedTier = tier
+			session.PriceExperiment = ""
+			if strings.HasPrefix(payload, "pe_lower") {
+				session.PriceExperiment = "lower"
+				payload = strings.TrimPrefix(payload, "pe_lower")
+				payload = strings.TrimPrefix(payload, "_")
+			}
 
 			// 2. Extract the short landing attribution token.
 			attrToken := ""

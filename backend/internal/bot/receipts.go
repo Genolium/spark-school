@@ -100,7 +100,7 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) error {
 			chosenTier = "accelerator"
 		}
 
-		pricing := s.getPricing()
+		pricing := s.pricingForSession(session)
 		switch chosenTier {
 		case "basic":
 			amount = pricing.BasicPrice
