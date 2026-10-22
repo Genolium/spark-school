@@ -46,7 +46,9 @@ jobs:
           POSTGRES_USER: spark
           POSTGRES_PASSWORD: spark_test_password
           POSTGRES_DB: spark_test
+          PGPASSWORD: spark_test_password
         run: |
+          set -euo pipefail
           psql -h 127.0.0.1 -U spark -d spark_test -v ON_ERROR_STOP=1 \
             -c "INSERT INTO users (telegram_id, first_name, has_access) VALUES (999999, 'Restore Drill', TRUE) ON CONFLICT (telegram_id) DO NOTHING"
           psql -h 127.0.0.1 -U spark -d spark_test -v ON_ERROR_STOP=1 \
@@ -54,7 +56,9 @@ jobs:
           mkdir -p /tmp/spark-backups
           pg_dump -h 127.0.0.1 -U spark -d spark_test | gzip > /tmp/spark-backups/spark_test.sql.gz
           chmod +x scripts/restore-drill.sh
-          scripts/restore-drill.sh /tmp/spark-backups/spark_test.sql.gz
+          scripts/restore-drill.sh /tmp/spark-backups/spark_test.sql.gz 2>&1 | tee /tmp/restore-drill.log
+          echo "### Restore drill" >> "$GITHUB_STEP_SUMMARY"
+          cat /tmp/restore-drill.log >> "$GITHUB_STEP_SUMMARY"
 
   frontend:
     runs-on: ubuntu-latest
