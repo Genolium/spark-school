@@ -298,8 +298,9 @@ func (s *BotService) SendCuratorDailyDigest(targetChatID ...int64) (*DailyDigest
 		return nil, nil
 	}
 
-	now := time.Now()
-	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location())
+	msk := time.FixedZone("MSK", 3*3600)
+	now := time.Now().In(msk)
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, msk)
 
 	data := &DailyDigestData{
 		Date: now.Format("02.01.2006"),
@@ -309,21 +310,16 @@ func (s *BotService) SendCuratorDailyDigest(targetChatID ...int64) (*DailyDigest
 		// 1. New leads registered today
 		s.db.Model(&models.User{}).Where("created_at >= ? AND role != ?", todayStart, "admin").Count(&data.NewLeadsToday)
 
-		// 2. Approved payments today (Receipts + Online Transactions)
-		var receiptCount int64
-		var receiptRevenue float64
-		s.db.Model(&models.PaymentReceipt{}).Where("status = 'approved' AND (updated_at >= ? OR created_at >= ?)", todayStart, todayStart).Count(&receiptCount)
-		s.db.Model(&models.PaymentReceipt{}).Where("status = 'approved' AND (updated_at >= ? OR created_at >= ?)", todayStart, todayStart).Select("COALESCE(SUM(amount), 0)").Scan(&receiptRevenue)
+		// 2. Approved payments today from the single ledger source of truth (PaymentTransaction)
+		s.db.Model(&models.PaymentTransaction{}).
+			Where("status = 'SUCCESS' AND created_at >= ?", todayStart).
+			Count(&data.ApprovedPaymentsToday)
 
-		var onlineCount int64
-		var onlineRevenue float64
-		s.db.Model(&models.PaymentTransaction{}).Where("status = 'SUCCESS' AND created_at >= ?", todayStart).Count(&onlineCount)
-		s.db.Model(&models.PaymentTransaction{}).Where("status = 'SUCCESS' AND created_at >= ?", todayStart).Select("COALESCE(SUM(amount), 0)").Scan(&onlineRevenue)
+		s.db.Model(&models.PaymentTransaction{}).
+			Where("status = 'SUCCESS' AND created_at >= ?", todayStart).
+			Select("COALESCE(SUM(amount), 0)").Scan(&data.RevenueToday)
 
-		data.ApprovedPaymentsToday = receiptCount + onlineCount
-		data.RevenueToday = receiptRevenue + onlineRevenue
-
-		// 4. Pending receipts waiting for review
+		// 3. Pending receipts waiting for review
 		s.db.Model(&models.PaymentReceipt{}).Where("status = 'pending'").Count(&data.PendingReceipts)
 
 		// 5. Active students and remaining spots
