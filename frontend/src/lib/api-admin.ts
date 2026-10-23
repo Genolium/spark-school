@@ -1,7 +1,7 @@
 "use client";
 
 import { API_BASE, getAdminToken } from "./api-base";
-import type { PlacesStats, CoursePricing, ValidatePromoResponse, UserProfile, AdminStats, PayoutRequest, PromoCode, AffiliateStats, ExperimentMetric, DeadOutboxEvent, FunnelData } from "./api-types";
+import type { PlacesStats, CoursePricing, ValidatePromoResponse, UserProfile, AdminStats, PayoutRequest, PromoCode, AffiliateStats, ExperimentMetric, ExperimentReport, DeadOutboxEvent, FunnelData } from "./api-types";
 
 export const adminApi = {
   async updateCoursePricing(pricing: CoursePricing): Promise<{ success: boolean; pricing?: CoursePricing; error?: string }> {
@@ -546,7 +546,7 @@ export const adminApi = {
     }
   },
 
-  async getExperiments(): Promise<ExperimentMetric[] | null> {
+  async getExperiments(): Promise<ExperimentReport | null> {
     const token = getAdminToken();
     try {
       const res = await fetch(`${API_BASE}/admin/analytics/experiments`, {
@@ -555,7 +555,14 @@ export const adminApi = {
       });
       if (!res.ok) return null;
       const json = await res.json();
-      return (json.experiments || []) as ExperimentMetric[];
+      return {
+        experiments: (json.experiments || []) as ExperimentMetric[],
+        min_sample_per_variant: json.min_sample_per_variant ?? 100,
+        decision_metric: json.decision_metric ?? "revenue_per_visitor",
+        window_days: json.window_days ?? 14,
+        from: json.from ?? "",
+        to: json.to ?? "",
+      };
     } catch {
       return null;
     }

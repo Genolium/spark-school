@@ -83,7 +83,7 @@ export function FunnelAnalytics() {
 
       {data && (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-5">
             <div className="rounded-2xl bg-slate-50 dark:bg-white/5 p-4">
               <p className="text-xs text-slate-500">Подтверждённых оплат</p>
               <p className="text-2xl font-semibold">{data.payments.count}</p>
@@ -96,7 +96,19 @@ export function FunnelAnalytics() {
               <p className="text-xs text-slate-500">Средний чек</p>
               <p className="text-2xl font-semibold">{data.payments.average.toLocaleString("ru-RU")} ₽</p>
             </div>
+            <div className="rounded-2xl bg-slate-50 dark:bg-white/5 p-4">
+              <p className="text-xs text-slate-500">Вне воронки</p>
+              <p className="text-2xl font-semibold">{data.payments.untracked_count ?? 0}</p>
+              <p className="text-xs text-slate-500">
+                {(data.payments.untracked_revenue ?? 0).toLocaleString("ru-RU")} ₽ · ручные и импортированные оплаты без визита
+              </p>
+            </div>
           </div>
+
+          <p className="text-xs text-slate-500 mb-3">
+            Этапы считаются только по посетителям, которые попали на лендинг в выбранном окне. Оплаты без такого визита
+            показаны отдельно и не искажают конверсию.
+          </p>
 
           <div className="overflow-x-auto">
             <table className="w-full text-sm">

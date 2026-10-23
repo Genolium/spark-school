@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"html"
+	"log"
 	"strings"
 	"time"
 
@@ -55,7 +56,11 @@ func (s *BotService) DeliverPaymentNotice(p outbox.PaymentNoticePayload) error {
 
 Вам открыты все расширенные материалы и привилегии потока проекта «так называемый SPARK».
 По всем вопросам вы всегда можете обратиться к куратору через поддержку бота.`, html.EscapeString(tierDisplay(p.Tier)))
-		return s.SendNotification(p.TelegramID, msg)
+		if err := s.SendNotification(p.TelegramID, msg); err != nil {
+			return err
+		}
+		s.recordAccessDelivered(p)
+		return nil
 
 	default: // access
 		inviteLink := ""
@@ -75,21 +80,42 @@ func (s *BotService) DeliverPaymentNotice(p outbox.PaymentNoticePayload) error {
 		if err := s.sendAccessNotificationToStudent(p.TelegramID, FormatPaymentSuccessMessage(inviteLink), inviteLink); err != nil {
 			return err
 		}
-		if s.db != nil {
-			var user models.User
-			if err := s.db.Where("telegram_id = ?", p.TelegramID).First(&user).Error; err == nil {
-				_ = s.db.Create(&models.AnalyticsEvent{
-					VisitorID:        user.VisitorID,
-					AttributionToken: user.AttributionToken,
-					Step:             "access_delivered",
-					Source:           p.Source,
-					Tier:             p.Tier,
-					PaymentID:        p.PaymentID,
-					CreatedAt:        time.Now(),
-				}).Error
-			}
-		}
+		s.recordAccessDelivered(p)
 		return nil
+	}
+}
+
+// recordAccessDelivered mirrors a delivered access or upgrade into the funnel.
+// It is idempotent per payment and never fails the delivery: the student has
+// already received the message, so a storage problem must not trigger a retry.
+func (s *BotService) recordAccessDelivered(p outbox.PaymentNoticePayload) {
+	if s.db == nil || p.TelegramID == 0 || p.PaymentID == "" {
+		return
+	}
+
+	var existing int64
+	if err := s.db.Model(&models.AnalyticsEvent{}).
+		Where("step = ? AND payment_id = ?", "access_delivered", p.PaymentID).
+		Count(&existing).Error; err == nil && existing > 0 {
+		return
+	}
+
+	var user models.User
+	if err := s.db.Where("telegram_id = ?", p.TelegramID).First(&user).Error; err != nil {
+		log.Printf("[payment-delivery] access_delivered: user %d not found: %v", p.TelegramID, err)
+		return
+	}
+
+	if err := s.db.Create(&models.AnalyticsEvent{
+		VisitorID:        user.VisitorID,
+		AttributionToken: user.AttributionToken,
+		Step:             "access_delivered",
+		Source:           p.Source,
+		Tier:             p.Tier,
+		PaymentID:        p.PaymentID,
+		CreatedAt:        time.Now(),
+	}).Error; err != nil {
+		log.Printf("[payment-delivery] access_delivered event for %s: %v", p.PaymentID, err)
 	}
 }
 

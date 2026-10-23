@@ -5,6 +5,7 @@ import (
 	"log"
 	"math"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -268,19 +269,39 @@ func GetFunnel(db *gorm.DB) gin.HandlerFunc {
 		tier := normalizePaidTier(c.Query("tier"))
 		promo := sanitizeToken(strings.ToUpper(c.Query("promo")), 32)
 
-		eventQuery := db.Model(&models.AnalyticsEvent{}).Where("created_at >= ? AND created_at < ?", from, to)
-		if source != "" {
-			eventQuery = eventQuery.Where("source = ?", source)
+		// A step is only meaningful for visitors who entered the funnel through
+		// its first step inside this window. Payments imported from before
+		// client-side tracking (and manual grants) otherwise push
+		// `payment_confirmed` above `landing_view` and make conversion look
+		// broken; they are reported separately as untracked money.
+		applyEventFilters := func(q *gorm.DB) *gorm.DB {
+			if source != "" {
+				q = q.Where("source = ?", source)
+			}
+			if campaign != "" {
+				q = q.Where("campaign = ?", campaign)
+			}
+			if tier != "" {
+				q = q.Where("tier = ?", tier)
+			}
+			if promo != "" {
+				q = q.Where("promo_code = ?", promo)
+			}
+			return q
 		}
-		if campaign != "" {
-			eventQuery = eventQuery.Where("campaign = ?", campaign)
-		}
-		if tier != "" {
-			eventQuery = eventQuery.Where("tier = ?", tier)
-		}
-		if promo != "" {
-			eventQuery = eventQuery.Where("promo_code = ?", promo)
-		}
+
+		cohort := applyEventFilters(
+			db.Model(&models.AnalyticsEvent{}).
+				Select("visitor_id").
+				Where("step = ? AND visitor_id IS NOT NULL AND visitor_id <> ''", "landing_view").
+				Where("created_at >= ? AND created_at < ?", from, to),
+		).Group("visitor_id")
+
+		eventQuery := applyEventFilters(
+			db.Model(&models.AnalyticsEvent{}).
+				Where("visitor_id IN (?)", cohort).
+				Where("created_at >= ? AND created_at < ?", from, to),
+		)
 
 		type row struct {
 			Step  string
@@ -288,7 +309,7 @@ func GetFunnel(db *gorm.DB) gin.HandlerFunc {
 		}
 		var rows []row
 		if err := eventQuery.
-			Select("step, COUNT(DISTINCT COALESCE(NULLIF(visitor_id, ''), 'event:' || id::text)) AS count").
+			Select("step, COUNT(DISTINCT visitor_id) AS count").
 			Group("step").Scan(&rows).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "funnel query failed"})
 			return
@@ -310,29 +331,48 @@ func GetFunnel(db *gorm.DB) gin.HandlerFunc {
 			previous = count
 		}
 
-		txQuery := db.Model(&models.PaymentTransaction{}).
-			Where("status = 'SUCCESS' AND created_at >= ? AND created_at < ?", from, to)
-		if source != "" {
-			txQuery = txQuery.Where("source = ?", source)
+		newPaymentQuery := func() *gorm.DB {
+			q := db.Model(&models.PaymentTransaction{}).
+				Where("status = 'SUCCESS' AND created_at >= ? AND created_at < ?", from, to)
+			if source != "" {
+				q = q.Where("source = ?", source)
+			}
+			if tier != "" {
+				q = q.Where("tier = ?", tier)
+			}
+			if promo != "" {
+				q = q.Where("promo_code = ?", promo)
+			}
+			return q
 		}
-		if tier != "" {
-			txQuery = txQuery.Where("tier = ?", tier)
-		}
-		if promo != "" {
-			txQuery = txQuery.Where("promo_code = ?", promo)
-		}
+
 		var paymentCount int64
 		var revenue float64
-		if err := txQuery.Count(&paymentCount).Error; err != nil {
+		if err := newPaymentQuery().Count(&paymentCount).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "payment aggregation failed"})
 			return
 		}
 		var sum struct{ Total float64 }
-		if err := txQuery.Select("COALESCE(SUM(amount), 0) AS total").Scan(&sum).Error; err != nil {
+		if err := newPaymentQuery().Select("COALESCE(SUM(amount), 0) AS total").Scan(&sum).Error; err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "revenue aggregation failed"})
 			return
 		}
 		revenue = roundAmount(sum.Total)
+
+		var trackedCount int64
+		var trackedSum struct{ Total float64 }
+		if err := newPaymentQuery().Where("visitor_id IN (?)", cohort).Count(&trackedCount).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "tracked payment aggregation failed"})
+			return
+		}
+		if err := newPaymentQuery().Where("visitor_id IN (?)", cohort).
+			Select("COALESCE(SUM(amount), 0) AS total").Scan(&trackedSum).Error; err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "tracked revenue aggregation failed"})
+			return
+		}
+		trackedRevenue := roundAmount(trackedSum.Total)
+		untrackedRevenue := roundAmount(revenue - trackedRevenue)
+		untrackedCount := paymentCount - trackedCount
 
 		average := 0.0
 		if paymentCount > 0 {
@@ -346,45 +386,82 @@ func GetFunnel(db *gorm.DB) gin.HandlerFunc {
 			},
 			"steps": steps,
 			"payments": gin.H{
-				"count":   paymentCount,
-				"revenue": revenue,
-				"average": average,
-				"source":  "payment_transactions",
+				"count":             paymentCount,
+				"revenue":           revenue,
+				"average":           average,
+				"tracked_count":     trackedCount,
+				"tracked_revenue":   trackedRevenue,
+				"untracked_count":   untrackedCount,
+				"untracked_revenue": untrackedRevenue,
+				"source":            "payment_transactions",
 			},
 		})
 	}
 }
 
 type experimentRow struct {
-	Experiment       string  `json:"experiment"`
-	Variant          string  `json:"variant"`
-	Visitors         int64   `json:"visitors"`
-	BotLeads         int64   `json:"bot_leads"`
-	Orders           int64   `json:"orders"`
-	Payers           int64   `json:"payers"`
-	Revenue          float64 `json:"revenue"`
-	Conversion       float64 `json:"conversion"`
-	UpliftPercent    float64 `json:"uplift_percent"`
-	PValue           float64 `json:"p_value"`
-	Significant      bool    `json:"significant"`
-	MinSampleReached bool    `json:"min_sample_reached"`
-	RequiredSample   int64   `json:"required_sample_per_variant"`
+	Experiment        string  `json:"experiment"`
+	Variant           string  `json:"variant"`
+	Visitors          int64   `json:"visitors"`
+	BotLeads          int64   `json:"bot_leads"`
+	Orders            int64   `json:"orders"`
+	Payers            int64   `json:"payers"`
+	Revenue           float64 `json:"revenue"`
+	RevenueSquared    float64 `json:"-"`
+	RevenuePerVisitor float64 `json:"revenue_per_visitor"`
+	Conversion        float64 `json:"conversion"`
+	UpliftPercent     float64 `json:"uplift_percent"`
+	PValue            float64 `json:"p_value"`
+	Significant       bool    `json:"significant"`
+	Decision          string  `json:"decision"`
+	MinSampleReached  bool    `json:"min_sample_reached"`
+	RequiredSample    int64   `json:"required_sample_per_variant"`
 }
 
-// GetExperiments reports A/B results. The success metric is a confirmed
-// payment in payment_transactions, not a click or an event.
+// GetExperiments reports A/B results over a fixed decision window. The metric
+// is revenue per visitor in payment_transactions, not clicks or page events:
+// a cheaper price can raise conversion while lowering revenue, and the report
+// must make that trade-off visible.
 func GetExperiments(db *gorm.DB) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if db == nil {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"error": "database is unavailable"})
 			return
 		}
+
+		windowDays := 14
+		if raw := c.Query("days"); raw != "" {
+			if parsed, err := strconv.Atoi(raw); err == nil {
+				windowDays = parsed
+			}
+		}
+		if windowDays < 1 {
+			windowDays = 1
+		}
+		if windowDays > 90 {
+			windowDays = 90
+		}
+		now := time.Now()
+		from := now.AddDate(0, 0, -windowDays)
+		to := now
+		if raw := c.Query("from"); raw != "" {
+			if parsed, err := time.Parse("2006-01-02", raw); err == nil {
+				from = parsed
+			}
+		}
+		if raw := c.Query("to"); raw != "" {
+			if parsed, err := time.Parse("2006-01-02", raw); err == nil {
+				to = parsed.Add(24 * time.Hour)
+			}
+		}
+
 		var rows []experimentRow
 		err := db.Raw(`
 			WITH assignments AS (
 				SELECT DISTINCT experiment, variant, visitor_id
 				FROM experiment_assignments
 				WHERE visitor_id IS NOT NULL AND visitor_id <> ''
+				  AND created_at >= ? AND created_at < ?
 			),
 			events AS (
 				SELECT visitor_id,
@@ -392,12 +469,14 @@ func GetExperiments(db *gorm.DB) gin.HandlerFunc {
 				       BOOL_OR(step = 'order_created') AS has_order
 				FROM analytics_events
 				WHERE visitor_id IS NOT NULL AND visitor_id <> ''
+				  AND created_at >= ? AND created_at < ?
 				GROUP BY visitor_id
 			),
 			payments AS (
 				SELECT visitor_id, COUNT(*) AS payments, SUM(amount) AS revenue
 				FROM payment_transactions
 				WHERE status = 'SUCCESS' AND visitor_id IS NOT NULL AND visitor_id <> ''
+				  AND created_at >= ? AND created_at < ?
 				GROUP BY visitor_id
 			)
 			SELECT a.experiment, a.variant,
@@ -405,12 +484,13 @@ func GetExperiments(db *gorm.DB) gin.HandlerFunc {
 			       COUNT(*) FILTER (WHERE COALESCE(e.has_lead, FALSE)) AS bot_leads,
 			       COUNT(*) FILTER (WHERE COALESCE(e.has_order, FALSE)) AS orders,
 			       COUNT(*) FILTER (WHERE COALESCE(p.payments, 0) > 0) AS payers,
-			       COALESCE(SUM(p.revenue), 0) AS revenue
+			       COALESCE(SUM(p.revenue), 0) AS revenue,
+			       COALESCE(SUM(p.revenue * p.revenue), 0) AS revenue_squared
 			FROM assignments a
 			LEFT JOIN events e ON e.visitor_id = a.visitor_id
 			LEFT JOIN payments p ON p.visitor_id = a.visitor_id
 			GROUP BY a.experiment, a.variant
-			ORDER BY a.experiment, a.variant`).Scan(&rows).Error
+			ORDER BY a.experiment, a.variant`, from, to, from, to, from, to).Scan(&rows).Error
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "experiment query failed"})
 			return
@@ -418,19 +498,28 @@ func GetExperiments(db *gorm.DB) gin.HandlerFunc {
 		for i := range rows {
 			if rows[i].Visitors > 0 {
 				rows[i].Conversion = roundAmount(float64(rows[i].Payers) / float64(rows[i].Visitors) * 100)
+				rows[i].RevenuePerVisitor = roundAmount(rows[i].Revenue / float64(rows[i].Visitors))
 			}
 			rows[i].Revenue = roundAmount(rows[i].Revenue)
 		}
 		applyExperimentStatistics(rows)
-		c.JSON(http.StatusOK, gin.H{"experiments": rows, "min_sample_per_variant": experimentMinSample})
+		c.JSON(http.StatusOK, gin.H{
+			"experiments":            rows,
+			"min_sample_per_variant": experimentMinSample,
+			"decision_metric":        "revenue_per_visitor",
+			"window_days":            windowDays,
+			"from":                   from.Format("2006-01-02"),
+			"to":                     to.Add(-time.Nanosecond).Format("2006-01-02"),
+		})
 	}
 }
 
 const experimentMinSample int64 = 100
 
-// applyExperimentStatistics compares each non-control variant with control using
-// a two-proportion z-test. With a small sample the result is reported but not
-// marked significant, so a decision is not made on the first few payments.
+// applyExperimentStatistics compares each non-control variant with control on
+// revenue per visitor. A cheaper tier can win on conversion and still lose on
+// money, so the decision metric is rubles per visitor, not payer count.
+// The report needs at least 100 visitors in both arms before it calls a winner.
 func applyExperimentStatistics(rows []experimentRow) {
 	byExperiment := make(map[string][]int)
 	for i, row := range rows {
@@ -451,56 +540,63 @@ func applyExperimentStatistics(rows []experimentRow) {
 		for _, idx := range indexes {
 			row := &rows[idx]
 			row.MinSampleReached = control.Visitors >= experimentMinSample && row.Visitors >= experimentMinSample
-			row.RequiredSample = requiredSamplePerVariant(control)
-			if row.Variant == "control" || control.Visitors == 0 || row.Visitors == 0 {
+			row.RequiredSample = experimentMinSample
+			if row.Variant == "control" {
+				row.Decision = "reference"
 				continue
 			}
-			baseRate := float64(control.Payers) / float64(control.Visitors)
-			variantRate := float64(row.Payers) / float64(row.Visitors)
-			if baseRate > 0 {
-				row.UpliftPercent = roundAmount((variantRate - baseRate) / baseRate * 100)
+			if control.Visitors == 0 || row.Visitors == 0 {
+				row.Decision = "collect"
+				continue
 			}
-			row.PValue = roundAmount(twoProportionPValue(control.Payers, control.Visitors, row.Payers, row.Visitors)*10000) / 10000
+			baseRPV := control.Revenue / float64(control.Visitors)
+			variantRPV := row.Revenue / float64(row.Visitors)
+			if baseRPV > 0 {
+				row.UpliftPercent = roundAmount((variantRPV - baseRPV) / baseRPV * 100)
+			}
+			row.PValue = roundAmount(revenuePerVisitorPValue(control, *row)*10000) / 10000
 			row.Significant = row.MinSampleReached && row.PValue < 0.05
+			switch {
+			case !row.MinSampleReached:
+				row.Decision = "collect"
+			case row.Significant && row.UpliftPercent > 0:
+				row.Decision = "switch"
+			case row.Significant && row.UpliftPercent < 0:
+				row.Decision = "keep_control"
+			default:
+				row.Decision = "no_difference"
+			}
 		}
 	}
 }
 
-func twoProportionPValue(x1, n1, x2, n2 int64) float64 {
-	if n1 == 0 || n2 == 0 {
-		return 1
-	}
-	p1 := float64(x1) / float64(n1)
-	p2 := float64(x2) / float64(n2)
-	pooled := float64(x1+x2) / float64(n1+n2)
-	se := math.Sqrt(pooled * (1 - pooled) * (1/float64(n1) + 1/float64(n2)))
+// revenuePerVisitorPValue runs a two-sample z-test on revenue per visitor.
+// With at least 100 visitors per arm the normal approximation is adequate and
+// avoids pulling a t-distribution implementation into the handlers package.
+func revenuePerVisitorPValue(control, variant experimentRow) float64 {
+	controlMean := control.Revenue / float64(control.Visitors)
+	variantMean := variant.Revenue / float64(variant.Visitors)
+	controlVar := revenueSampleVariance(control, controlMean)
+	variantVar := revenueSampleVariance(variant, variantMean)
+	se := math.Sqrt(controlVar/float64(control.Visitors) + variantVar/float64(variant.Visitors))
 	if se == 0 {
-		return 1
+		if controlMean == variantMean {
+			return 1
+		}
+		return 0
 	}
-	z := math.Abs(p1-p2) / se
+	z := math.Abs(variantMean-controlMean) / se
 	return math.Erfc(z / math.Sqrt2)
 }
 
-func requiredSamplePerVariant(control experimentRow) int64 {
-	p1 := 0.05
-	if control.Visitors > 0 && control.Payers > 0 {
-		p1 = float64(control.Payers) / float64(control.Visitors)
+func revenueSampleVariance(row experimentRow, mean float64) float64 {
+	if row.Visitors < 2 {
+		return 0
 	}
-	if p1 < 0.01 {
-		p1 = 0.01
+	n := float64(row.Visitors)
+	variance := (row.RevenueSquared - n*mean*mean) / (n - 1)
+	if variance < 0 {
+		return 0
 	}
-	if p1 > 0.9 {
-		p1 = 0.9
-	}
-	p2 := math.Min(0.99, p1+0.01)
-	pooled := (p1 + p2) / 2
-	numerator := math.Pow(1.96*math.Sqrt(2*pooled*(1-pooled))+0.84*math.Sqrt(p1*(1-p1)+p2*(1-p2)), 2)
-	sample := int64(math.Ceil(numerator / math.Pow(p2-p1, 2)))
-	if sample < experimentMinSample {
-		sample = experimentMinSample
-	}
-	if sample > 100000 {
-		sample = 100000
-	}
-	return sample
+	return variance
 }

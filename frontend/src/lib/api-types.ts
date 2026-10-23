@@ -155,12 +155,23 @@ export interface ExperimentMetric {
   orders: number;
   payers: number;
   revenue: number;
+  revenue_per_visitor: number;
   conversion: number;
   uplift_percent: number;
   p_value: number;
   significant: boolean;
+  decision: string;
   min_sample_reached: boolean;
   required_sample_per_variant: number;
+}
+
+export interface ExperimentReport {
+  experiments: ExperimentMetric[];
+  min_sample_per_variant: number;
+  decision_metric: string;
+  window_days: number;
+  from: string;
+  to: string;
 }
 
 export interface DeadOutboxEvent {
@@ -176,6 +187,15 @@ export interface DeadOutboxEvent {
 export interface FunnelData {
   filters: { from: string; to: string; source: string; campaign: string; tier: string; promo: string };
   steps: FunnelStepMetric[];
-  payments: { count: number; revenue: number; average: number; source: string };
+  payments: {
+    count: number;
+    revenue: number;
+    average: number;
+    source: string;
+    tracked_count: number;
+    tracked_revenue: number;
+    untracked_count: number;
+    untracked_revenue: number;
+  };
 }
 

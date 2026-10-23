@@ -104,33 +104,46 @@ func TestExperimentAssignmentAndStatistics(t *testing.T) {
 	if assignVariant("", "hero_cta_copy") == "" {
 		t.Fatal("expected a variant")
 	}
-	// 10% vs 15% on 1,000 visitors each is significant.
-	p := twoProportionPValue(100, 1000, 150, 1000)
-	if p >= 0.05 {
-		t.Fatalf("expected significant difference, p=%f", p)
-	}
+
+	// Revenue per visitor: 1000 visitors with 100 payments of 1000 ₽ vs
+	// 1000 visitors with 150 payments of 1000 ₽ = 100 ₽ vs 150 ₽ per visitor.
 	rows := []experimentRow{
-		{Experiment: "hero_cta_copy", Variant: "control", Visitors: 1000, Payers: 100},
-		{Experiment: "hero_cta_copy", Variant: "benefit", Visitors: 1000, Payers: 150},
+		{Experiment: "hero_cta_copy", Variant: "control", Visitors: 1000, Payers: 100, Revenue: 100000, RevenueSquared: 100000000},
+		{Experiment: "hero_cta_copy", Variant: "benefit", Visitors: 1000, Payers: 150, Revenue: 150000, RevenueSquared: 150000000},
 	}
 	applyExperimentStatistics(rows)
+	for i := range rows {
+		rows[i].RevenuePerVisitor = roundAmount(rows[i].Revenue / float64(rows[i].Visitors))
+	}
+	if rows[0].RevenuePerVisitor != 100 || rows[1].RevenuePerVisitor != 150 {
+		t.Fatalf("unexpected revenue per visitor: %v vs %v", rows[0].RevenuePerVisitor, rows[1].RevenuePerVisitor)
+	}
 	if !rows[1].Significant || rows[1].PValue >= 0.05 {
-		t.Fatalf("expected significant uplift, got %+v", rows[1])
+		t.Fatalf("expected significant RPV uplift, got %+v", rows[1])
 	}
 	if rows[1].UpliftPercent < 49 || rows[1].UpliftPercent > 51 {
-		t.Fatalf("expected +50%% uplift, got %f", rows[1].UpliftPercent)
+		t.Fatalf("expected +50%% RPV uplift, got %f", rows[1].UpliftPercent)
+	}
+	if rows[1].Decision != "switch" {
+		t.Fatalf("expected the report to switch, got %q", rows[1].Decision)
+	}
+	if rows[0].Decision != "reference" {
+		t.Fatalf("control must stay the reference, got %q", rows[0].Decision)
 	}
 
 	small := []experimentRow{
-		{Experiment: "hero_cta_copy", Variant: "control", Visitors: 10, Payers: 1},
-		{Experiment: "hero_cta_copy", Variant: "benefit", Visitors: 10, Payers: 3},
+		{Experiment: "hero_cta_copy", Variant: "control", Visitors: 10, Payers: 1, Revenue: 6900},
+		{Experiment: "hero_cta_copy", Variant: "benefit", Visitors: 10, Payers: 3, Revenue: 20700},
 	}
 	applyExperimentStatistics(small)
 	if small[1].Significant || small[1].MinSampleReached {
 		t.Fatalf("small samples must not be called significant: %+v", small[1])
 	}
-	if small[1].RequiredSample < experimentMinSample {
-		t.Fatalf("required sample too small: %d", small[1].RequiredSample)
+	if small[1].Decision != "collect" {
+		t.Fatalf("small samples must ask for more data, got %q", small[1].Decision)
+	}
+	if small[1].RequiredSample != experimentMinSample {
+		t.Fatalf("the threshold must be %d visitors per variant, got %d", experimentMinSample, small[1].RequiredSample)
 	}
 }
 
