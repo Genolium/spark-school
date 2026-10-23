@@ -55,13 +55,22 @@ export default function AdminPage() {
   const [promos, setPromos] = useState<PromoCode[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Check if session token exists
+  // Check if session token exists and handle session expiration (401)
   useEffect(() => {
     const savedToken = localStorage.getItem("spark_admin_token");
-    const unlockedSession = sessionStorage.getItem("spark_admin_unlocked");
-    if (savedToken || unlockedSession === "true") {
+    if (savedToken) {
       setUnlocked(true);
+    } else {
+      setUnlocked(false);
     }
+
+    const onUnauthorized = () => {
+      setUnlocked(false);
+    };
+    window.addEventListener("spark:admin-unauthorized", onUnauthorized);
+    return () => {
+      window.removeEventListener("spark:admin-unauthorized", onUnauthorized);
+    };
   }, []);
 
   const loadAdminData = async () => {

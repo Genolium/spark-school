@@ -18,3 +18,13 @@ export function getAuthToken(): string | null {
   );
 }
 
+// Helper to clear invalid/expired admin auth credentials and trigger re-login
+export function handleAdminAuthFailure(): void {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem("spark_admin_token");
+  localStorage.removeItem("spark_admin_user");
+  sessionStorage.removeItem("spark_admin_unlocked");
+  window.dispatchEvent(new CustomEvent("spark:admin-unauthorized"));
+}
+
+

@@ -1,20 +1,34 @@
 "use client";
 
-import { API_BASE, getAdminToken } from "./api-base";
+import { API_BASE, getAdminToken, handleAdminAuthFailure } from "./api-base";
 import type { PlacesStats, CoursePricing, ValidatePromoResponse, UserProfile, AdminStats, PayoutRequest, PromoCode, AffiliateStats, ExperimentMetric, ExperimentReport, DeadOutboxEvent, FunnelData } from "./api-types";
+
+async function fetchAdmin(endpoint: string, options: RequestInit = {}): Promise<Response> {
+  const token = getAdminToken();
+  const headers = new Headers(options.headers || {});
+  if (token && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${token}`);
+  }
+  const res = await fetch(`${API_BASE}${endpoint}`, {
+    ...options,
+    headers,
+    credentials: "include",
+  });
+  if (res.status === 401) {
+    handleAdminAuthFailure();
+  }
+  return res;
+}
 
 export const adminApi = {
   async updateCoursePricing(pricing: CoursePricing): Promise<{ success: boolean; pricing?: CoursePricing; error?: string }> {
-    const token = getAdminToken();
     try {
-      const res = await fetch(`${API_BASE}/admin/pricing`, {
+      const res = await fetchAdmin(`/admin/pricing`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(pricing),
-        credentials: "include",
       });
       const data = await res.json();
       if (res.ok) {
@@ -80,12 +94,8 @@ export const adminApi = {
   },
 
   async getAdminStats(): Promise<AdminStats> {
-    const token = getAdminToken();
     try {
-      const res = await fetch(`${API_BASE}/admin/stats`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        credentials: "include",
-      });
+      const res = await fetchAdmin(`/admin/stats`);
       if (res.ok) {
         const data: AdminStats = await res.json();
         return {
@@ -171,10 +181,7 @@ export const adminApi = {
       if (page) sp.set("page", String(page));
       if (pageSize) sp.set("pageSize", String(pageSize));
 
-      const res = await fetch(`${API_BASE}/admin/users?${sp.toString()}`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        credentials: "include",
-      });
+      const res = await fetchAdmin(`/admin/users?${sp.toString()}`);
       if (res.ok) {
         const data = await res.json();
         return Array.isArray(data.users) ? data.users : [];
@@ -190,16 +197,13 @@ export const adminApi = {
     userId: number,
     issued?: boolean
   ): Promise<{ success: boolean; receipt_issued: boolean; receipt_issued_at?: string; user?: UserProfile; error?: string }> {
-    const token = getAdminToken();
     try {
-      const res = await fetch(`${API_BASE}/admin/users/${userId}/receipt-issued`, {
+      const res = await fetchAdmin(`/admin/users/${userId}/receipt-issued`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(issued !== undefined ? { receipt_issued: issued } : {}),
-        credentials: "include",
       });
       if (res.ok) {
         return await res.json();
@@ -231,16 +235,13 @@ export const adminApi = {
     user?: UserProfile;
     error?: string;
   }> {
-    const token = getAdminToken();
     try {
-      const res = await fetch(`${API_BASE}/admin/users/${userId}/issue-receipt`, {
+      const res = await fetchAdmin(`/admin/users/${userId}/issue-receipt`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(payload),
-        credentials: "include",
       });
       if (res.ok) {
         return await res.json();
@@ -257,16 +258,13 @@ export const adminApi = {
     hasAccess: boolean,
     extra?: { tier?: string; paid_amount?: number; promo_code?: string }
   ): Promise<boolean> {
-    const token = getAdminToken();
     try {
-      const res = await fetch(`${API_BASE}/admin/users/${userId}/access`, {
+      const res = await fetchAdmin(`/admin/users/${userId}/access`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({ has_access: hasAccess, ...extra }),
-        credentials: "include",
       });
       if (res.ok) return true;
       return false;
@@ -276,12 +274,8 @@ export const adminApi = {
   },
 
   async getAdminPayouts(): Promise<PayoutRequest[]> {
-    const token = getAdminToken();
     try {
-      const res = await fetch(`${API_BASE}/admin/payouts`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        credentials: "include",
-      });
+      const res = await fetchAdmin(`/admin/payouts`);
       if (res.ok) {
         const data = await res.json();
         return Array.isArray(data.payouts) ? data.payouts : [];
@@ -294,12 +288,9 @@ export const adminApi = {
   },
 
   async approvePayout(id: number): Promise<boolean> {
-    const token = getAdminToken();
     try {
-      const res = await fetch(`${API_BASE}/admin/payouts/${id}/approve`, {
+      const res = await fetchAdmin(`/admin/payouts/${id}/approve`, {
         method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        credentials: "include",
       });
       if (res.ok) return true;
       return false;
@@ -309,12 +300,9 @@ export const adminApi = {
   },
 
   async rejectPayout(id: number): Promise<boolean> {
-    const token = getAdminToken();
     try {
-      const res = await fetch(`${API_BASE}/admin/payouts/${id}/reject`, {
+      const res = await fetchAdmin(`/admin/payouts/${id}/reject`, {
         method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        credentials: "include",
       });
       if (res.ok) return true;
       return false;
@@ -324,12 +312,9 @@ export const adminApi = {
   },
 
   async triggerAdminDigest(): Promise<{ success: boolean; message?: string; error?: string }> {
-    const token = getAdminToken();
     try {
-      const res = await fetch(`${API_BASE}/admin/digest`, {
+      const res = await fetchAdmin(`/admin/digest`, {
         method: "POST",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-        credentials: "include",
       });
       if (res.ok) {
         const data = await res.json();
@@ -343,12 +328,8 @@ export const adminApi = {
   },
 
   async getAdminPromoCodes(): Promise<PromoCode[]> {
-    const token = getAdminToken();
     try {
-      const res = await fetch(`${API_BASE}/admin/promos`, {
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        credentials: "include",
-      });
+      const res = await fetchAdmin(`/admin/promos`);
       if (res.ok) return await res.json();
       return [];
     } catch {
@@ -357,16 +338,13 @@ export const adminApi = {
   },
 
   async createAdminPromoCode(data: { code: string; owner_username?: string; discount_percent?: number; reward_amount?: number }): Promise<{ success: boolean; promo?: PromoCode; error?: string }> {
-    const token = getAdminToken();
     try {
-      const res = await fetch(`${API_BASE}/admin/promos`, {
+      const res = await fetchAdmin(`/admin/promos`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(data),
-        credentials: "include",
       });
       const json = await res.json();
       if (res.ok) return { success: true, promo: json };
@@ -388,16 +366,13 @@ export const adminApi = {
     promo_code?: string;
     receipt_issued?: boolean;
   }): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
-    const token = getAdminToken();
     try {
-      const res = await fetch(`${API_BASE}/admin/users`, {
+      const res = await fetchAdmin(`/admin/users`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(data),
-        credentials: "include",
       });
       const json = await res.json();
       if (res.ok) return { success: true, user: json };
@@ -423,16 +398,13 @@ export const adminApi = {
       receipt_number?: string;
     }
   ): Promise<{ success: boolean; user?: UserProfile; error?: string }> {
-    const token = getAdminToken();
     try {
-      const res = await fetch(`${API_BASE}/admin/users/${id}`, {
+      const res = await fetchAdmin(`/admin/users/${id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(data),
-        credentials: "include",
       });
       const json = await res.json();
       if (res.ok) return { success: true, user: json };
@@ -443,12 +415,9 @@ export const adminApi = {
   },
 
   async deleteAdminUser(id: number): Promise<{ success: boolean; error?: string }> {
-    const token = getAdminToken();
     try {
-      const res = await fetch(`${API_BASE}/admin/users/${id}`, {
+      const res = await fetchAdmin(`/admin/users/${id}`, {
         method: "DELETE",
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        credentials: "include",
       });
       if (res.ok) return { success: true };
       const json = await res.json();
@@ -468,16 +437,13 @@ export const adminApi = {
       is_active?: boolean;
     }
   ): Promise<{ success: boolean; promo?: PromoCode; error?: string }> {
-    const token = getAdminToken();
     try {
-      const res = await fetch(`${API_BASE}/admin/promos/${id}`, {
+      const res = await fetchAdmin(`/admin/promos/${id}`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify(data),
-        credentials: "include",
       });
       const json = await res.json();
       if (res.ok) return { success: true, promo: json };
@@ -488,12 +454,9 @@ export const adminApi = {
   },
 
   async deleteAdminPromoCode(id: number): Promise<{ success: boolean; error?: string }> {
-    const token = getAdminToken();
     try {
-      const res = await fetch(`${API_BASE}/admin/promos/${id}`, {
+      const res = await fetchAdmin(`/admin/promos/${id}`, {
         method: "DELETE",
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        credentials: "include",
       });
       if (res.ok) return { success: true };
       const json = await res.json();
@@ -504,12 +467,9 @@ export const adminApi = {
   },
 
   async toggleAdminPromoCode(id: number): Promise<{ success: boolean; promo?: PromoCode }> {
-    const token = getAdminToken();
     try {
-      const res = await fetch(`${API_BASE}/admin/promos/${id}/toggle`, {
+      const res = await fetchAdmin(`/admin/promos/${id}/toggle`, {
         method: "POST",
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        credentials: "include",
       });
       if (res.ok) {
         const promo = await res.json();
@@ -529,16 +489,12 @@ export const adminApi = {
     tier?: string;
     promo?: string;
   } = {}): Promise<FunnelData | null> {
-    const token = getAdminToken();
     const params = new URLSearchParams();
     for (const [key, value] of Object.entries(filters)) {
       if (value) params.set(key, value);
     }
     try {
-      const res = await fetch(`${API_BASE}/admin/analytics/funnel?${params.toString()}`, {
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        credentials: "include",
-      });
+      const res = await fetchAdmin(`/admin/analytics/funnel?${params.toString()}`);
       if (!res.ok) return null;
       return (await res.json()) as FunnelData;
     } catch {
@@ -547,12 +503,8 @@ export const adminApi = {
   },
 
   async getExperiments(): Promise<ExperimentReport | null> {
-    const token = getAdminToken();
     try {
-      const res = await fetch(`${API_BASE}/admin/analytics/experiments`, {
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        credentials: "include",
-      });
+      const res = await fetchAdmin(`/admin/analytics/experiments`);
       if (!res.ok) return null;
       const json = await res.json();
       return {
@@ -569,12 +521,8 @@ export const adminApi = {
   },
 
   async getDeadOutbox(): Promise<DeadOutboxEvent[] | null> {
-    const token = getAdminToken();
     try {
-      const res = await fetch(`${API_BASE}/admin/outbox/dead`, {
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        credentials: "include",
-      });
+      const res = await fetchAdmin(`/admin/outbox/dead`);
       if (!res.ok) return null;
       const json = await res.json();
       return (json.events || []) as DeadOutboxEvent[];
@@ -584,12 +532,9 @@ export const adminApi = {
   },
 
   async retryOutbox(id: number): Promise<boolean> {
-    const token = getAdminToken();
     try {
-      const res = await fetch(`${API_BASE}/admin/outbox/${id}/retry`, {
+      const res = await fetchAdmin(`/admin/outbox/${id}/retry`, {
         method: "POST",
-        headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
-        credentials: "include",
       });
       return res.ok;
     } catch {
