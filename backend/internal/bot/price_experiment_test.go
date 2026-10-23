@@ -22,3 +22,20 @@ func TestPricingForSessionPriceExperiment(t *testing.T) {
 		t.Fatalf("control accelerator price = %v, want %v", control.AcceleratorPrice, models.DefaultCoursePricing.AcceleratorPrice)
 	}
 }
+
+func TestPricingForSessionVIPPriceExperiment(t *testing.T) {
+	service := &BotService{}
+
+	low := service.pricingForSession(&UserSession{VIPPriceExperiment: "low"})
+	if low.VIPPrice != 14990 {
+		t.Fatalf("low VIP price = %v, want 14990", low.VIPPrice)
+	}
+	mid := service.pricingForSession(&UserSession{VIPPriceExperiment: "mid"})
+	if mid.VIPPrice != 17990 {
+		t.Fatalf("mid VIP price = %v, want 17990", mid.VIPPrice)
+	}
+	control := service.pricingForSession(&UserSession{})
+	if control.VIPPrice != models.DefaultCoursePricing.VIPPrice {
+		t.Fatalf("control VIP price = %v, want %v", control.VIPPrice, models.DefaultCoursePricing.VIPPrice)
+	}
+}

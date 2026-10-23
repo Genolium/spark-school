@@ -16,8 +16,16 @@ const lowerAcceleratorPrice = 9990.0
 // so the amount shown on the site and the amount requested in Telegram match.
 func (s *BotService) pricingForSession(session *UserSession) models.CoursePricing {
 	pricing := s.getPricing()
-	if session != nil && session.PriceExperiment == "lower" {
-		pricing.AcceleratorPrice = lowerAcceleratorPrice
+	if session != nil {
+		if session.PriceExperiment == "lower" {
+			pricing.AcceleratorPrice = lowerAcceleratorPrice
+		}
+		switch session.VIPPriceExperiment {
+		case "low":
+			pricing.VIPPrice = 14990
+		case "mid":
+			pricing.VIPPrice = 17990
+		}
 	}
 	return pricing
 }

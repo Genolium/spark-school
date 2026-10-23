@@ -9,6 +9,7 @@ const EXPERIMENT_LABELS: Record<string, string> = {
   hero_headline: "Заголовок первого экрана",
   pricing_cta_copy: "CTA в тарифах",
   pricing_price: "Цена Акселератора",
+  vip_price: "Цена VIP",
 };
 
 const VARIANT_LABELS: Record<string, string> = {
@@ -18,6 +19,8 @@ const VARIANT_LABELS: Record<string, string> = {
   urgency: "Дедлайн",
   action: "Оплатить и начать",
   lower: "9 990 ₽",
+  mid: "17 990 ₽",
+  low: "14 990 ₽",
 };
 
 const DECISION_LABELS: Record<string, { text: string; className: string }> = {

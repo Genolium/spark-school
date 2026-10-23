@@ -46,6 +46,12 @@ export default function HomePage() {
     if (getExperiment("pricing_price") === "lower") {
       startParam += "_pe_lower";
     }
+    if (tier === "vip") {
+      const vipVariant = getExperiment("vip_price");
+      if (vipVariant === "mid" || vipVariant === "low") {
+        startParam += `_pe_vip_${vipVariant}`;
+      }
+    }
     if (attributionToken) {
       startParam += `_a_${attributionToken}`;
     }

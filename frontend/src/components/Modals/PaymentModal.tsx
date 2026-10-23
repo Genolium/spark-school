@@ -186,6 +186,12 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
   if (getExperiment("pricing_price") === "lower") {
     startParts.push("pe_lower");
   }
+  if (tier === "vip") {
+    const vipVariant = getExperiment("vip_price");
+    if (vipVariant === "mid" || vipVariant === "low") {
+      startParts.push(`pe_vip_${vipVariant}`);
+    }
+  }
   if (pPart) {
     startParts.push(pPart);
   } else if (rPart && uPart) {

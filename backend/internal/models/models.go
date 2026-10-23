@@ -362,6 +362,7 @@ type BotSession struct {
 	PromoCode          string    `gorm:"size:32" json:"promo_code"`
 	DiscountPct        int       `json:"discount_pct"`
 	PriceExperiment    string    `gorm:"size:16" json:"price_experiment,omitempty"`
+	VIPPriceExperiment string    `gorm:"size:16" json:"vip_price_experiment,omitempty"`
 	IsUpgrade          bool      `json:"is_upgrade"`
 	UpgradeFromTier    string    `gorm:"size:32" json:"upgrade_from_tier"`
 	UpgradeToTier      string    `gorm:"size:32" json:"upgrade_to_tier"`

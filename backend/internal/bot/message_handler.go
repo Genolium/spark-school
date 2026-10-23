@@ -114,9 +114,19 @@ func (s *BotService) handleMessage(msg *telego.Message) error {
 			}
 			session.SelectedTier = tier
 			session.PriceExperiment = ""
+			session.VIPPriceExperiment = ""
 			if strings.HasPrefix(payload, "pe_lower") {
 				session.PriceExperiment = "lower"
 				payload = strings.TrimPrefix(payload, "pe_lower")
+				payload = strings.TrimPrefix(payload, "_")
+			}
+			if strings.HasPrefix(payload, "pe_vip_low") {
+				session.VIPPriceExperiment = "low"
+				payload = strings.TrimPrefix(payload, "pe_vip_low")
+				payload = strings.TrimPrefix(payload, "_")
+			} else if strings.HasPrefix(payload, "pe_vip_mid") {
+				session.VIPPriceExperiment = "mid"
+				payload = strings.TrimPrefix(payload, "pe_vip_mid")
 				payload = strings.TrimPrefix(payload, "_")
 			}
 

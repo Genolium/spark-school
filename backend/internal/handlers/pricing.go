@@ -24,8 +24,8 @@ func NewPricingHandler(db *gorm.DB) *PricingHandler {
 func (h *PricingHandler) GetPricing(c *gin.Context) {
 	pricing := models.GetCoursePricing(h.db)
 	if visitorID := sanitizeToken(c.Query("visitor_id"), 64); visitorID != "" {
-		variant := assignVariant(visitorID, "pricing_price")
-		pricing.AcceleratorPrice = acceleratorPriceForVariant(pricing.AcceleratorPrice, variant)
+		pricing.AcceleratorPrice = acceleratorPriceForVariant(pricing.AcceleratorPrice, assignVariant(visitorID, "pricing_price"))
+		pricing.VIPPrice = vipPriceForVariant(pricing.VIPPrice, assignVariant(visitorID, "vip_price"))
 	}
 	c.JSON(http.StatusOK, pricing)
 }

@@ -93,6 +93,15 @@ func TestPostgresMigrations_EmptyDatabaseAndRerun(t *testing.T) {
 		t.Errorf("expected bot_sessions.price_experiment, got %d", priceExperimentColumns)
 	}
 
+	var vipPriceExperimentColumns int
+	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM information_schema.columns
+		WHERE table_schema='public' AND table_name='bot_sessions' AND column_name='vip_price_experiment'`).Scan(&vipPriceExperimentColumns); err != nil {
+		t.Fatal(err)
+	}
+	if vipPriceExperimentColumns != 1 {
+		t.Errorf("expected bot_sessions.vip_price_experiment, got %d", vipPriceExperimentColumns)
+	}
+
 	var onboardingColumns int
 	if err := sqlDB.QueryRow(`SELECT COUNT(*) FROM information_schema.columns WHERE table_schema='public' AND table_name='users' AND column_name IN ('onboarding_status','intro_sent_at','onboarding_replied_at','onboarding_completed_at','onboarding_notes')`).Scan(&onboardingColumns); err != nil {
 		t.Fatal(err)

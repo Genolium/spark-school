@@ -69,6 +69,9 @@ func checkoutBasePrice(tier string, pricing models.CoursePricing, visitorID stri
 	if tier == "accelerator" {
 		basePrice = acceleratorPriceForVariant(basePrice, assignVariant(visitorID, "pricing_price"))
 	}
+	if tier == "vip" {
+		basePrice = vipPriceForVariant(basePrice, assignVariant(visitorID, "vip_price"))
+	}
 	return basePrice
 }
 
