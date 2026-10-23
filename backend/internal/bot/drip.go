@@ -312,9 +312,9 @@ func (s *BotService) sendDripMessageWithFallback(chatID telego.ChatID, text stri
 	}
 }
 
-// processDueBasicUpsells automatically offers the 1900 RUB essay audit order bump to students on 'basic' tier after 3 days.
+// processDueBasicUpsells automatically offers upgrade to Accelerator or essay audit order bump to students on 'basic' tier after 3 days.
 func (s *BotService) processDueBasicUpsells() {
-	if s.db == nil || s.bot == nil || !learningToolsEnabled {
+	if s.db == nil || s.bot == nil {
 		return
 	}
 
@@ -340,35 +340,43 @@ func (s *BotService) processDueBasicUpsells() {
 	}
 }
 
-// sendBasicUpsellMessage delivers the Order Bump offer to student who bought Basic tier.
+// sendBasicUpsellMessage delivers the upgrade / order bump offer to a student who bought the Basic tier.
+// Prices and differences are dynamically calculated from the database.
 func (s *BotService) sendBasicUpsellMessage(chatID telego.ChatID, student models.User) {
 	name := student.FirstName
 	if name == "" {
 		name = "Студент"
 	}
 
+	pricing := s.getPricing()
+	diffAcc := pricing.AcceleratorPrice - pricing.BasicPrice
+	if diffAcc <= 0 {
+		diffAcc = 2910.0
+	}
+
 	text := fmt.Sprintf(`👋 Привет, %s!
 
-Ты уже 3 дня на курсе и наверняка изучил уроки по написанию эссе.
+Ты уже 3 дня на курсе и наверняка изучил вводные материалы по эссе.
 
-Хочешь, я сделаю <b>текстовый аудит твоего черновика с подробными правками в Google Docs</b> без полного созвона?
+Практика показывает: самое сложное — объективно оценить свой текст и отрепетировать живое собеседование на английском.
 
-✍️ <b>Что входит в текстовый аудит:</b>
-• Построчный разбор каждого абзаца эссе на 500 слов
-• Проверка структуры, логики аргументов и ответа на вопрос «Why SPARK?»
-• Вычитка шаблонных фраз, которые сразу режут глаз американской комиссии
-• Конкретные правки в режиме рецензирования в Google Docs
+Ты можешь усилить подготовку прямо сейчас:
 
-💳 <b>Доплата всего 1 900 ₽</b> (вместо полного тарифа Акселератор за 6 900 ₽)`, name)
+⚡️ <b>Апгрейд до тарифа «Акселератор»:</b>
+• Личный аудит всех эссе и резюме
+• Созвон 45–60 мин: симуляция 20-мин интервью 1-на-1 с разбором
+• Пошаговый визовый гайд J-1 и закрытый чат
+💳 Доплата разницы: всего <b>%s ₽</b> (вместо полной стоимости %s ₽)
 
-	kb := tu.InlineKeyboard(
-		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("✍️ Оформить аудит эссе (1 900 ₽)").WithCallbackData("pay_upsell_audit"),
-		),
-		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("💬 Написать так называемому Илю").WithURL("https://t.me/ilyan_vas"),
-		),
+✍️ <b>Либо текстовый аудит эссе:</b>
+• Построчный разбор черновика на 500 слов с правками в Google Docs
+💳 Доплата: <b>1 900 ₽</b>`,
+		name,
+		formatPriceRub(int(diffAcc)),
+		formatPriceRub(int(pricing.AcceleratorPrice)),
 	)
+
+	kb := BasicUpsellAuditKeyboard(diffAcc)
 
 	s.sendDripMessageWithFallback(chatID, text, kb)
 	log.Printf("[Upsell Nurture] Sent 72h Basic Upsell offer to %d (@%s)", student.TelegramID, student.Username)

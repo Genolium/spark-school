@@ -70,17 +70,25 @@ func TestDrip_BasicUpsellOrderBump(t *testing.T) {
 		HasAccess:  true,
 	}
 
-	kb := BasicUpsellAuditKeyboard()
-	if kb == nil || len(kb.InlineKeyboard) == 0 {
-		t.Fatalf("expected non-empty BasicUpsellAuditKeyboard")
+	kb := BasicUpsellAuditKeyboard(2910.0)
+	if kb == nil || len(kb.InlineKeyboard) < 2 {
+		t.Fatalf("expected non-empty BasicUpsellAuditKeyboard with at least 2 rows")
 	}
 
-	btn := kb.InlineKeyboard[0][0]
-	if btn.CallbackData != "pay_upsell_audit" {
-		t.Errorf("expected callback pay_upsell_audit, got %s", btn.CallbackData)
+	btnUpgrade := kb.InlineKeyboard[0][0]
+	if btnUpgrade.CallbackData != "upgrade_to_accelerator" {
+		t.Errorf("expected callback upgrade_to_accelerator, got %s", btnUpgrade.CallbackData)
 	}
-	if !strings.Contains(btn.Text, "1 900") {
-		t.Errorf("expected 1 900 in button text, got %s", btn.Text)
+	if !strings.Contains(btnUpgrade.Text, "2 910") {
+		t.Errorf("expected 2 910 in upgrade button text, got %s", btnUpgrade.Text)
+	}
+
+	btnAudit := kb.InlineKeyboard[1][0]
+	if btnAudit.CallbackData != "pay_upsell_audit" {
+		t.Errorf("expected callback pay_upsell_audit, got %s", btnAudit.CallbackData)
+	}
+	if !strings.Contains(btnAudit.Text, "1 900") {
+		t.Errorf("expected 1 900 in audit button text, got %s", btnAudit.Text)
 	}
 
 	_ = student

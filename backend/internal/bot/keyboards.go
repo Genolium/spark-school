@@ -370,9 +370,16 @@ func AdminPanelKeyboard() *telego.InlineKeyboardMarkup {
 	)
 }
 
-// BasicUpsellAuditKeyboard returns buttons for the +3 days upsell message (Order Bump: Текстовый аудит эссе за 1 900 ₽).
-func BasicUpsellAuditKeyboard() *telego.InlineKeyboardMarkup {
+// BasicUpsellAuditKeyboard returns buttons for the +3 days upsell message (Upgrade to Accelerator or Text Audit).
+func BasicUpsellAuditKeyboard(diffAcc ...float64) *telego.InlineKeyboardMarkup {
+	accDiff := 2910.0
+	if len(diffAcc) > 0 && diffAcc[0] > 0 {
+		accDiff = diffAcc[0]
+	}
 	return tu.InlineKeyboard(
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton(fmt.Sprintf("⚡️ Перейти на Акселератор (+%s ₽)", formatPriceRub(int(accDiff)))).WithCallbackData("upgrade_to_accelerator"),
+		),
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton("✍️ Оформить аудит эссе (1 900 ₽)").WithCallbackData("pay_upsell_audit"),
 		),
