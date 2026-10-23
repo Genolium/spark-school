@@ -56,7 +56,7 @@ func (s *BotService) SendAdminLiveStats(chatID telego.ChatID) {
 	totalCapacity, spotsLeft := handlers.CalculateCapacityAndSpots(activeStudents)
 
 	var revenue float64
-	s.db.Model(&models.PaymentReceipt{}).Where("status = ?", "approved").Select("COALESCE(SUM(amount), 0)").Scan(&revenue)
+	s.db.Model(&models.PaymentTransaction{}).Where("status = ?", "SUCCESS").Select("COALESCE(SUM(amount), 0)").Scan(&revenue)
 
 	var pendingReceipts int64
 	s.db.Model(&models.PaymentReceipt{}).Where("status = ?", "pending").Count(&pendingReceipts)

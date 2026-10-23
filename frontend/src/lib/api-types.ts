@@ -43,6 +43,8 @@ export interface TierBreakdownItem {
 export interface AdminStats {
   gross_volume: number;
   active_students: number;
+  total_capacity?: number;
+  spots_left?: number;
   total_registered: number;
   conversion_rate: number;
   pending_payouts_count: number;

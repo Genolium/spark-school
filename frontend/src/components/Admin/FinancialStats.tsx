@@ -40,7 +40,10 @@ export function FinancialStats({ stats }: FinancialStatsProps) {
           </div>
         </div>
         <div className="text-2xl sm:text-3xl font-black font-mono text-white">
-          {stats.active_students} <span className="text-sm font-normal text-slate-400">/ 25 мест</span>
+          {stats.active_students}{" "}
+          <span className="text-sm font-normal text-slate-400">
+            / {stats.total_capacity || 50} мест (осталось: {stats.spots_left !== undefined ? stats.spots_left : Math.max(0, (stats.total_capacity || 50) - stats.active_students)})
+          </span>
         </div>
         <div className="text-xs font-mono text-slate-400 mt-1">
           Всего зарегистрировано: {stats.total_registered}

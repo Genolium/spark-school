@@ -390,10 +390,14 @@ func (h *AdminHandler) GetStats(c *gin.Context) {
 		vipPct = (vipRevenue / grossVolume) * 100.0
 	}
 
+	totalCapacity, spotsLeft := CalculateCapacityAndSpots(activeStudents)
+
 	c.JSON(http.StatusOK, gin.H{
 		"gross_volume":           grossVolume,
 		"gross_volume_kopecks":   int64(grossKopecks),
 		"active_students":        activeStudents,
+		"total_capacity":         totalCapacity,
+		"spots_left":             spotsLeft,
 		"free_access_count":      freeAccessCount,
 		"total_registered":       totalUsers,
 		"conversion_rate":        conversionRate,
