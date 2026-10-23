@@ -54,8 +54,8 @@ func TestReceiptConfirmInput_UsesApprovalTimeAsPaymentDate(t *testing.T) {
 	}
 
 	input := receiptConfirmInput(receipt)
-	if age := time.Since(input.CreatedAt); age > time.Minute {
-		t.Fatalf("payment date must be the confirmation time, got %s ago", age)
+	if !input.CreatedAt.Equal(receipt.CreatedAt) {
+		t.Fatalf("payment date must match receipt created_at, got %v want %v", input.CreatedAt, receipt.CreatedAt)
 	}
 	if input.PaymentID != "RECEIPT_0" {
 		t.Fatalf("unexpected payment id %q", input.PaymentID)

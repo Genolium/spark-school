@@ -209,10 +209,13 @@ func (s *BotService) studentStatusDetails(user *models.User) string {
 // sendAccessNotificationToStudent reliably delivers channel invite link to student using 6-stage fallback logic
 
 // receiptConfirmInput builds the confirmation payload for an approved receipt.
-// The financial operation is dated at confirmation time: the receipt upload
-// may sit in the queue for days, and dating revenue by upload time moved old
-// receipts outside the reporting window.
+// Dates the financial operation by the receipt's actual submission/payment time,
+// falling back to current time if missing.
 func receiptConfirmInput(receipt models.PaymentReceipt) payments.ConfirmInput {
+	txTime := receipt.CreatedAt
+	if txTime.IsZero() {
+		txTime = time.Now()
+	}
 	return payments.ConfirmInput{
 		Source:      "sbp_receipt",
 		PaymentID:   fmt.Sprintf("RECEIPT_%d", receipt.ID),
@@ -224,7 +227,7 @@ func receiptConfirmInput(receipt models.PaymentReceipt) payments.ConfirmInput {
 		Currency:    "RUB",
 		PayMethod:   "sbp_receipt",
 		ProductName: "Оплата участия в проекте «так называемый SPARK»",
-		CreatedAt:   time.Now(),
+		CreatedAt:   txTime,
 	}
 }
 
