@@ -50,15 +50,15 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroPro
   const headline =
     headlineVariant === "benefit" ? (
       <>
-        ПОСТУПИ В АМЕРИКАНСКИЙ
+        ПРОЙДИ ПУТЬ
         <br />
-        УНИВЕРСИТЕТ
+        ДО ГРАНТА $20,000
         <br />
-        С ГРАНТОМ $20,000
+        С ЛИЧНЫМ МЕНТОРОМ
       </>
     ) : headlineVariant === "urgency" ? (
       <>
-        УСПЕЙ В ПОТОК SPARK 2027
+        УСПЕЙ В ПОТОК SPARK 2027!
         <br />
         ГРАНТ $20,000
         <br />

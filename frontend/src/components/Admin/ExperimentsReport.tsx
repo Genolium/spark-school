@@ -34,6 +34,11 @@ const DECISION_LABELS: Record<string, { text: string; className: string }> = {
   no_difference: { text: "без разницы", className: "text-slate-500" },
 };
 
+function variantLabel(experiment: string, variant: string): string {
+  if (experiment === "hero_headline" && variant === "benefit") return "Путь к гранту";
+  return VARIANT_LABELS[variant] || variant;
+}
+
 function DecisionCell({ row }: { row: ExperimentMetric }) {
   const decision = DECISION_LABELS[row.decision] || { text: row.decision, className: "text-slate-500" };
   return (
@@ -108,7 +113,7 @@ export function ExperimentsReport() {
               {rows.map((row) => (
                 <tr key={`${row.experiment}:${row.variant}`} className="border-b last:border-0">
                   <td className="py-2">{EXPERIMENT_LABELS[row.experiment] || row.experiment}</td>
-                  <td className="py-2">{VARIANT_LABELS[row.variant] || row.variant}</td>
+                  <td className="py-2">{variantLabel(row.experiment, row.variant)}</td>
                   <td className="py-2 font-mono">{row.visitors}</td>
                   <td className="py-2 font-mono">{row.bot_leads}</td>
                   <td className="py-2 font-mono">{row.orders}</td>
