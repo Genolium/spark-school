@@ -67,6 +67,16 @@ func (s *BotService) handleMessage(msg *telego.Message) error {
 			param = parts[1]
 		}
 
+		// Attribution travels on every bot entry point, not only on pay links.
+		param, attrToken := splitAttributionToken(param)
+		if attrToken != "" && msg.From != nil {
+			if s.syncTelegramUser(msg.From) != nil {
+				if err := s.attributeLead(msg.From, attrToken); err != nil {
+					log.Printf("[Analytics] failed to attribute bot lead: %v", err)
+				}
+			}
+		}
+
 		if token := diagnosticTokenFromStart(param); token != "" {
 			return s.handleDiagnosticPlan(chatID, msg.From, token)
 		}
@@ -110,12 +120,7 @@ func (s *BotService) handleMessage(msg *telego.Message) error {
 				payload = strings.TrimPrefix(payload, "_")
 			}
 
-			// 2. Extract the short landing attribution token.
-			attrToken := ""
-			if idx := strings.Index(payload, "_a_"); idx != -1 {
-				attrToken = sanitizeAttributionToken(payload[idx+len("_a_"):])
-				payload = payload[:idx]
-			}
+			// 2. Attribution was already extracted from the start parameter.
 
 			// 3. Extract referral or promo code
 			refCode := ""
@@ -159,12 +164,6 @@ func (s *BotService) handleMessage(msg *telego.Message) error {
 				}
 				s.db.Save(u)
 			}
-			if attrToken != "" {
-				if err := s.attributeLead(msg.From, attrToken); err != nil {
-					log.Printf("[Analytics] failed to attribute bot lead: %v", err)
-				}
-			}
-
 			s.sendPaymentDetails(chatID, msg.From, withPromo)
 			return nil
 		}

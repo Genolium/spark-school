@@ -58,6 +58,36 @@ export function getVisitorId(): string {
  * Short token that travels through Telegram's start parameter. It links a
  * landing visitor to a bot lead; it is opaque and contains no user identity.
  */
+export const BOT_URL = "https://t.me/spark_prep_bot";
+
+/**
+ * Append the anonymous attribution token to a Telegram bot link. The bot
+ * copies the visitor id from the landing event with the same token, so every
+ * entry point (lead magnet, calculator, pricing) must carry it.
+ */
+export function withBotAttribution(url: string): string {
+  if (typeof window === "undefined") return url;
+  const token = getAttributionToken();
+  if (!token) return url;
+  try {
+    const parsed = new URL(url);
+    if (!/(^|\.)t\.me$/i.test(parsed.hostname)) return url;
+    if (!parsed.pathname.startsWith("/spark_prep_bot")) return url;
+    const start = parsed.searchParams.get("start") || "";
+    const next = `${start ? `${start}_` : ""}a_${token}`.slice(0, 64);
+    parsed.searchParams.set("start", next);
+    return parsed.toString();
+  } catch {
+    return url;
+  }
+}
+
+/** Build a bot link with an optional start payload and the attribution token. */
+export function botStartUrl(params: string = ""): string {
+  const base = params ? `${BOT_URL}?start=${params}` : BOT_URL;
+  return withBotAttribution(base);
+}
+
 export function getAttributionToken(): string {
   if (typeof window === "undefined") return "";
   try {

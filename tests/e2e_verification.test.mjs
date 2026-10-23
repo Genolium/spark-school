@@ -340,11 +340,25 @@ describe('Tier 3: Cross-Feature & Deep-Links', () => {
     assert.ok(fs.existsSync(calcPath), 'ChancesCalculator.tsx must exist');
     const calcContent = fs.readFileSync(calcPath, 'utf8');
 
-    // Check CTA link target
+    // The CTA must use BotLink with the calculator payload; BotLink appends the
+    // anonymous attribution token, so the literal URL lives in analytics.ts.
     assert.match(
       calcContent,
-      /https:\/\/t\.me\/spark_prep_bot\?start=calc_[a-zA-Z0-9_\${}]*/,
-      'Calculator CTA button must link to https://t.me/spark_prep_bot?start=calc_...'
+      /<BotLink[\s\S]{0,300}?start=\{`calc_/,
+      'Calculator CTA must use BotLink with start=calc_...'
+    );
+    const analyticsPath = path.join(ROOT, 'frontend', 'src', 'lib', 'analytics.ts');
+    assert.ok(fs.existsSync(analyticsPath), 'analytics.ts must exist');
+    const analyticsContent = fs.readFileSync(analyticsPath, 'utf8');
+    assert.match(
+      analyticsContent,
+      /BOT_URL\s*=\s*"https:\/\/t\.me\/spark_prep_bot"/,
+      'Bot base URL must live in analytics.ts'
+    );
+    assert.match(
+      analyticsContent,
+      /function withBotAttribution/,
+      'Bot links must carry the attribution token'
     );
 
     // Check CTA copy invites the user to discuss the application with the curator.

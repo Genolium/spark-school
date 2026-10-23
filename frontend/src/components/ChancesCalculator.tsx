@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Calculator, CheckCircle2, AlertTriangle, ArrowRight, RotateCcw, Send, Sparkles } from "lucide-react";
+import { BotLink } from "@/components/BotLink";
 import { trackFunnelStep } from "@/lib/analytics";
 import { createDiagnostic, DiagnosticResult } from "@/lib/diagnostic";
 
@@ -450,15 +451,16 @@ export function ChancesCalculator() {
               </div>
 
               <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-                <a
-                  href={plan?.telegram_url || `https://t.me/spark_prep_bot?start=calc_${englishLevel || "b1"}_${scoreData.percent}`}
+                <BotLink
+                  href={plan?.telegram_url}
+                  start={`calc_${englishLevel || "b1"}_${scoreData.percent}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="btn-primary-mono w-full sm:w-auto px-6 py-3.5 text-xs sm:text-sm font-bold flex items-center justify-center gap-2 group shadow-xl"
                 >
                   <Send className="w-4 h-4" />
                   <span>{planLoading ? "Готовим план…" : plan ? "Получить персональный план в Telegram ➔" : "Разобрать заявку с Илем в Telegram ➔"}</span>
-                </a>
+                </BotLink>
                 {plan && (
                   <a href={plan.plan_url} className="text-xs font-mono text-emerald-700 dark:text-emerald-300 underline">
                     Открыть план на сайте

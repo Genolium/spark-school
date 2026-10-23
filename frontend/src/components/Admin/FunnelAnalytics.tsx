@@ -123,11 +123,17 @@ export function FunnelAnalytics() {
               <tbody>
                 {data.steps.map((step, index) => {
                   const first = data.steps[0]?.count || 0;
+                  const previous = index > 0 ? data.steps[index - 1]?.count || 0 : 0;
+                  // Steps are not strictly sequential (diagnostics and pricing
+                  // are alternative paths), so a larger step is not "260%".
+                  const nonLinear = index > 0 && step.count > previous;
                   return (
                     <tr key={step.step} className="border-b last:border-0">
                       <td className="py-2">{STEP_LABELS[step.step] || step.step}</td>
                       <td className="py-2 font-mono">{step.count}</td>
-                      <td className="py-2">{index === 0 ? "—" : `${step.conversion_from_previous}%`}</td>
+                      <td className="py-2" title={nonLinear ? "Независимая ветка воронки: посетители могут попасть сюда, минуя предыдущий шаг" : undefined}>
+                        {index === 0 ? "—" : nonLinear ? "—" : `${step.conversion_from_previous}%`}
+                      </td>
                       <td className="py-2">{first > 0 ? `${((step.count / first) * 100).toFixed(1)}%` : "—"}</td>
                     </tr>
                   );

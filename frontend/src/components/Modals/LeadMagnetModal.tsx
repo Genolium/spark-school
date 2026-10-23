@@ -3,6 +3,7 @@
 import React, { useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, Send } from "lucide-react";
+import { BotLink } from "@/components/BotLink";
 
 interface LeadMagnetModalProps {
   isOpen: boolean;
@@ -72,15 +73,15 @@ export function LeadMagnetModal({ isOpen, onClose }: LeadMagnetModalProps) {
 
             {/* Launch in Bot CTA */}
             <div className="space-y-3">
-              <a
-                href="https://t.me/spark_prep_bot?start=free_audit"
+              <BotLink
+                start="free_audit"
                 target="_blank"
                 rel="noreferrer"
                 className="btn-primary-mono w-full py-4 text-sm sm:text-base font-bold flex items-center justify-center gap-2.5 active:scale-95 shadow-xl"
               >
                 <Send className="w-4 h-4" />
                 <span>Забрать видео и PDF в Telegram-боте</span>
-              </a>
+              </BotLink>
 
               <div className="text-center text-[11px] font-mono text-slate-500 dark:text-slate-400">
                 Бот мгновенно пришлёт материалы в личные сообщения без спама.

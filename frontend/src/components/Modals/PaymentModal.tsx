@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { X, ShieldCheck, ArrowUpRight, QrCode, CreditCard, Send, Check, Tag, Sparkles } from "lucide-react";
+import { BotLink } from "@/components/BotLink";
 import { api, PromoValidationResult, PlacesStats } from "@/lib/api";
 import { getAttributionToken, getVisitorId, trackFunnelStep } from "@/lib/analytics";
 import { getExperiment } from "@/lib/experiments";
@@ -475,14 +476,13 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                   <ArrowUpRight className="w-4 h-4" />
                 </a>
 
-                <a
-                  href="https://t.me/spark_prep_bot"
+                <BotLink
                   target="_blank"
                   rel="noreferrer"
                   className="px-6 py-3 rounded-xl bg-slate-50 hover:bg-slate-100 text-xs font-mono text-slate-700 dark:bg-white/5 dark:hover:bg-white/10 dark:text-slate-300 flex items-center justify-center gap-2 transition-all font-semibold cursor-pointer border border-slate-200 dark:border-white/10"
                 >
                   <span>Написать куратору (@spark_prep_bot)</span>
-                </a>
+                </BotLink>
 
                 <p className="text-[11px] font-mono text-center text-slate-500 dark:text-slate-400 mt-1">
                   Оплачивая участие, вы соглашаетесь с{" "}

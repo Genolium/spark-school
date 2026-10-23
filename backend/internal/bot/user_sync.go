@@ -113,25 +113,50 @@ func (s *BotService) attributeLead(from *telego.User, token string) error {
 	if err := s.db.Where("telegram_id = ?", from.ID).First(&user).Error; err != nil {
 		return err
 	}
-	if user.AttributionToken != "" {
+	if user.AttributionToken != "" && user.VisitorID != "" {
 		return nil
 	}
+
+	// First touch wins: keep the token the visitor arrived with, but retry the
+	// landing lookup when the matching event has not been ingested yet.
+	attributionToken := user.AttributionToken
+	if attributionToken == "" {
+		attributionToken = token
+	}
 	var landing models.AnalyticsEvent
-	err := s.db.Where("attribution_token = ? AND visitor_id <> ''", token).Order("created_at DESC").First(&landing).Error
-	visitorID := ""
-	if err == nil {
+	err := s.db.Where("attribution_token = ? AND visitor_id <> ''", attributionToken).
+		Order("created_at DESC").First(&landing).Error
+	visitorID := user.VisitorID
+	if err == nil && landing.VisitorID != "" {
 		visitorID = landing.VisitorID
 	}
-	if err := s.db.Model(&models.User{}).Where("id = ?", user.ID).Updates(map[string]interface{}{
-		"attribution_token": token,
-		"visitor_id":        visitorID,
-	}).Error; err != nil {
+
+	updates := map[string]interface{}{"attribution_token": attributionToken}
+	if visitorID != "" {
+		updates["visitor_id"] = visitorID
+	}
+	if err := s.db.Model(&models.User{}).Where("id = ?", user.ID).Updates(updates).Error; err != nil {
 		return err
 	}
-	meta := fmt.Sprintf(`{"telegram_id":%d,"attribution_token":%q}`, from.ID, token)
+	if visitorID == "" {
+		// No landing event yet. A later /start will finish the attribution.
+		return nil
+	}
+
+	var existing int64
+	if err := s.db.Model(&models.AnalyticsEvent{}).
+		Where("step = ? AND visitor_id = ?", "bot_lead", visitorID).
+		Count(&existing).Error; err != nil {
+		return err
+	}
+	if existing > 0 {
+		return nil
+	}
+
+	meta := fmt.Sprintf(`{"telegram_id":%d,"attribution_token":%q}`, from.ID, attributionToken)
 	return s.db.Create(&models.AnalyticsEvent{
 		VisitorID:        visitorID,
-		AttributionToken: token,
+		AttributionToken: attributionToken,
 		Step:             "bot_lead",
 		Source:           landing.Source,
 		Campaign:         landing.Campaign,
@@ -139,6 +164,24 @@ func (s *BotService) attributeLead(from *telego.User, token string) error {
 		Metadata:         meta,
 		CreatedAt:        time.Now(),
 	}).Error
+}
+
+// splitAttributionToken pulls the short landing token out of a Telegram start
+// parameter. Every bot entry point can carry it: pay links, the free audit
+// magnet, calculator results and a bare bot link.
+func splitAttributionToken(param string) (string, string) {
+	param = strings.TrimSpace(param)
+	if idx := strings.Index(param, "_a_"); idx != -1 {
+		if token := sanitizeAttributionToken(param[idx+len("_a_"):]); token != "" {
+			return param[:idx], token
+		}
+	}
+	if strings.HasPrefix(param, "a_") {
+		if token := sanitizeAttributionToken(strings.TrimPrefix(param, "a_")); token != "" {
+			return "", token
+		}
+	}
+	return param, ""
 }
 
 func sanitizeAttributionToken(raw string) string {
