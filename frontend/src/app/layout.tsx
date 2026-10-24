@@ -210,7 +210,7 @@ const jsonLd = {
         {
           "@type": "Offer",
           "name": "Акселератор",
-          "price": "6900",
+          "price": "10900",
           "priceCurrency": "RUB",
           "availability": "https://schema.org/InStock",
           "url": "https://so-called-spark.ru/#pricing",

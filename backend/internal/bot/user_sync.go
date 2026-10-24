@@ -192,17 +192,44 @@ func (s *BotService) attributeLead(from *telego.User, token string) error {
 // magnet, calculator results and a bare bot link.
 func splitAttributionToken(param string) (string, string) {
 	param = strings.TrimSpace(param)
+	refSuffix := ""
+	if idx := strings.Index(param, "_ref_"); idx != -1 {
+		refSuffix = param[idx:]
+		param = param[:idx]
+	}
 	if idx := strings.Index(param, "_a_"); idx != -1 {
 		if token := sanitizeAttributionToken(param[idx+len("_a_"):]); token != "" {
-			return param[:idx], token
+			return param[:idx] + refSuffix, token
 		}
 	}
 	if strings.HasPrefix(param, "a_") {
 		if token := sanitizeAttributionToken(strings.TrimPrefix(param, "a_")); token != "" {
-			return "", token
+			return strings.TrimPrefix(refSuffix, "_"), token
 		}
 	}
-	return param, ""
+	return param + refSuffix, ""
+}
+
+func (s *BotService) applyLandingExperiments(session *UserSession, attributionToken string) {
+	if s.db == nil || session == nil || attributionToken == "" {
+		return
+	}
+	var rows []models.ExperimentAssignment
+	if err := s.db.Where("attribution_token = ?", attributionToken).Find(&rows).Error; err != nil {
+		return
+	}
+	for _, row := range rows {
+		switch row.Experiment {
+		case "pricing_price":
+			if session.PriceExperiment == "" {
+				session.PriceExperiment = row.Variant
+			}
+		case "vip_price":
+			if session.VIPPriceExperiment == "" {
+				session.VIPPriceExperiment = row.Variant
+			}
+		}
+	}
 }
 
 func sanitizeAttributionToken(raw string) string {

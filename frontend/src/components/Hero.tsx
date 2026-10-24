@@ -7,6 +7,7 @@ import { ArrowUpRight, CheckCircle2, Video, FileText } from "lucide-react";
 import { api, PlacesStats, CoursePricing } from "@/lib/api";
 import { trackFunnelStep } from "@/lib/analytics";
 import { getExperiment } from "@/lib/experiments";
+import { DEFAULT_PRICING } from "@/lib/pricing-defaults";
 
 interface HeroProps {
   onOpenPayment?: () => void;
@@ -14,20 +15,9 @@ interface HeroProps {
   onOpenChances?: () => void;
 }
 
-export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroProps) {
-  const [places, setPlaces] = useState<PlacesStats>({
-    total_capacity: 25,
-    active_students: 16,
-    spots_left: 9,
-  });
-  const [pricing, setPricing] = useState<CoursePricing>({
-    basic_price: 3990,
-    basic_old_price: 5900,
-    accelerator_price: 6900,
-    accelerator_old_price: 9900,
-    vip_price: 14900,
-    vip_old_price: 19900,
-  });
+export function Hero({ onOpenChances }: HeroProps) {
+  const [places, setPlaces] = useState<PlacesStats | null>(null);
+  const [pricing, setPricing] = useState<CoursePricing>(DEFAULT_PRICING);
 
   useEffect(() => {
     api.getPlacesStats().then(setPlaces).catch(() => {});
@@ -104,15 +94,15 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroPro
             />
           </div>
 
-          {/* Mobile: Golden Gate Bridge Vertical Photo */}
+          {/* Mobile: same Wyoming campus crop as desktop */}
           <div className="block sm:hidden absolute inset-0">
             <BlurImage
-              src="/spatial-campus-hero-mobile.webp"
-              alt="Golden Gate Bridge, California — академическая стажировка и путешествия в США"
+              src="/spatial-campus-hero.webp"
+              alt="Кампус University of Wyoming и Скалистые горы — место академической стажировки так называемого Иля"
               fill
               priority
               quality={75}
-              className="object-cover object-center"
+              className="object-cover object-[center_30%]"
               sizes="100vw"
             />
           </div>
@@ -179,7 +169,7 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroPro
                   }}
                   className="px-7 py-4 rounded-full text-xs sm:text-sm flex items-center justify-center gap-2.5 active:scale-95 transition-all font-semibold bg-white/20 hover:bg-white/30 text-white border border-white/35 backdrop-blur-xl shadow-xl group cursor-pointer"
                 >
-                  <span>Рассчитать шансы</span>
+                  <span>Пройти диагностику</span>
                 </button>
               </div>
 
@@ -191,7 +181,9 @@ export function Hero({ onOpenPayment, onOpenLeadMagnet, onOpenChances }: HeroPro
                 </span>
                 <span className="text-white/40">•</span>
                 <span className="text-white/90">
-                  Лимит: {places.total_capacity} мест • Осталось {places.spots_left} мест
+                  {places
+                    ? `Лимит: ${places.total_capacity} мест • Осталось ${places.spots_left}`
+                    : "Набор в поток SPARK 2027 открыт"}
                 </span>
               </div>
             </motion.div>

@@ -33,10 +33,10 @@ func TestDrip_MessageCopy_Sanity(t *testing.T) {
 	defer service.Stop()
 
 	// Verify price calculations in drip messages
-	accPrice := 6555
+	accPrice := 10355
 	vipPrice := 14155
 
-	if accPrice != 6900-(6900*5)/100 {
+	if accPrice != 10900-(10900*5)/100 {
 		t.Fatalf("unexpected accelerator discounted price: %d", accPrice)
 	}
 	if vipPrice != 14900-(14900*5)/100 {

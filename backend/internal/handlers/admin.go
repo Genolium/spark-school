@@ -16,6 +16,7 @@ import (
 	"github.com/spark-school/backend/internal/config"
 	"github.com/spark-school/backend/internal/models"
 	"github.com/spark-school/backend/internal/money"
+	"github.com/spark-school/backend/internal/payments"
 	"github.com/spark-school/backend/internal/privacy"
 	"github.com/spark-school/backend/internal/readmodels"
 	"github.com/spark-school/backend/internal/services"
@@ -32,6 +33,7 @@ type AdminHandler struct {
 	inviteLinkFunc   func(ctx context.Context, channelID int64) (string, error)
 	digestFunc       func() error
 	receiptSender    func(telegramID int64, tier string, amount float64, receiptURL string, receiptNumber string, serviceName string) error
+	paymentsService  *payments.Service
 }
 
 func NewAdminHandler(db *gorm.DB, cfg *config.Config, aff *services.AffiliateService, notify func(telegramID int64, message string) error, inviteLinkGen ...func(ctx context.Context, channelID int64) (string, error)) *AdminHandler {
@@ -39,13 +41,17 @@ func NewAdminHandler(db *gorm.DB, cfg *config.Config, aff *services.AffiliateSer
 	if len(inviteLinkGen) > 0 {
 		gen = inviteLinkGen[0]
 	}
-	return &AdminHandler{
+	h := &AdminHandler{
 		db:               db,
 		cfg:              cfg,
 		affiliateService: aff,
 		notifyFunc:       notify,
 		inviteLinkFunc:   gen,
 	}
+	if db != nil && aff != nil {
+		h.paymentsService = payments.NewService(db, aff)
+	}
+	return h
 }
 
 // SetInviteLinkGenerator sets a custom generator for one-time Telegram invite links.
@@ -822,7 +828,7 @@ func (h *AdminHandler) IssueReceipt(c *gin.Context) {
 	now := time.Now()
 
 	if h.db == nil {
-		amount := 6900.0
+		amount := 10900.0
 		if req.Amount != nil && *req.Amount > 0 {
 			amount = *req.Amount
 		}
@@ -1048,6 +1054,40 @@ func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 		}
 
 		wasActive = user.HasAccess
+		if req.HasAccess && !wasActive && req.PaidAmount != nil && *req.PaidAmount > 0 && h.paymentsService != nil {
+			tier := strings.ToLower(strings.TrimSpace(req.Tier))
+			if tier == "" {
+				tier = user.Tier
+			}
+			paymentID := fmt.Sprintf("MANUAL_%d_%s_%d", user.ID, tier, int64(*req.PaidAmount*100))
+			_, err := h.paymentsService.ConfirmTx(tx, payments.ConfirmInput{
+				Source:     "admin_manual",
+				PaymentID:  paymentID,
+				OrderID:    paymentID,
+				TelegramID: user.TelegramID,
+				Username:   user.Username,
+				FirstName:  user.FirstName,
+				Tier:       tier,
+				Amount:     *req.PaidAmount,
+				Currency:   "RUB",
+				PayMethod:  "admin_manual",
+				PromoCode:  cleanPromo,
+			})
+			if err != nil {
+				return err
+			}
+			if err := tx.First(&user, user.ID).Error; err != nil {
+				return err
+			}
+			if cleanPromo != "" {
+				var promo models.PromoCode
+				if err := tx.Where("UPPER(code) = ?", cleanPromo).First(&promo).Error; err == nil {
+					redeemedPromo = &promo
+				}
+			}
+			return nil
+		}
+
 		user.HasAccess = req.HasAccess
 		if req.Tier != "" {
 			user.Tier = strings.ToLower(strings.TrimSpace(req.Tier))
@@ -1066,57 +1106,6 @@ func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 		}
 		if err := tx.Save(&user).Error; err != nil {
 			return err
-		}
-
-		// Record manual paid activation in payment_transactions for unified financial stats
-		if req.HasAccess && !wasActive && user.PaidAmount > 0 {
-			// Deterministic key prevents a repeated admin click from creating
-			// a second financial operation for the same manual payment.
-			paymentID := fmt.Sprintf("MANUAL_%d_%s_%d", user.ID, strings.ToLower(user.Tier), int64(user.PaidAmount*100))
-			if err := tx.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "payment_id"}}, DoNothing: true}).Create(&models.PaymentTransaction{
-				PaymentID:     paymentID,
-				OrderID:       paymentID,
-				TelegramID:    user.TelegramID,
-				Username:      user.Username,
-				Amount:        user.PaidAmount,
-				AmountKopecks: int64(money.FromRubles(user.PaidAmount)),
-				Currency:      "RUB",
-				Tier:          user.Tier,
-				Status:        "SUCCESS",
-				PayMethod:     "admin_manual",
-				PromoCode:     user.PromoCode,
-				CreatedAt:     time.Now(),
-			}).Error; err != nil {
-				return err
-			}
-		}
-
-		// Only redeem promo and distribute commission on initial access activation
-		if req.HasAccess && !wasActive {
-			// 1. Atomic Promo Code Redemption (if provided)
-			if cleanPromo != "" {
-				promo, err := RedeemPromoCode(tx, cleanPromo)
-				if err != nil {
-					return err
-				}
-				redeemedPromo = promo
-			}
-
-			// 2. Affiliate Commission Settlement (inside same transaction)
-			if h.affiliateService != nil {
-				purchasePrice := user.PaidAmount
-				if purchasePrice <= 0 {
-					pricing := models.GetCoursePricing(h.db)
-					purchasePrice = pricing.AcceleratorPrice
-				}
-				var userReceipt models.PaymentReceipt
-				if err := tx.Where("telegram_id = ?", user.TelegramID).Order("id DESC").First(&userReceipt).Error; err == nil && userReceipt.Amount > 0 {
-					purchasePrice = userReceipt.Amount
-				}
-				if err := h.affiliateService.ProcessCoursePurchaseTx(tx, user.ID, purchasePrice); err != nil {
-					return err
-				}
-			}
 		}
 
 		return nil

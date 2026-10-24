@@ -78,6 +78,8 @@ func NewBotService(cfg *config.Config, db *gorm.DB) *BotService {
 	// Start daily curator digest cron worker
 	go s.startDigestWorker()
 
+	go s.startRecoveryWorker()
+
 	return s
 }
 
@@ -415,11 +417,9 @@ func (s *BotService) processReceiptTierToggle(query *telego.CallbackQuery, idStr
 	}
 
 	var student models.User
-	userFound := false
 	isUpgrade := false
 	prevTier := ""
 	if err := s.db.Where("telegram_id = ?", receipt.TelegramID).First(&student).Error; err == nil {
-		userFound = true
 		if student.HasAccess {
 			isUpgrade = true
 			prevTier = strings.ToLower(strings.TrimSpace(student.Tier))
@@ -440,7 +440,7 @@ func (s *BotService) processReceiptTierToggle(query *telego.CallbackQuery, idStr
 			} else {
 				diff := pricing.AcceleratorPrice - pricing.BasicPrice
 				if diff <= 0 {
-					diff = 2910.0
+					diff = 6910.0
 				}
 				receipt.Amount = diff
 				receipt.Tier = "accelerator"
@@ -448,7 +448,7 @@ func (s *BotService) processReceiptTierToggle(query *telego.CallbackQuery, idStr
 		} else if prevTier == "accelerator" {
 			diff := pricing.VIPPrice - pricing.AcceleratorPrice
 			if diff <= 0 {
-				diff = 8000.0
+				diff = 4000.0
 			}
 			receipt.Amount = diff
 			receipt.Tier = "vip"
@@ -469,11 +469,6 @@ func (s *BotService) processReceiptTierToggle(query *telego.CallbackQuery, idStr
 	if err := s.db.Save(&receipt).Error; err != nil {
 		log.Printf("[Bot Receipt] failed to save tier toggle for #%d: %v", receipt.ID, err)
 		return
-	}
-
-	if userFound && !isUpgrade {
-		student.Tier = receipt.Tier
-		s.db.Save(&student)
 	}
 
 	_ = s.bot.AnswerCallbackQuery(&telego.AnswerCallbackQueryParams{

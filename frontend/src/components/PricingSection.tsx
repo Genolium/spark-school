@@ -7,6 +7,7 @@ import { api, PlacesStats, CoursePricing } from "@/lib/api";
 import { DeadlineCountdown } from "./DeadlineCountdown";
 import { trackFunnelStep } from "@/lib/analytics";
 import { getExperiment } from "@/lib/experiments";
+import { DEFAULT_PRICING } from "@/lib/pricing-defaults";
 
 interface PricingSectionProps {
   onOpenPayment?: (tier?: "basic" | "accelerator" | "vip") => void;
@@ -14,21 +15,8 @@ interface PricingSectionProps {
 
 export function PricingSection({ onOpenPayment }: PricingSectionProps) {
   const pricingCtaVariant = getExperiment("pricing_cta_copy");
-  const [places, setPlaces] = useState<PlacesStats>({
-    total_capacity: 25,
-    active_students: 16,
-    spots_left: 9,
-  });
-
-  // Default pricing fallbacks: 3 990 ₽ (Basic), 6 900 ₽ (Accelerator) and 14 900 ₽ (VIP)
-  const [pricing, setPricing] = useState<CoursePricing>({
-    basic_price: 3990,
-    basic_old_price: 5900,
-    accelerator_price: 6900,
-    accelerator_old_price: 9900,
-    vip_price: 14900,
-    vip_old_price: 19900,
-  });
+  const [places, setPlaces] = useState<PlacesStats | null>(null);
+  const [pricing, setPricing] = useState<CoursePricing>(DEFAULT_PRICING);
 
   useEffect(() => {
     api.getPlacesStats().then(setPlaces).catch(() => {});
@@ -39,24 +27,16 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
     return (num || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   };
 
-  const basicPrice = pricing.basic_price || 3990;
+  const basicPrice = pricing.basic_price || DEFAULT_PRICING.basic_price || 3990;
   const basicOldPrice = (pricing.basic_old_price && pricing.basic_old_price > basicPrice)
     ? pricing.basic_old_price
-    : Math.round((basicPrice * 1.4) / 100) * 100;
-
-  // Dynamic strikethrough prices: always guaranteed to be strictly higher than current price
+    : null;
   const accOldPrice = pricing.accelerator_old_price > pricing.accelerator_price
     ? pricing.accelerator_old_price
-    : Math.round((pricing.accelerator_price * 1.4) / 100) * 100;
-
+    : null;
   const vipOldPrice = pricing.vip_old_price > pricing.vip_price
     ? pricing.vip_old_price
-    : Math.round((pricing.vip_price * 1.4) / 100) * 100;
-
-  // Dynamic ROI calculation: $20,000 grant (~2,000,000 ₽ benchmark) vs accelerator price
-  const grantRub = 20000 * 100;
-  const currentAccPrice = pricing.accelerator_price || 6900;
-  const roiMultiplier = Math.round(grantRub / currentAccPrice);
+    : null;
 
   return (
     <section id="pricing" className="relative w-full max-w-[1520px] mx-auto px-3 sm:px-6 py-16 sm:py-24 scroll-mt-20 sm:scroll-mt-24">
@@ -74,16 +54,24 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
           Выбери комфортный формат подготовки: самостоятельный по видео- и аудиоурокам, полное персональное менторство от финалиста SPARK 2026 или VIP-сопровождение под ключ.
         </p>
 
-        {/* Live Scarcity Counter Bar */}
+        {/* Live Scarcity Counter Bar — only after a real API response */}
         <div className="mt-6 inline-flex flex-wrap items-center justify-center gap-3 px-4 py-2 rounded-full bg-amber-500/10 border border-amber-500/25 text-xs font-mono">
-          <span className="w-2 h-2 rounded-full bg-amber-500 animate-ping" />
-          <span className="font-semibold text-slate-900 dark:text-white">
-            Лимит потока: {places.total_capacity} мест
-          </span>
-          <span className="text-slate-400 dark:text-white/30">•</span>
-          <span className="text-amber-900 dark:text-amber-300 font-bold">
-            Осталось {places.spots_left} мест
-          </span>
+          <span className="w-2 h-2 rounded-full bg-amber-500 motion-safe:animate-ping" />
+          {places ? (
+            <>
+              <span className="font-semibold text-slate-900 dark:text-white">
+                Лимит потока: {places.total_capacity} мест
+              </span>
+              <span className="text-slate-400 dark:text-white/30">•</span>
+              <span className="text-amber-900 dark:text-amber-300 font-bold">
+                Осталось {places.spots_left} мест
+              </span>
+            </>
+          ) : (
+            <span className="font-semibold text-slate-900 dark:text-white">
+              Набор в поток SPARK 2027 открыт
+            </span>
+          )}
         </div>
       </div>
 
@@ -92,7 +80,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
         <DeadlineCountdown onOpenPayment={() => onOpenPayment?.("accelerator")} />
       </div>
 
-      {/* Value Contrast & ROI Breakdown Card (6 900 ₽ vs Цена ошибки) */}
+      {/* Value contrast: preparation cost vs cost of a missed grant cycle */}
       <motion.div
         initial={{ opacity: 0, y: 16 }}
         whileInView={{ opacity: 1, y: 0 }}
@@ -107,7 +95,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
             </div>
             <div>
               <h3 className="font-editorial text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
-                Математика инвестиции: почему курс окупается сразу
+                Стоимость подготовки vs цена пропущенного цикла
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">
                 Сравните разовую стоимость системной подготовки со стоимостью одной ошибки в заявке
@@ -115,7 +103,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
             </div>
           </div>
           <span className="hidden sm:inline-flex px-3 py-1 rounded-full text-xs font-mono font-bold uppercase bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30">
-            ROI 1 : {roiMultiplier}
+            Разовая подготовка
           </span>
         </div>
 
@@ -190,7 +178,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
               </div>
               <div className="flex items-start gap-2">
                 <span className="text-rose-500 font-bold shrink-0">✕</span>
-                <span>Соотношение ценности курса к гранту: <b>1 к {roiMultiplier}</b></span>
+                <span>Грант не гарантирован: комиссия принимает решение независимо</span>
               </div>
             </div>
           </div>
@@ -228,9 +216,11 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
             </p>
 
             <div className="mb-6 pb-6 border-b border-emerald-500/15 dark:border-white/10">
-              <div className="text-slate-400 line-through text-sm font-mono">
-                {formatRub(basicOldPrice)} ₽
-              </div>
+              {basicOldPrice ? (
+                <div className="text-slate-400 line-through text-sm font-mono">
+                  {formatRub(basicOldPrice)} ₽
+                </div>
+              ) : null}
               <div className="text-3xl sm:text-4xl font-black font-mono text-slate-900 dark:text-white tracking-tight">
                 {formatRub(basicPrice)} ₽
               </div>
@@ -298,7 +288,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
                 Хит продаж
               </span>
               <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
-                Выбор 85% студентов
+                Полное менторство
               </span>
             </div>
 
@@ -310,9 +300,11 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
             </p>
 
             <div className="mb-6 pb-6 border-b border-emerald-500/20 dark:border-white/10">
-              <div className="text-slate-500 dark:text-slate-400 line-through text-sm font-mono">
-                {formatRub(accOldPrice)} ₽
-              </div>
+              {accOldPrice ? (
+                <div className="text-slate-500 dark:text-slate-400 line-through text-sm font-mono">
+                  {formatRub(accOldPrice)} ₽
+                </div>
+              ) : null}
               <div className="text-3xl sm:text-4xl font-black font-mono text-emerald-600 dark:text-emerald-400 tracking-tight">
                 {formatRub(pricing.accelerator_price)} ₽
               </div>
@@ -386,9 +378,11 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
             </p>
 
             <div className="mb-6 pb-6 border-b border-emerald-500/15 dark:border-white/10">
-              <div className="text-slate-500 dark:text-slate-400 line-through text-sm font-mono">
-                {formatRub(vipOldPrice)} ₽
-              </div>
+              {vipOldPrice ? (
+                <div className="text-slate-500 dark:text-slate-400 line-through text-sm font-mono">
+                  {formatRub(vipOldPrice)} ₽
+                </div>
+              ) : null}
               <div className="text-3xl sm:text-4xl font-black font-mono text-amber-600 dark:text-amber-400 tracking-tight">
                 {formatRub(pricing.vip_price)} ₽
               </div>
@@ -442,7 +436,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
         </div>
         <div className="flex items-center gap-2">
           <CreditCard className="w-4 h-4 text-sky-500 shrink-0" />
-          <span>СБП 0% • Любые карты РФ • Безопасный платёж</span>
+          <span>Оплата по СБП 0% комиссии • Фискальный чек ФНС</span>
         </div>
       </div>
     </section>

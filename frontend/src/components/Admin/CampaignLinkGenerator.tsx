@@ -12,13 +12,13 @@ export function CampaignLinkGenerator() {
   const [copied, setCopied] = useState<string | null>(null);
 
   // Derive production base URL
-  const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://spark-school.ru";
+  const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://so-called-spark.ru";
 
   // Build Web Landing URL
   const buildWebUrl = () => {
     let path = "/";
     if (targetType === "pricing") path = "/#pricing";
-    if (targetType === "calc") path = "/#calculator";
+    if (targetType === "calc") path = "/#pricing";
 
     const params = new URLSearchParams();
     const cleanSource = source.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "");

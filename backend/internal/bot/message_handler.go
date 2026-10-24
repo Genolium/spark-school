@@ -129,6 +129,7 @@ func (s *BotService) handleMessage(msg *telego.Message) error {
 				payload = strings.TrimPrefix(payload, "pe_vip_mid")
 				payload = strings.TrimPrefix(payload, "_")
 			}
+			s.applyLandingExperiments(session, attrToken)
 
 			// 2. Attribution was already extracted from the start parameter.
 

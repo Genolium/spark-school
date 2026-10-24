@@ -43,7 +43,7 @@ type ValidatePromoResponse struct {
 	Message         string  `json:"message,omitempty"`
 }
 
-const BaseCoursePrice = 6900.00
+const BaseCoursePrice = 10900.00
 
 // GetTierPrice returns standard price for the selected tier
 func GetTierPrice(tier string, fallbackPrice float64) float64 {
@@ -56,7 +56,7 @@ func GetTierPrice(tier string, fallbackPrice float64) float64 {
 	case "vip":
 		return 14900.00
 	case "accelerator", "акселератор":
-		return 6900.00
+		return 10900.00
 	default:
 		return BaseCoursePrice
 	}
@@ -370,8 +370,9 @@ type RedeemPromoResponse struct {
 	Message         string `json:"message,omitempty"`
 }
 
-// Redeem handles public promo code redemption requests atomically.
-// POST /api/v1/promo/redeem
+// Redeem used to increment uses_count on a public unauthenticated request.
+// Uses are consumed only at payment confirmation. This endpoint now looks the
+// code up without mutating it.
 func (h *PromoHandler) Redeem(c *gin.Context) {
 	var req RedeemPromoRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -385,18 +386,7 @@ func (h *PromoHandler) Redeem(c *gin.Context) {
 		return
 	}
 
-	var promo *models.PromoCode
-	var err error
-	if h.redeemFunc != nil {
-		promo, err = h.redeemFunc(cleanCode)
-	} else {
-		if h.db == nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "База данных не инициализирована"})
-			return
-		}
-		promo, err = RedeemPromoCode(h.db, cleanCode)
-	}
-
+	promo, err := h.lookupActivePromo(cleanCode)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -408,6 +398,20 @@ func (h *PromoHandler) Redeem(c *gin.Context) {
 		UsesCount:       promo.UsesCount,
 		DiscountPercent: promo.DiscountPercent,
 		OwnerUsername:   promo.OwnerUsername,
-		Message:         "Промокод успешно применён!",
+		Message:         "Промокод действителен. Скидка применится при оплате.",
 	})
+}
+
+func (h *PromoHandler) lookupActivePromo(cleanCode string) (*models.PromoCode, error) {
+	if h.db != nil {
+		var promo models.PromoCode
+		if err := h.db.Where("UPPER(code) = ? AND is_active = ?", cleanCode, true).First(&promo).Error; err != nil {
+			return nil, errors.New("promo code not found or inactive")
+		}
+		return &promo, nil
+	}
+	if h.redeemFunc != nil {
+		return h.redeemFunc(cleanCode)
+	}
+	return nil, errors.New("promo code not found or inactive")
 }

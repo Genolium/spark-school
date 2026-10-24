@@ -33,8 +33,8 @@ func (h *AuthHandler) TelegramWidgetLogin(c *gin.Context) {
 		return
 	}
 
-	// In development or when token is not set, allow graceful test bypass if hash == "test"
-	if h.cfg.TelegramBotToken != "" && payload["hash"] != "test" {
+	allowTestHash := payload["hash"] == "test" && (h.cfg == nil || !h.cfg.IsProduction())
+	if h.cfg != nil && h.cfg.TelegramBotToken != "" && !allowTestHash {
 		if !auth.VerifyTelegramWidget(payload, h.cfg.TelegramBotToken) {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Telegram signature verification failed"})
 			return

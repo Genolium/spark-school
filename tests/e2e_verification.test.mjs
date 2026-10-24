@@ -60,22 +60,22 @@ function isPrivateChat(chat) {
 }
 
 // Helper: Generate Telegram payment deep-link
-function generatePaymentDeepLink(tier, username = '', promoCode = '', refCode = '') {
-  const cleanU = (username || '').replace('@', '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 16);
-  const cleanP = (promoCode || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 12);
-  const cleanR = (refCode || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 12);
-
-  let startParam = `pay_${tier}`;
-  if (cleanP && cleanU) {
-    startParam = `pay_${tier}_${cleanU}_p_${cleanP}`;
-  } else if (cleanP) {
-    startParam = `pay_${tier}_p_${cleanP}`;
-  } else if (cleanR && cleanU) {
-    startParam = `pay_${tier}_${cleanU}_r_${cleanR}`;
-  } else if (cleanU) {
-    startParam = `pay_${tier}_${cleanU}`;
+function compactStartParam(action, attributionToken = '', ref = '') {
+  const cleanAction = action.replace(/[^a-zA-Z0-9_]/g, '').slice(0, 24);
+  const token = attributionToken.replace(/[^a-zA-Z0-9]/g, '').slice(0, 16);
+  const cleanRef = ref.replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 12);
+  let param = cleanAction || 'start';
+  if (token) param += `_a_${token}`;
+  if (cleanRef) {
+    const withRef = `${param}_ref_${cleanRef}`;
+    if (withRef.length <= 64) param = withRef;
   }
-  return `https://t.me/spark_prep_bot?start=${startParam}`;
+  return param.slice(0, 64);
+}
+
+function generatePaymentDeepLink(tier, username = '', promoCode = '', refCode = '') {
+  const ref = (refCode || promoCode || username || '').replace('@', '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 12);
+  return `https://t.me/spark_prep_bot?start=${compactStartParam(`pay_${tier}`, '', ref)}`;
 }
 
 // Helper: Recursively find files in directory
@@ -104,78 +104,76 @@ function getFilesRecursively(dir, filterFn) {
 // ============================================================================
 describe('Tier 1: Feature Coverage', () => {
 
-  it('1.1 Pricing Tiers: 3 tiers: Базовый (3990), Акселератор (6900), and VIP (14900) exist with proper features', () => {
-    // 1. Verify frontend PricingSection.tsx
+  it('1.1 Pricing Tiers: 3 tiers: Базовый (3990), Акселератор (10900 / lower 9990), and VIP (14900) exist with proper features', () => {
+    const defaultsPath = path.join(ROOT, 'frontend', 'src', 'lib', 'pricing-defaults.ts');
+    assert.ok(fs.existsSync(defaultsPath), 'pricing-defaults.ts must exist');
+    const defaultsContent = fs.readFileSync(defaultsPath, 'utf8');
+    assert.match(defaultsContent, /basic_price:\s*3990/, 'list price for Базовый must be 3990');
+    assert.match(defaultsContent, /accelerator_price:\s*10900/, 'list price for Акселератор must be 10900');
+    assert.match(defaultsContent, /ACCELERATOR_LOWER_PRICE = 9990/, 'lower experiment must be 9990');
+    assert.match(defaultsContent, /vip_price:\s*14900/, 'list price for VIP must be 14900');
+
     const pricingSectionPath = path.join(ROOT, 'frontend', 'src', 'components', 'PricingSection.tsx');
     assert.ok(fs.existsSync(pricingSectionPath), 'PricingSection.tsx must exist');
     const pricingContent = fs.readFileSync(pricingSectionPath, 'utf8');
 
-    // Check tier names in PricingSection
     assert.match(pricingContent, /Базовый/, 'PricingSection must include Базовый tier');
     assert.match(pricingContent, /Акселератор/, 'PricingSection must include Акселератор tier');
     assert.match(pricingContent, /VIP/, 'PricingSection must include VIP tier');
+    assert.match(pricingContent, /DEFAULT_PRICING/, 'PricingSection must use canonical DEFAULT_PRICING');
+    assert.match(pricingContent, /line-through/, 'PricingSection must keep strikethrough old prices');
 
-    // Check base prices in PricingSection
-    assert.match(pricingContent, /3\s*990\s*₽/, 'PricingSection must display 3 990 ₽ for Базовый');
-    assert.match(pricingContent, /6\s*900\s*₽/, 'PricingSection must display 6 900 ₽ for Акселератор');
-    assert.match(pricingContent, /14\s*900\s*₽/, 'PricingSection must display 14 900 ₽ for VIP');
-
-    // Verify Basic tier button and feature copy
     assert.match(pricingContent, /Выбрать Базовый/, 'PricingSection must have Basic tier button');
     assert.match(pricingContent, /видеоуроки/i, 'PricingSection must mention video lessons');
     assert.match(pricingContent, /БЕЗ обратной связи/i, 'PricingSection must state without feedback');
 
-    // Check strict naming: VIP card header must not include 'Консьерж'
     assert.doesNotMatch(pricingContent, /<h3[^>]*>[\s\S]*?VIP\s*\/\s*Консьерж[\s\S]*?<\/h3>/, 'PricingSection header must NOT contain "VIP / Консьерж"');
     assert.doesNotMatch(pricingContent, /Выбрать\s+VIP\s+Консьерж/, 'PricingSection button must NOT say "VIP Консьерж"');
 
-    // 2. Verify frontend PaymentModal.tsx
     const paymentModalPath = path.join(ROOT, 'frontend', 'src', 'components', 'Modals', 'PaymentModal.tsx');
     assert.ok(fs.existsSync(paymentModalPath), 'PaymentModal.tsx must exist');
     const modalContent = fs.readFileSync(paymentModalPath, 'utf8');
 
-    // Check TIERS dictionary in PaymentModal has basic, accelerator, and vip
     assert.match(modalContent, /basic:\s*\{[\s\S]*?price:\s*3990/, 'PaymentModal must have basic price 3990');
-    assert.match(modalContent, /accelerator:\s*\{[\s\S]*?price:\s*6900/, 'PaymentModal must have accelerator price 6900');
+    assert.match(modalContent, /accelerator:\s*\{[\s\S]*?price:\s*10900/, 'PaymentModal must have accelerator list price 10900');
     assert.match(modalContent, /vip:\s*\{[\s\S]*?price:\s*14900/, 'PaymentModal must have vip price 14900');
     assert.match(modalContent, /vip:\s*\{[\s\S]*?name:\s*["']VIP["']/, 'PaymentModal VIP tier name must be strictly "VIP"');
 
-    // 3. Verify backend promo.go tier pricing
     const backendPromoPath = path.join(ROOT, 'backend', 'internal', 'handlers', 'promo.go');
     assert.ok(fs.existsSync(backendPromoPath), 'backend/internal/handlers/promo.go must exist');
     const backendPromoContent = fs.readFileSync(backendPromoPath, 'utf8');
     assert.match(backendPromoContent, /case\s+"basic"(?:,\s*"базовый")?:\s*return\s*3990/, 'backend GetTierPrice must return 3990 for basic');
     assert.match(backendPromoContent, /case\s+"vip":\s*return\s*14900/, 'backend GetTierPrice must return 14900 for vip');
-    assert.match(backendPromoContent, /case\s+"accelerator"/, 'backend GetTierPrice must return 6900 for accelerator');
+    assert.match(backendPromoContent, /case\s+"accelerator"[\s\S]*?return\s*10900/, 'backend GetTierPrice must return 10900 for accelerator');
   });
 
-  it('1.2 Promo Code Engine: 5% discount calculation (3990 -> 3790, 6900 -> 6555, 14900 -> 14155 for 3 active tiers)', () => {
-    // Mathematical specification validation for 3 active tiers
+  it('1.2 Promo Code Engine: 5% discount calculation (3990 -> 3790, 10900 -> 10355, 14900 -> 14155 for 3 active tiers)', () => {
     const basicDiscount = calculatePromoDiscount(3990, 5);
     assert.equal(basicDiscount.discountAmount, 200, '3990 * 5% must equal 200 (rounded)');
     assert.equal(basicDiscount.finalPrice, 3790, '3990 - 200 must equal 3790');
 
-    const accDiscount = calculatePromoDiscount(6900, 5);
-    assert.equal(accDiscount.discountAmount, 345, '6900 * 5% must equal 345');
-    assert.equal(accDiscount.finalPrice, 6555, '6900 - 345 must equal 6555');
+    const accDiscount = calculatePromoDiscount(10900, 5);
+    assert.equal(accDiscount.discountAmount, 545, '10900 * 5% must equal 545');
+    assert.equal(accDiscount.finalPrice, 10355, '10900 - 545 must equal 10355');
+
+    const lowerDiscount = calculatePromoDiscount(9990, 5);
+    assert.equal(lowerDiscount.discountAmount, 500, '9990 * 5% must equal 500');
+    assert.equal(lowerDiscount.finalPrice, 9490, '9990 - 500 must equal 9490');
 
     const vipDiscount = calculatePromoDiscount(14900, 5);
     assert.equal(vipDiscount.discountAmount, 745, '14900 * 5% must equal 745');
     assert.equal(vipDiscount.finalPrice, 14155, '14900 - 745 must equal 14155');
 
-    // Verify presence of prices in PricingSection.tsx (3 tiers: 3 990, 6 900 and 14 900)
     const pricingSectionPath = path.join(ROOT, 'frontend', 'src', 'components', 'PricingSection.tsx');
     const pricingContent = fs.readFileSync(pricingSectionPath, 'utf8');
-    assert.match(pricingContent, /3\s*990\s*₽/, 'PricingSection must display 3 990 ₽ price');
-    assert.match(pricingContent, /6\s*900\s*₽/, 'PricingSection must display 6 900 ₽ price');
-    assert.match(pricingContent, /14\s*900\s*₽/, 'PricingSection must display 14 900 ₽ price');
+    assert.match(pricingContent, /DEFAULT_PRICING/, 'PricingSection must read canonical prices');
+    assert.match(pricingContent, /line-through/, 'PricingSection must keep strikethrough old prices');
 
-    // Verify discount calculation formula in PaymentModal.tsx
     const paymentModalPath = path.join(ROOT, 'frontend', 'src', 'components', 'Modals', 'PaymentModal.tsx');
     const modalContent = fs.readFileSync(paymentModalPath, 'utf8');
     assert.match(modalContent, /0\.95/, 'PaymentModal must calculate 5% discount using 0.95 multiplier');
     assert.match(modalContent, /discountPrice:\s*3790/, 'PaymentModal must have discountPrice 3790 for basic');
-    assert.match(modalContent, /discountPrice:\s*6555/, 'PaymentModal must have discountPrice 6555 for accelerator');
+    assert.match(modalContent, /discountPrice:\s*10355/, 'PaymentModal must have discountPrice 10355 for accelerator');
     assert.match(modalContent, /discountPrice:\s*14155/, 'PaymentModal must have discountPrice 14155 for vip');
   });
 
@@ -375,14 +373,14 @@ describe('Tier 3: Cross-Feature & Deep-Links', () => {
     assert.ok(fs.existsSync(paymentModalPath), 'PaymentModal.tsx must exist');
     const modalContent = fs.readFileSync(paymentModalPath, 'utf8');
 
-    // Check deep-link prefix in PaymentModal
-    assert.match(
-      modalContent,
-      /https:\/\/t\.me\/spark_prep_bot\?start=\$\{startParam\}|https:\/\/t\.me\/spark_prep_bot\?start=pay_/,
-      'PaymentModal must generate deep link pointing to https://t.me/spark_prep_bot?start=pay_...'
-    );
+    assert.match(modalContent, /buildCheckoutStartParam/, 'PaymentModal must use compact checkout start params');
+    assert.match(modalContent, /BOT_URL\}\?start=\$\{startParam\}/, 'PaymentModal must open the bot with a start payload');
 
-    // Test deep-link generator helper covering all tiers
+    const analyticsPath = path.join(ROOT, 'frontend', 'src', 'lib', 'analytics.ts');
+    const analyticsContent = fs.readFileSync(analyticsPath, 'utf8');
+    assert.match(analyticsContent, /compactStartParam/, 'analytics.ts must compact Telegram start payloads');
+    assert.match(analyticsContent, /slice\(0,\s*64\)/, 'compact start payloads must stay within 64 characters');
+
     const linkBasic = generatePaymentDeepLink('basic');
     assert.equal(linkBasic, 'https://t.me/spark_prep_bot?start=pay_basic');
 
@@ -392,14 +390,13 @@ describe('Tier 3: Cross-Feature & Deep-Links', () => {
     const linkVip = generatePaymentDeepLink('vip');
     assert.equal(linkVip, 'https://t.me/spark_prep_bot?start=pay_vip');
 
-    // Test with username and promo code
-    const linkWithPromo = generatePaymentDeepLink('vip', '@student_alex', 'SPARK5');
-    assert.equal(linkWithPromo, 'https://t.me/spark_prep_bot?start=pay_vip_student_alex_p_SPARK5');
+    const linkWithPromo = generatePaymentDeepLink('vip', '', 'SPARK5');
+    assert.equal(linkWithPromo, 'https://t.me/spark_prep_bot?start=pay_vip_ref_SPARK5');
 
-    // Ensure parameters adhere to Telegram rules: max 64 chars, [a-zA-Z0-9_-]
-    const param = linkWithPromo.split('?start=')[1];
-    assert.ok(param.length <= 64, `Start parameter length ${param.length} must be <= 64 characters`);
-    assert.match(param, /^[a-zA-Z0-9_-]+$/, 'Start parameter must contain only alphanumeric characters, underscores, and dashes');
+    const compact = compactStartParam('pay_accelerator', 'apy1xadvhvmo1', 'partneril');
+    assert.equal(compact, 'pay_accelerator_a_apy1xadvhvmo1_ref_partneril');
+    assert.ok(compact.length <= 64, `Start parameter length ${compact.length} must be <= 64 characters`);
+    assert.match(compact, /^[a-zA-Z0-9_-]+$/, 'Start parameter must contain only alphanumeric characters, underscores, and dashes');
   });
 
 });
@@ -507,18 +504,25 @@ describe('Tier 4: Repository Hygiene & Acceptance Scan', () => {
     assert.match(keyboardsContent, /https:\/\/web\.tribute\.tg\/p\/GID/, 'Tribute VIP link GID must be in bot keyboards');
   });
 
-  it('4.7 Official YooKassa Integration: ShopID 1491540, API client, and checkout handlers are configured', () => {
-    const configPath = path.join(ROOT, 'backend', 'internal', 'config', 'config.go');
-    const configContent = fs.readFileSync(configPath, 'utf8');
-    assert.match(configContent, /1491540/, 'YooKassa ShopID 1491540 must be default in config.go');
-
-    const ykHandlerPath = path.join(ROOT, 'backend', 'internal', 'handlers', 'yookassa.go');
-    assert.ok(fs.existsSync(ykHandlerPath), 'backend/internal/handlers/yookassa.go must exist');
-
+  it('4.7 Checkout is SBP-only: landing and bot must not create a YooKassa session', () => {
     const paymentModalPath = path.join(ROOT, 'frontend', 'src', 'components', 'Modals', 'PaymentModal.tsx');
     const paymentModalContent = fs.readFileSync(paymentModalPath, 'utf8');
-    assert.match(paymentModalContent, /1491540/, 'PaymentModal must display YooKassa ShopID 1491540');
-    assert.match(paymentModalContent, /createYooKassaPayment/, 'PaymentModal must trigger createYooKassaPayment');
+    assert.match(paymentModalContent, /Оплата через СБП|Оплатить по СБП/, 'PaymentModal must offer SBP checkout');
+    assert.doesNotMatch(paymentModalContent, /createYooKassaPayment/, 'PaymentModal must not create a YooKassa checkout');
+
+    const keyboardsPath = path.join(ROOT, 'backend', 'internal', 'bot', 'keyboards.go');
+    const keyboardsContent = fs.readFileSync(keyboardsPath, 'utf8');
+    assert.match(keyboardsContent, /pay_sbp_accelerator/, 'Bot checkout must route to SBP');
+
+    const flowPath = path.join(ROOT, 'backend', 'internal', 'bot', 'payment_flow.go');
+    const flowContent = fs.readFileSync(flowPath, 'utf8');
+    assert.match(flowContent, /func \(s \*BotService\) handleYooKassaPayment/, 'legacy YooKassa callback must still exist');
+    assert.match(flowContent, /handleSbpPayment\(chatID, from, tier\)/, 'legacy YooKassa callback must alias to SBP');
+
+    const analyticsPath = path.join(ROOT, 'frontend', 'src', 'lib', 'analytics.ts');
+    const analyticsContent = fs.readFileSync(analyticsPath, 'utf8');
+    assert.match(analyticsContent, /export function compactStartParam/, 'start payload must be compacted under Telegram 64-char cap');
+    assert.match(analyticsContent, /slice\(0,\s*64\)/, 'compactStartParam must truncate to 64 characters');
   });
 });
 

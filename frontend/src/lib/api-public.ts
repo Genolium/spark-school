@@ -3,23 +3,20 @@
 import { API_BASE } from "./api-base";
 import { getVisitorId } from "./analytics";
 import { applyPriceExperiment } from "./experiments";
+import { DEFAULT_PRICING } from "./pricing-defaults";
 import type { PlacesStats, CoursePricing, ValidatePromoResponse, UserProfile, AdminStats, PayoutRequest, PromoCode, AffiliateStats, ExperimentMetric, DeadOutboxEvent, FunnelData } from "./api-types";
 
 export const publicApi = {
-  async getPlacesStats(): Promise<PlacesStats> {
+  async getPlacesStats(): Promise<PlacesStats | null> {
     try {
       const res = await fetch(`${API_BASE}/stats/places`);
       if (res.ok) {
         return await res.json();
       }
     } catch {
-      // Offline fallback
+      // Show a neutral status rather than invented occupancy.
     }
-    return {
-      total_capacity: 25,
-      active_students: 16,
-      spots_left: 9,
-    };
+    return null;
   },
 
   async getCoursePricing(): Promise<CoursePricing> {
@@ -47,15 +44,7 @@ export const publicApi = {
       }
     }
 
-    return applyPriceExperiment({
-      basic_price: 3990,
-      basic_old_price: 5900,
-      accelerator_price: 6900,
-      accelerator_old_price: 9900,
-      vip_price: 14900,
-      vip_old_price: 19900,
-      bank_name: "БСПБ (Банк «Санкт-Петербург»)",
-    });
+    return applyPriceExperiment({ ...DEFAULT_PRICING });
   },
 
   async validatePromoCode(code: string, tier?: string, price?: number): Promise<ValidatePromoResponse> {
@@ -68,14 +57,14 @@ export const publicApi = {
       return await res.json();
     } catch {
       // Mock fallback: if code ends with 5 or is START5/IL5/SPARK5, grant 5% discount
-      let basePrice = 6900;
+      let basePrice = DEFAULT_PRICING.accelerator_price;
       if (price && price > 0) {
         basePrice = price;
       } else if (tier) {
         const t = tier.toLowerCase();
-        if (t === "vip") basePrice = 14900;
-        else if (t === "basic" || t === "базовый") basePrice = 3990;
-        else basePrice = 6900;
+        if (t === "vip") basePrice = DEFAULT_PRICING.vip_price;
+        else if (t === "basic" || t === "базовый") basePrice = DEFAULT_PRICING.basic_price || 3990;
+        else basePrice = DEFAULT_PRICING.accelerator_price;
       }
 
       const clean = code.trim().toUpperCase();

@@ -2,11 +2,10 @@
 
 import React, { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, ShieldCheck, ArrowUpRight, QrCode, CreditCard, Send, Check, Tag, Sparkles } from "lucide-react";
+import { X, ShieldCheck, ArrowUpRight, QrCode, Send, Check, Tag } from "lucide-react";
 import { BotLink } from "@/components/BotLink";
 import { api, PromoValidationResult, PlacesStats } from "@/lib/api";
-import { getAttributionToken, getVisitorId, trackFunnelStep } from "@/lib/analytics";
-import { getExperiment } from "@/lib/experiments";
+import { trackFunnelStep, buildCheckoutStartParam, BOT_URL } from "@/lib/analytics";
 
 export type PricingTier = "basic" | "accelerator" | "vip";
 
@@ -26,9 +25,9 @@ const TIERS: Record<PricingTier, { name: string; price: number; discountPrice: n
   },
   accelerator: {
     name: "Акселератор",
-    price: 6900,
-    discountPrice: 6555,
-    discountAmount: 345,
+    price: 10900,
+    discountPrice: 10355,
+    discountAmount: 545,
     tag: "Хит продаж",
   },
   vip: {
@@ -42,13 +41,12 @@ const TIERS: Record<PricingTier, { name: string; price: number; discountPrice: n
 
 export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: PaymentModalProps) {
   const [tier, setTier] = useState<PricingTier>(initialTier);
-  const [method, setMethod] = useState<"sbp" | "card" | "foreign">("sbp");
   const [tgUsername, setTgUsername] = useState("");
   const [email, setEmail] = useState("");
   const [promoCode, setPromoCode] = useState("");
   const [promoResult, setPromoResult] = useState<PromoValidationResult | null>(null);
   const [validatingPromo, setValidatingPromo] = useState(false);
-  const [places, setPlaces] = useState<PlacesStats>({ total_capacity: 25, active_students: 16, spots_left: 9 });
+  const [places, setPlaces] = useState<PlacesStats | null>(null);
   const [tiersConfig, setTiersConfig] = useState(TIERS);
   const [bankName, setBankName] = useState("БСПБ (Банк «Санкт-Петербург»)");
   const [submitted, setSubmitted] = useState(false);
@@ -70,7 +68,7 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
           setBankName(p.bank_name);
         }
         const basicPrice = p.basic_price || 3990;
-        const accPrice = p.accelerator_price || 6900;
+        const accPrice = p.accelerator_price || 10900;
         const vipPrice = p.vip_price || 14900;
         setTiersConfig({
           basic: {
@@ -136,20 +134,6 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
     return "";
   };
 
-  const handlePayWithYooKassa = async () => {
-    try {
-      await api.createYooKassaPayment({
-        tier,
-        telegram_username: tgUsername.trim(),
-        promo_code: promoResult?.valid ? promoResult.code : undefined,
-        visitor_id: getVisitorId(),
-        attribution_token: getAttributionToken(),
-      });
-    } catch {
-      // Safe fallback
-    }
-  };
-
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     trackFunnelStep("order_created", {
@@ -163,7 +147,6 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
       price: finalPrice,
       startParam,
     });
-    handlePayWithYooKassa();
     setSubmitted(true);
     window.open(botPayUrl, "_blank");
   };
@@ -178,29 +161,11 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
   const cleanUsername = tgUsername.replace("@", "").trim().replace(/[^a-zA-Z0-9_-]/g, "");
   const appliedPromo = promoResult?.valid ? promoResult.code.replace(/[^a-zA-Z0-9_-]/g, "") : "";
   const refCode = getReferralCode().replace(/[^a-zA-Z0-9_-]/g, "");
-  const uPart = cleanUsername.slice(0, 16);
   const pPart = appliedPromo.slice(0, 16);
   const rPart = refCode.slice(0, 12);
 
-  const startParts = [`pay_${tier}`];
-  if (getExperiment("pricing_price") === "lower") {
-    startParts.push("pe_lower");
-  }
-  if (tier === "vip") {
-    const vipVariant = getExperiment("vip_price");
-    if (vipVariant === "mid" || vipVariant === "low") {
-      startParts.push(`pe_vip_${vipVariant}`);
-    }
-  }
-  if (pPart) {
-    startParts.push(pPart);
-  } else if (rPart && uPart) {
-    startParts.push(uPart, "ref", rPart);
-  } else if (uPart) {
-    startParts.push(uPart);
-  }
-  const startParam = startParts.join("_");
-  const botPayUrl = `https://t.me/spark_prep_bot?start=${startParam}`;
+  const startParam = buildCheckoutStartParam(tier, rPart || pPart);
+  const botPayUrl = `${BOT_URL}?start=${startParam}`;
 
   if (!isOpen) return null;
 
@@ -239,13 +204,13 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
               {/* Header */}
               <div className="mb-4 pr-8">
                 <span className="bento-pill px-3 py-1 rounded-full text-xs font-mono font-medium text-emerald-800 dark:text-emerald-300 mb-2 inline-block">
-                  Лимит потока • Осталось {places.spots_left} мест
+                  {places ? `Лимит потока • Осталось ${places.spots_left} мест` : "Набор открыт"}
                 </span>
                 <h3 className="text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white tracking-tight">
                   Оформление участия
                 </h3>
                 <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 mt-1 font-doc">
-                  Проект «так называемый SPARK» • ЮKassa ShopID: 1491540
+                  Проект «так называемый SPARK» • Оплата по СБП
                 </p>
               </div>
 
@@ -432,7 +397,7 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
 
                 <div className="flex items-center justify-center gap-2 text-[11px] font-mono text-slate-500 dark:text-slate-400 pt-1">
                   <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                  <span>ЮKassa ShopID 1491540 • Фискальный чек ФНС РФ (Васюнин Илья Олегович)</span>
+                  <span>Оплата по СБП • Фискальный чек ФНС РФ (Васюнин Илья Олегович)</span>
                 </div>
               </form>
             </div>

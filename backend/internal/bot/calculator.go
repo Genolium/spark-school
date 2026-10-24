@@ -27,7 +27,7 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) error
 		session.State = StateCalcQ1
 		pin := TgEmoji(EmojiPinRed, "📍")
 
-		text := fmt.Sprintf(`%s <b>Расчёт шансов на грант $20,000 (SPARK 2027)</b>
+		text := fmt.Sprintf(`%s <b>Диагностика готовности к SPARK 2027</b>
 
 <b>Шаг 1 из 3: Возраст и гражданство</b>
 
@@ -114,16 +114,16 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) error
 	case "calc_q3_b1", "calc_q3_b2", "calc_q3_c1":
 		session.State = StateDefault
 		score := 88
-		scoreZone := "Отличные шансы (High Potential)"
+		scoreZone := "Достаточный уровень для интервью"
 		langLabel := "B2 (Upper-Intermediate)"
 
 		if data == "calc_q3_c1" {
 			score = 96
-			scoreZone = "Максимальные шансы (Elite Zone)"
+			scoreZone = "Высокая готовность по языку"
 			langLabel = "C1 (Advanced)"
 		} else if data == "calc_q3_b1" {
 			score = 75
-			scoreZone = "Хороший потенциал (Needs Practice)"
+			scoreZone = "Стартовый уровень, есть запас по языку"
 			langLabel = "B1 (Intermediate)"
 		}
 
@@ -140,20 +140,20 @@ func (s *BotService) HandleCalculatorCallback(query *telego.CallbackQuery) error
 		accPriceStr := formatPriceRub(int(pricing.AcceleratorPrice))
 		accPromoStr := formatPriceRub(int(pricing.AcceleratorPrice * 0.95))
 
-		reply := fmt.Sprintf(`%s <b>Твой расчет шансов на грант $20,000:</b>
+		reply := fmt.Sprintf(`%s <b>Диагностика готовности к SPARK:</b>
 
-Оценка профиля: <b>%d/100</b> %s
+Оценка готовности: <b>%d/100</b> %s
 Уровень английского: <b>%s</b>
 Статус: <b>%s</b>
 
-%s <b>Ты полностью проходишь базовые фильтры проекта «так называемый SPARK»!</b>
+%s <b>Это оценка готовности к подготовке, а не вероятность гранта.</b> Решение принимает комиссия программы.
 
-%s <b>В чём главный нюанс?</b>
-Формальные критерии — это лишь 10%% отбора. Главная битва начинается в <b>резюме американского стандарта</b>, <b>эссе на 500 слов</b> и <b>20-минутном Zoom-интервью</b> с американской комиссией.
+%s <b>Дальше решают документы:</b>
+<b>резюме американского стандарта</b>, <b>эссе на 500 слов</b> и <b>20-минутное Zoom-интервью</b>.
 
-В проекте «так называемый SPARK» мы упакуем твою заявку до идеала под ключ от %s ₽ (от %s ₽ по промокоду).
+В проекте «так называемый SPARK» разбираем заявку под ключ от %s ₽ (от %s ₽ по промокоду).
 
-%s <i>Места на поток строго ограничены.</i>`, star, score, spark, langLabel, scoreZone, sun, chatBubbles, accPriceStr, accPromoStr, fire)
+%s <i>Оплата только по СБП.</i>`, star, score, spark, langLabel, scoreZone, sun, chatBubbles, accPriceStr, accPromoStr, fire)
 
 		calcKb := CalcResultKeyboard(pricing)
 

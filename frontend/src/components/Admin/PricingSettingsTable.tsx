@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { api, CoursePricing } from "@/lib/api";
+import { DEFAULT_PRICING } from "@/lib/pricing-defaults";
 import {
   DollarSign,
   Save,
@@ -18,15 +19,7 @@ import {
 } from "lucide-react";
 
 export function PricingSettingsTable() {
-  const [pricing, setPricing] = useState<CoursePricing>({
-    basic_price: 3990,
-    basic_old_price: 5900,
-    accelerator_price: 6900,
-    accelerator_old_price: 9900,
-    vip_price: 14900,
-    vip_old_price: 19900,
-    bank_name: "БСПБ (Банк «Санкт-Петербург»)",
-  });
+  const [pricing, setPricing] = useState<CoursePricing>({ ...DEFAULT_PRICING });
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -85,18 +78,9 @@ export function PricingSettingsTable() {
       return;
     }
 
-    let bOld = pricing.basic_old_price || 5900;
-    if (bOld <= bPrice) {
-      bOld = Math.round((bPrice * 1.4) / 100) * 100;
-    }
-    let accOld = pricing.accelerator_old_price;
-    if (accOld <= pricing.accelerator_price) {
-      accOld = Math.round((pricing.accelerator_price * 1.4) / 100) * 100;
-    }
-    let vipOld = pricing.vip_old_price;
-    if (vipOld <= pricing.vip_price) {
-      vipOld = Math.round((pricing.vip_price * 1.4) / 100) * 100;
-    }
+    const bOld = pricing.basic_old_price || 0;
+    const accOld = pricing.accelerator_old_price || 0;
+    const vipOld = pricing.vip_old_price || 0;
 
     const payload = {
       ...pricing,
@@ -126,16 +110,8 @@ export function PricingSettingsTable() {
   };
 
   const handleResetDefaults = () => {
-    setPricing({
-      basic_price: 3990,
-      basic_old_price: 5900,
-      accelerator_price: 6900,
-      accelerator_old_price: 9900,
-      vip_price: 14900,
-      vip_old_price: 19900,
-      bank_name: "БСПБ (Банк «Санкт-Петербург»)",
-    });
-    setMsg({ text: "Установлены стандартные значения (3 990 / 6 900 / 14 900 ₽). Нажмите «Сохранить», чтобы применить.", type: "success" });
+    setPricing({ ...DEFAULT_PRICING });
+    setMsg({ text: "Установлены стандартные значения (3 990 / 10 900 / 14 900 ₽). Нажмите «Сохранить», чтобы применить.", type: "success" });
   };
 
   const formatRub = (num: number) => {
@@ -146,30 +122,10 @@ export function PricingSettingsTable() {
     // Strip non-digits and leading zeros (e.g. "07800" -> "7800")
     const clean = rawValue.replace(/\D/g, "").replace(/^0+(?=\d)/, "");
     const num = clean === "" ? 0 : parseInt(clean, 10);
-    setPricing((prev) => {
-      const updated = {
-        ...prev,
-        [field]: isNaN(num) ? 0 : num,
-      };
-      // If current price changed and old strikethrough price is <= new current price,
-      // auto-adjust old strikethrough price (+40% rounded to hundreds)
-      if (field === "basic_price" && num > 0) {
-        if ((updated.basic_old_price || 0) <= num) {
-          updated.basic_old_price = Math.round((num * 1.4) / 100) * 100;
-        }
-      }
-      if (field === "accelerator_price" && num > 0) {
-        if (updated.accelerator_old_price <= num) {
-          updated.accelerator_old_price = Math.round((num * 1.4) / 100) * 100;
-        }
-      }
-      if (field === "vip_price" && num > 0) {
-        if (updated.vip_old_price <= num) {
-          updated.vip_old_price = Math.round((num * 1.4) / 100) * 100;
-        }
-      }
-      return updated;
-    });
+    setPricing((prev) => ({
+      ...prev,
+      [field]: isNaN(num) ? 0 : num,
+    }));
   };
 
   // Calculations for promo discount preview
@@ -364,7 +320,7 @@ export function PricingSettingsTable() {
                       type="text"
                       inputMode="numeric"
                       value={pricing.accelerator_price === 0 ? "" : pricing.accelerator_price}
-                      placeholder="6900"
+                      placeholder="10900"
                       onChange={(e) => handlePriceChange("accelerator_price", e.target.value)}
                       className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-black/30 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white font-mono text-base font-bold focus:outline-none focus:border-emerald-500 transition-colors"
                     />
@@ -622,7 +578,7 @@ export function PricingSettingsTable() {
             className="px-5 py-3 rounded-2xl bg-slate-200/80 dark:bg-white/10 hover:bg-slate-300 dark:hover:bg-white/20 text-xs font-mono font-semibold text-slate-700 dark:text-slate-300 flex items-center gap-2 transition-all active:scale-95"
           >
             <RotateCcw className="w-4 h-4" />
-            <span>Сбросить к рекомендованным (3 990 / 6 900 / 14 900 ₽)</span>
+            <span>Сбросить к рекомендованным (3 990 / 10 900 / 14 900 ₽)</span>
           </button>
 
           <button

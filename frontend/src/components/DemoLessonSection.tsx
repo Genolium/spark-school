@@ -1,7 +1,8 @@
 "use client";
 
-import React from "react";
+import React, { useEffect } from "react";
 import { BookOpen, PlayCircle } from "lucide-react";
+import { trackFunnelStep } from "@/lib/analytics";
 
 const LESSON_VIDEOS = [
   {
@@ -43,6 +44,10 @@ function KinescopeVideo({ videoId: rawVideoId, title }: { videoId: string; title
 
 export function DemoLessonSection() {
   const videos = LESSON_VIDEOS.filter((lesson) => kinescopeId(lesson.id));
+  useEffect(() => {
+    if (videos.length === 0) return;
+    trackFunnelStep("demo_lesson_view", { lessons: videos.length });
+  }, [videos.length]);
   if (videos.length === 0) return null;
 
   return (

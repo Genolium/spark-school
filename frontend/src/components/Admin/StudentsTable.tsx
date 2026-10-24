@@ -54,7 +54,7 @@ const emptyForm: FormState = {
   role: "student",
   has_access: false,
   tier: "accelerator",
-  paid_amount: "6900",
+  paid_amount: "10900",
   promo_code: "",
   receipt_issued: false,
   receipt_url: "",
@@ -106,9 +106,9 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
   const [activateTarget, setActivateTarget] = useState<UserProfile | null>(null);
   const [activateTier, setActivateTier] = useState<"basic" | "accelerator" | "vip">("accelerator");
   const [activatePromo, setActivatePromo] = useState("");
-  const [activateAmount, setActivateAmount] = useState("6900");
+  const [activateAmount, setActivateAmount] = useState("10900");
 
-  const [coursePricing, setCoursePricing] = useState({ basic_price: 3990, accelerator_price: 6900, vip_price: 14900 });
+  const [coursePricing, setCoursePricing] = useState({ basic_price: 3990, accelerator_price: 10900, vip_price: 14900 });
 
   // Issue Receipt modal state
   const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
@@ -130,10 +130,10 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
       if (p) {
         setCoursePricing({
           basic_price: p.basic_price || 3990,
-          accelerator_price: p.accelerator_price || 6900,
+          accelerator_price: p.accelerator_price || 10900,
           vip_price: p.vip_price || 14900,
         });
-        setActivateAmount(String(p.accelerator_price || 6900));
+        setActivateAmount(String(p.accelerator_price || 10900));
       }
     }).catch(() => {});
   }, []);
@@ -1427,7 +1427,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
                       type="number"
                       value={receiptAmount}
                       onChange={(e) => setReceiptAmount(e.target.value)}
-                      placeholder="6900"
+                      placeholder="10900"
                       className={`${inputCls} mt-1 font-bold text-amber-600 dark:text-amber-400`}
                     />
                   </label>

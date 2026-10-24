@@ -3,6 +3,7 @@
 import { getAttributionToken, getVisitorId } from "./analytics";
 import { API_BASE } from "./api-base";
 import type { CoursePricing } from "./api-types";
+import { ACCELERATOR_LIST_PRICE, ACCELERATOR_LOWER_PRICE } from "./pricing-defaults";
 
 export type ExperimentName = "hero_cta_copy" | "hero_headline" | "pricing_cta_copy" | "pricing_price" | "vip_price";
 
@@ -76,7 +77,8 @@ export async function syncServerExperiments(): Promise<Record<string, string>> {
   }
 }
 
-export const LOWER_ACCELERATOR_PRICE = 9990;
+/** Sale price vs list 10 900 ₽. */
+export const LOWER_ACCELERATOR_PRICE = ACCELERATOR_LOWER_PRICE;
 export const MID_VIP_PRICE = 17990;
 export const LOW_VIP_PRICE = 14990;
 
@@ -84,7 +86,8 @@ export const LOW_VIP_PRICE = 14990;
 export function applyPriceExperiment(pricing: CoursePricing): CoursePricing {
   let next = pricing;
   if (getExperiment("pricing_price") === "lower") {
-    next = { ...next, accelerator_price: LOWER_ACCELERATOR_PRICE };
+    const list = Math.max(next.accelerator_price || 0, next.accelerator_old_price || 0, ACCELERATOR_LIST_PRICE);
+    next = { ...next, accelerator_old_price: list, accelerator_price: LOWER_ACCELERATOR_PRICE };
   }
   const vipVariant = getExperiment("vip_price");
   if (vipVariant === "mid") {

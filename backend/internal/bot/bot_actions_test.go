@@ -195,10 +195,10 @@ func TestBot_UpgradeDifferencesAndReceiptCard(t *testing.T) {
 	}, nil)
 	defer service.Stop()
 
-	// 1. Difference math check: Accelerator (6 900) -> VIP (14 900) = 8 000
-	diffAccToVIP := 14900.0 - 6900.0
-	if diffAccToVIP != 8000.0 {
-		t.Errorf("expected 8000 difference, got %v", diffAccToVIP)
+	// 1. Difference math check: Accelerator (10 900) -> VIP (14 900) = 4 000
+	diffAccToVIP := 14900.0 - 10900.0
+	if diffAccToVIP != 4000.0 {
+		t.Errorf("expected 4000 difference, got %v", diffAccToVIP)
 	}
 
 	// 2. SendAdminReceiptCard with Upgrade amount

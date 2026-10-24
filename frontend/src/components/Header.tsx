@@ -11,6 +11,15 @@ interface HeaderProps {
 }
 
 export function Header({ onOpenPayment }: HeaderProps) {
+  const goToCheckout = () => {
+    if (onOpenPayment) {
+      onOpenPayment();
+      return;
+    }
+    if (typeof window !== "undefined") {
+      window.location.href = "/#pricing";
+    }
+  };
   const { theme, toggleTheme } = useTheme();
   const [scrolled, setScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -19,8 +28,15 @@ export function Header({ onOpenPayment }: HeaderProps) {
     const handleScroll = () => {
       setScrolled(window.scrollY > 30);
     };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileMenuOpen(false);
+    };
     window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("keydown", handleKeyDown);
+    };
   }, []);
 
   const navLinks = [
@@ -125,7 +141,7 @@ export function Header({ onOpenPayment }: HeaderProps) {
 
           <button
             type="button"
-            onClick={onOpenPayment}
+            onClick={goToCheckout}
             className="btn-primary-mono px-3.5 sm:px-5 py-2 text-xs sm:text-[13px] flex items-center gap-1.5 active:scale-95 shadow-lg shrink-0 cursor-pointer"
           >
             <span>Занять место</span>

@@ -1,25 +1,31 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { Header } from "@/components/Header";
 import { Hero } from "@/components/Hero";
 import { SocialProofStrip } from "@/components/SocialProofStrip";
 import { HardTruth } from "@/components/HardTruth";
 import { KibiRoadmap } from "@/components/KibiRoadmap";
-import { PlacementMap } from "@/components/PlacementMap";
 import { PlatformFeatures } from "@/components/PlatformFeatures";
 import { AuthorSection } from "@/components/AuthorSection";
 import { PricingSection } from "@/components/PricingSection";
 import { QualificationSection } from "@/components/QualificationSection";
 import { FaqSection } from "@/components/FaqSection";
 import { Footer } from "@/components/Footer";
-import { ChancesModal } from "@/components/Modals/ChancesModal";
-import { ReferralTracker } from "@/components/ReferralTracker";
 import { RecoveryBanner } from "@/components/RecoveryBanner";
 import { DemoLessonSection } from "@/components/DemoLessonSection";
 import { StudentReviews } from "@/components/StudentReviews";
-import { trackFunnelStep, getAttributionToken } from "@/lib/analytics";
-import { getExperiment, syncServerExperiments } from "@/lib/experiments";
+import { trackFunnelStep, buildCheckoutStartParam, BOT_URL } from "@/lib/analytics";
+import { syncServerExperiments } from "@/lib/experiments";
+
+const PlacementMap = dynamic(
+  () => import("@/components/PlacementMap").then((mod) => mod.PlacementMap),
+  { ssr: false }
+);
+const ChancesModal = dynamic(
+  () => import("@/components/Modals/ChancesModal").then((mod) => mod.ChancesModal)
+);
 
 export default function HomePage() {
   const [isChancesOpen, setIsChancesOpen] = useState(false);
@@ -40,29 +46,8 @@ export default function HomePage() {
         // Safe fallback
       }
     }
-    const cleanRef = refCode.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 16);
-    const attributionToken = getAttributionToken();
-    let startParam = `pay_${tier}`;
-    if (getExperiment("pricing_price") === "lower") {
-      startParam += "_pe_lower";
-    }
-    if (tier === "vip") {
-      const vipVariant = getExperiment("vip_price");
-      if (vipVariant === "mid" || vipVariant === "low") {
-        startParam += `_pe_vip_${vipVariant}`;
-      }
-    }
-    if (attributionToken) {
-      startParam += `_a_${attributionToken}`;
-    }
-    if (cleanRef) {
-      startParam += `_ref_${cleanRef}`;
-    }
-    // Telegram start parameters are limited to 64 characters.
-    const botUrl = `https://t.me/spark_prep_bot?start=${startParam.slice(0, 64)}`;
-    if (typeof window !== "undefined") {
-      window.location.href = botUrl;
-    }
+    const startParam = buildCheckoutStartParam(tier, refCode);
+    window.location.href = `${BOT_URL}?start=${startParam}`;
   };
 
   useEffect(() => {
@@ -90,9 +75,6 @@ export default function HomePage() {
 
   return (
     <main className="min-h-screen bg-[var(--bg-base)] text-[var(--text-main)] relative selection:bg-emerald-500/20 selection:text-emerald-900 dark:selection:bg-white/20 dark:selection:text-white transition-colors duration-300">
-      {/* Referral Tracker query string listener (?ref=...) */}
-      <ReferralTracker />
-
       {/* Detached Floating Navigation Pill */}
       <Header
         onOpenPayment={() => handleOpenPayment("accelerator")}
@@ -107,7 +89,7 @@ export default function HomePage() {
       {/* Social Proof Strip: 5 Capsules (Инфо о программе $20,000) */}
       <SocialProofStrip onOpenChances={() => setIsChancesOpen(true)} />
 
-      {/* Screen 2: Hard Truth (Why 90% Fail) */}
+      {/* Screen 2: Hard Truth (typical first-round mistakes) */}
       <HardTruth />
 
       {/* Screen 3: The Journey (Kibi-Style Curved Flight Path) */}

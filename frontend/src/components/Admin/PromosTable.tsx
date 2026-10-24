@@ -38,7 +38,7 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
   const [newReward, setNewReward] = useState(1000);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [coursePricing, setCoursePricing] = useState({ accelerator_price: 6900 });
+  const [coursePricing, setCoursePricing] = useState({ accelerator_price: 10900 });
 
   React.useEffect(() => {
     api.getCoursePricing().then((p) => {

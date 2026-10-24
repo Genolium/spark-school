@@ -84,12 +84,33 @@ export function withBotAttribution(url: string): string {
     if (!/(^|\.)t\.me$/i.test(parsed.hostname)) return url;
     if (!parsed.pathname.startsWith("/spark_prep_bot")) return url;
     const start = parsed.searchParams.get("start") || "";
-    const next = `${start ? `${start}_` : ""}a_${token}`.slice(0, 64);
+    if (start.includes("_a_") || start.startsWith("a_")) {
+      return url;
+    }
+    const next = compactStartParam(start, token);
     parsed.searchParams.set("start", next);
     return parsed.toString();
   } catch {
     return url;
   }
+}
+
+/** Telegram start payloads are capped at 64 characters. Keep action + attribution, drop flags. */
+export function compactStartParam(action: string, attributionToken: string, ref = ""): string {
+  const cleanAction = action.replace(/[^a-zA-Z0-9_]/g, "").slice(0, 24);
+  const token = attributionToken.replace(/[^a-zA-Z0-9]/g, "").slice(0, 16);
+  const cleanRef = ref.replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 12);
+  let param = cleanAction || "start";
+  if (token) param += `_a_${token}`;
+  if (cleanRef) {
+    const withRef = `${param}_ref_${cleanRef}`;
+    if (withRef.length <= 64) param = withRef;
+  }
+  return param.slice(0, 64);
+}
+
+export function buildCheckoutStartParam(tier: "basic" | "accelerator" | "vip", ref = ""): string {
+  return compactStartParam(`pay_${tier}`, getAttributionToken(), ref);
 }
 
 /** Build a bot link with an optional start payload and the attribution token. */

@@ -99,7 +99,7 @@ func (s *AffiliateService) ProcessCoursePurchaseForPaymentTxKopecks(tx *gorm.DB,
 		return nil
 	}
 
-	// Level 1: 15% Commission (1 035 ₽ on 6 900 ₽ base)
+	// Level 1: 15% commission on the paid course amount
 	if ref.ReferredByID != nil {
 		l1AmountK := coursePrice.Percent(15)
 		l1Amount := l1AmountK.ToRubles()
@@ -126,7 +126,7 @@ func (s *AffiliateService) ProcessCoursePurchaseForPaymentTxKopecks(tx *gorm.DB,
 		}
 	}
 
-	// Level 2: 5% Commission (345 ₽ on 6 900 ₽ base)
+	// Level 2: 5% commission on the paid course amount
 	if ref.ParentReferrerID != nil {
 		l2AmountK := coursePrice.Percent(5)
 		l2Amount := l2AmountK.ToRubles()

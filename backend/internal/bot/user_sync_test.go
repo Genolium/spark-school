@@ -14,6 +14,7 @@ func TestSplitAttributionToken(t *testing.T) {
 		wantToken string
 	}{
 		{"pay_accelerator_a_apy1xadvhvmo1", "pay_accelerator", "apy1xadvhvmo1"},
+		{"pay_accelerator_a_apy1xadvhvmo1_ref_partner", "pay_accelerator_ref_partner", "apy1xadvhvmo1"},
 		{"pay_accelerator_pe_lower_a_apy1xadvhvmo1", "pay_accelerator_pe_lower", "apy1xadvhvmo1"},
 		{"free_audit_a_apy1xadvhvmo1", "free_audit", "apy1xadvhvmo1"},
 		{"calc_b1_45_a_apy1xadvhvmo1", "calc_b1_45", "apy1xadvhvmo1"},

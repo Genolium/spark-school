@@ -13,6 +13,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -137,9 +138,16 @@ func (h *PaymentWebhookHandler) HandleAntilopayWebhook(c *gin.Context) {
 		return
 	}
 
-	// 2. Strict Signature verification if public key is configured
+	// 2. Signature is required whenever the webhook is reachable.
 	signHeader := c.GetHeader("X-Apay-Callback")
-	if h.cfg != nil && h.cfg.AntilopayPublicKey != "" {
+	isTestMode := gin.Mode() == gin.TestMode || os.Getenv("ENV") == "test"
+	if h.cfg == nil || strings.TrimSpace(h.cfg.AntilopayPublicKey) == "" {
+		if !isTestMode {
+			log.Printf("[ANTILOPAY-SECURITY] Public key is not configured; rejecting unsigned callback")
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "error", "message": "payment webhook is not configured"})
+			return
+		}
+	} else {
 		if signHeader == "" {
 			log.Printf("[ANTILOPAY-SECURITY] Missing required signature header (X-Apay-Callback)")
 			c.JSON(http.StatusUnauthorized, gin.H{"status": "error", "message": "missing signature header"})

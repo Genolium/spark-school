@@ -311,7 +311,12 @@ func TestPromoRedeem_EndpointConcurrency(t *testing.T) {
 	})
 
 	handler := NewPromoHandler(nil).WithCustomRedeem(func(code string) (*models.PromoCode, error) {
-		return store.AtomicIncrement(code)
+		p, ok := store.Get(code)
+		if !ok || !p.IsActive {
+			return nil, errors.New("promo code not found or inactive")
+		}
+		copy := *p
+		return &copy, nil
 	})
 
 	router := gin.New()
@@ -354,8 +359,8 @@ func TestPromoRedeem_EndpointConcurrency(t *testing.T) {
 		t.Fatalf("Promo code HTTP50 not found")
 	}
 
-	if finalPromo.UsesCount != concurrency {
-		t.Fatalf("Lost update in HTTP handler! Final uses_count = %d, expected %d", finalPromo.UsesCount, concurrency)
+	if finalPromo.UsesCount != 0 {
+		t.Fatalf("public redeem must not consume uses, got uses_count = %d", finalPromo.UsesCount)
 	}
 }
 
@@ -380,7 +385,12 @@ func TestPromoRedeem_ValidationAndEdgeCases(t *testing.T) {
 	})
 
 	handler := NewPromoHandler(nil).WithCustomRedeem(func(code string) (*models.PromoCode, error) {
-		return store.AtomicIncrement(code)
+		p, ok := store.Get(code)
+		if !ok || !p.IsActive {
+			return nil, errors.New("promo code not found or inactive")
+		}
+		copy := *p
+		return &copy, nil
 	})
 
 	router := gin.New()
@@ -451,7 +461,7 @@ func TestPromoRedeem_ValidationAndEdgeCases(t *testing.T) {
 			UsesCount int    `json:"uses_count"`
 		}
 		_ = json.Unmarshal(w.Body.Bytes(), &res)
-		if !res.Success || res.Code != "VALID5" || res.UsesCount != 1 {
+		if !res.Success || res.Code != "VALID5" || res.UsesCount != 0 {
 			t.Errorf("Unexpected response payload: %+v", res)
 		}
 	})

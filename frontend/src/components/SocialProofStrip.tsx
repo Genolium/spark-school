@@ -110,7 +110,7 @@ export function SocialProofStrip({ onOpenChances }: SocialProofStripProps) {
                   className="w-full sm:w-auto px-6 py-3.5 rounded-2xl bento-pill hover:bg-emerald-500/15 border border-emerald-500/30 text-xs sm:text-sm font-mono font-bold text-slate-900 dark:text-white flex items-center justify-center gap-2.5 transition-all shadow-sm hover:shadow active:scale-95 group"
                 >
                   <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                  <span>Оценить свои шансы на грант</span>
+                  <span>Пройти диагностику готовности</span>
                   <span className="text-emerald-600 dark:text-emerald-400 group-hover:translate-x-0.5 transition-transform">➔</span>
                 </button>
               </div>

@@ -5,7 +5,7 @@ export default function robots(): MetadataRoute.Robots {
     rules: [
       {
         userAgent: "*",
-        allow: ["/", "/partner", "/offer", "/privacy", "/llms.txt", "/llms-full.txt"],
+        allow: ["/", "/offer", "/privacy", "/llms.txt", "/llms-full.txt"],
         disallow: ["/admin", "/admin/*", "/api/*", "/dashboard", "/dashboard/*"],
       },
       {
@@ -18,7 +18,7 @@ export default function robots(): MetadataRoute.Robots {
           "Applebot-Extended",
           "cohere-ai",
         ],
-        allow: ["/", "/partner", "/offer", "/privacy", "/llms.txt", "/llms-full.txt"],
+        allow: ["/", "/offer", "/privacy", "/llms.txt", "/llms-full.txt"],
         disallow: ["/admin", "/admin/*", "/api/*", "/dashboard", "/dashboard/*"],
       },
     ],

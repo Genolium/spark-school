@@ -173,6 +173,28 @@ func TestTelegramWidgetLogin_Validation(t *testing.T) {
 	if wBadID.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400 for invalid Telegram ID, got %d", wBadID.Code)
 	}
+
+	// Production must never accept the development hash=test bypass.
+	prodCfg := &config.Config{
+		Env:              "production",
+		TelegramBotToken: "123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11",
+		JWTSecret:        "test-secret-key-32-chars-spark-2027",
+	}
+	prodHandler := NewAuthHandler(nil, prodCfg, nil)
+	prodRouter := gin.New()
+	prodRouter.POST("/auth/telegram-widget", prodHandler.TelegramWidgetLogin)
+	payloadTestHash, _ := json.Marshal(map[string]string{
+		"id":         "123456789",
+		"first_name": "Test",
+		"hash":       "test",
+	})
+	reqTestHash := httptest.NewRequest("POST", "/auth/telegram-widget", bytes.NewReader(payloadTestHash))
+	reqTestHash.Header.Set("Content-Type", "application/json")
+	wTestHash := httptest.NewRecorder()
+	prodRouter.ServeHTTP(wTestHash, reqTestHash)
+	if wTestHash.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for hash=test in production, got %d", wTestHash.Code)
+	}
 }
 
 func TestCalculateCapacityAndSpots(t *testing.T) {
@@ -263,17 +285,17 @@ func TestReceiptVerify_Validation(t *testing.T) {
 
 func TestPromoValidate_TierPricing(t *testing.T) {
 	// Test helper GetTierPrice (only 2 active tiers: accelerator and vip)
-	if price := GetTierPrice("accelerator", 0); price != 6900.00 {
-		t.Errorf("expected accelerator price 6900, got %f", price)
+	if price := GetTierPrice("accelerator", 0); price != 10900.00 {
+		t.Errorf("expected accelerator price 10900, got %f", price)
 	}
-	if price := GetTierPrice("акселератор", 0); price != 6900.00 {
-		t.Errorf("expected акселератор price 6900, got %f", price)
+	if price := GetTierPrice("акселератор", 0); price != 10900.00 {
+		t.Errorf("expected акселератор price 10900, got %f", price)
 	}
 	if price := GetTierPrice("vip", 0); price != 14900.00 {
 		t.Errorf("expected vip price 14900, got %f", price)
 	}
-	if price := GetTierPrice("unknown", 0); price != 6900.00 {
-		t.Errorf("expected default price 6900, got %f", price)
+	if price := GetTierPrice("unknown", 0); price != 10900.00 {
+		t.Errorf("expected default price 10900, got %f", price)
 	}
 	if price := GetTierPrice("", 5000); price != 5000.00 {
 		t.Errorf("expected custom price 5000, got %f", price)
@@ -927,8 +949,8 @@ func TestPricingHandler_GetAndUpdatePricing(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &p); err != nil {
 		t.Fatalf("failed to decode pricing response: %v", err)
 	}
-	if p.AcceleratorPrice != 6900.0 || p.VIPPrice != 14900.0 {
-		t.Fatalf("expected default prices 6900 and 14900, got %f and %f", p.AcceleratorPrice, p.VIPPrice)
+	if p.AcceleratorPrice != 10900.0 || p.VIPPrice != 14900.0 {
+		t.Fatalf("expected default prices 10900 and 14900, got %f and %f", p.AcceleratorPrice, p.VIPPrice)
 	}
 
 	// 2. PUT invalid pricing (VIP < Accelerator)

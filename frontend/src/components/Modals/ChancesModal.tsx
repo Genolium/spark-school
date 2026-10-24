@@ -13,6 +13,8 @@ interface ChancesModalProps {
 }
 
 export function ChancesModal({ isOpen, onClose }: ChancesModalProps) {
+  const dialogRef = React.useRef<HTMLDivElement>(null);
+  const lastFocusRef = React.useRef<HTMLElement | null>(null);
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [ageCitizenshipValid, setAgeCitizenshipValid] = useState<boolean | null>(null);
   const [universityYear, setUniversityYear] = useState<"1-2" | "3" | "senior" | null>(null);
@@ -31,27 +33,27 @@ export function ChancesModal({ isOpen, onClose }: ChancesModalProps) {
       case "c1":
         return {
           percent: 96,
-          label: "Максимальные шансы (Elite Zone)",
+          label: "Высокая готовность по языку",
           color: "text-emerald-500",
           strokeColor: "#10b981",
-          description: "У тебя сильная языковая база! При грамотной упаковке истории в эссе и подготовке к поведенческому интервью твоя заявка войдёт в топ-5% отбора.",
+          description: "Сильная языковая база. Дальше решает упаковка истории в эссе и уверенность на интервью — не «вероятность гранта».",
         };
       case "b2":
         return {
           percent: 88,
-          label: "Отличные шансы (High Potential)",
+          label: "Достаточный уровень для интервью",
           color: "text-teal-500",
           strokeColor: "#14b8a6",
-          description: "Отличный уровень для уверенного прохождения собеседования с американской комиссией. Главный фокус — отточить структуру резюме американского стандарта.",
+          description: "Уровня хватает, чтобы говорить с комиссией. Главный фокус — структура резюме и конкретные результаты в эссе.",
         };
       case "b1":
       default:
         return {
           percent: 75,
-          label: "Хороший потенциал (Needs Practice)",
+          label: "Стартовый уровень, есть запас по языку",
           color: "text-amber-500",
           strokeColor: "#f59e0b",
-          description: "Базового уровня достаточно для старта! Комиссия оценивает идеи и лидерский потенциал. В проекте «так называемый SPARK» поможем подготовить скрипты ответов.",
+          description: "Базы достаточно, чтобы начать. Комиссия смотрит на идею и потенциал; язык подтягиваем параллельно с документами.",
         };
     }
   };
@@ -85,16 +87,44 @@ export function ChancesModal({ isOpen, onClose }: ChancesModalProps) {
   const scoreData = getScoreData();
 
   React.useEffect(() => {
+    if (!isOpen) return;
+    lastFocusRef.current = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const root = dialogRef.current;
+    const focusables = () =>
+      Array.from(
+        root?.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        ) ?? []
+      ).filter((el) => !el.hasAttribute("disabled"));
+    focusables()[0]?.focus();
+
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         onClose();
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const items = focusables();
+      if (items.length === 0) return;
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
       }
     };
-    if (isOpen) {
-      window.addEventListener("keydown", handleKeyDown);
-    }
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [isOpen, onClose]);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      lastFocusRef.current?.focus();
+    };
+  }, [isOpen, onClose, step]);
 
   if (!isOpen) return null;
 
@@ -112,6 +142,7 @@ export function ChancesModal({ isOpen, onClose }: ChancesModalProps) {
 
         {/* Modal Window */}
         <motion.div
+          ref={dialogRef}
           role="dialog"
           aria-modal="true"
           aria-labelledby="chances-modal-title"
@@ -141,10 +172,10 @@ export function ChancesModal({ isOpen, onClose }: ChancesModalProps) {
               <span>Интерактивный экспресс-тест</span>
             </div>
             <h2 id="chances-modal-title" className="font-editorial text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white">
-              Оцени свои шансы на грант $20,000
+              Диагностика готовности к SPARK
             </h2>
             <p className="mt-1.5 text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-doc">
-              3 вопроса • Без лишней бюрократии • Мгновенный расчет вероятности победы
+              3 вопроса • Критерии программы • План на ближайшие шаги. Это не вероятность выигрыша гранта.
             </p>
 
             {/* Step Progress Bar */}
@@ -368,7 +399,7 @@ export function ChancesModal({ isOpen, onClose }: ChancesModalProps) {
                         Понимаю суть, могу изъясняться простыми фразами
                       </div>
                     </div>
-                    <span className="text-xs font-mono text-amber-700 dark:text-amber-400 font-bold">75% шансов</span>
+                    <span className="text-xs font-mono text-amber-700 dark:text-amber-400 font-bold">старт</span>
                   </button>
 
                   <button
@@ -386,7 +417,7 @@ export function ChancesModal({ isOpen, onClose }: ChancesModalProps) {
                         Свободно общаюсь на общие темы, смотрю видео без субтитров
                       </div>
                     </div>
-                    <span className="text-xs font-mono text-teal-700 dark:text-teal-400 font-bold">88% шансов</span>
+                    <span className="text-xs font-mono text-teal-700 dark:text-teal-400 font-bold">уверенно</span>
                   </button>
 
                   <button
@@ -404,7 +435,7 @@ export function ChancesModal({ isOpen, onClose }: ChancesModalProps) {
                         Свободный беглый язык, аргументация и профессиональные темы
                       </div>
                     </div>
-                    <span className="text-xs font-mono text-emerald-700 dark:text-emerald-400 font-bold">96% шансов</span>
+                    <span className="text-xs font-mono text-emerald-700 dark:text-emerald-400 font-bold">сильный язык</span>
                   </button>
                 </div>
               </motion.div>
@@ -458,7 +489,7 @@ export function ChancesModal({ isOpen, onClose }: ChancesModalProps) {
                       {scoreData.percent}%
                     </motion.span>
                     <span className="text-[10px] font-mono text-slate-500 uppercase tracking-wider">
-                      шанс победы
+                      готовность
                     </span>
                   </div>
                 </div>
@@ -475,6 +506,9 @@ export function ChancesModal({ isOpen, onClose }: ChancesModalProps) {
 
                 <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-doc mb-3 leading-relaxed">
                   {scoreData.description}
+                </p>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 font-doc mb-3">
+                  Оценка готовности к подготовке, а не вероятность гранта. Решение принимает комиссия программы.
                 </p>
 
                 {/* Actionable Diagnostic Steps */}

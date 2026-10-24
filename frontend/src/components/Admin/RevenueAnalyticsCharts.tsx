@@ -232,7 +232,7 @@ export function RevenueAnalyticsCharts({ stats }: RevenueAnalyticsChartsProps) {
             <Target className="w-3.5 h-3.5 text-amber-400" />
           </div>
           <div className="text-xl font-black font-mono text-amber-400">
-            {(stats.average_order_value || periodMetrics.aov || 6900).toLocaleString("ru-RU")} ₽
+            {(stats.average_order_value || periodMetrics.aov || 10900).toLocaleString("ru-RU")} ₽
           </div>
           <div className="text-[11px] font-mono text-slate-400 mt-1">
             Выше базового тарифа
@@ -699,7 +699,7 @@ export function RevenueAnalyticsCharts({ stats }: RevenueAnalyticsChartsProps) {
               <div className="flex items-center gap-5">
                 <div className="flex items-center gap-2">
                   <span className="w-3 h-3 rounded bg-gradient-to-t from-emerald-500 to-amber-500 shadow-sm" />
-                  <span>Акселератор (6 555 – 6 900 ₽)</span>
+                  <span>Акселератор (9 990 – 10 900 ₽)</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="w-3 h-3 rounded bg-gradient-to-t from-blue-600 to-sky-400 shadow-sm" />
@@ -788,7 +788,7 @@ export function RevenueAnalyticsCharts({ stats }: RevenueAnalyticsChartsProps) {
                           {acc.revenue.toLocaleString("ru-RU")} ₽
                         </div>
                         <div className="text-xs font-mono text-slate-400 mt-0.5">
-                          {acc.count} студентов (6 900 ₽ / 6 555 ₽)
+                          {acc.count} студентов (10 900 ₽ / 9 990 ₽)
                         </div>
                       </div>
                       <div className="text-right text-xs font-mono text-slate-400">

@@ -92,7 +92,7 @@ func MainMenuKeyboard(frontendURL string, options ...any) *telego.InlineKeyboard
 // PaymentKeyboard returns the checkout keyboard with direct SBP transfer.
 func PaymentKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboardMarkup {
 	basicPrice := 3990
-	accPrice := 6900
+	accPrice := 10900
 	vipPrice := 14900
 	if len(pricing) > 0 {
 		if pricing[0].BasicPrice > 0 {
@@ -134,7 +134,7 @@ func PaymentKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboardMark
 // PromoAppliedKeyboard returns keyboard after successful promo code redemption.
 func PromoAppliedKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboardMarkup {
 	basicPrice := 3790
-	accPrice := 6555
+	accPrice := 10355
 	vipPrice := 14155
 	if len(pricing) > 0 {
 		if pricing[0].BasicPrice > 0 {
@@ -176,7 +176,7 @@ func PromoAppliedKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboar
 // YooKassaSelectTierKeyboard routes to direct SBP checkout.
 func YooKassaSelectTierKeyboard(hasPromo bool, pricing ...models.CoursePricing) *telego.InlineKeyboardMarkup {
 	basicPrice := 3990
-	accPrice := 6900
+	accPrice := 10900
 	vipPrice := 14900
 	if len(pricing) > 0 {
 		if pricing[0].BasicPrice > 0 {
@@ -208,7 +208,7 @@ func YooKassaSelectTierKeyboard(hasPromo bool, pricing ...models.CoursePricing) 
 			tu.InlineKeyboardButton(vipText).WithCallbackData("pay_sbp_vip"),
 		),
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("⬅️ Назад ко всем способам").WithCallbackData("action_payment"),
+			tu.InlineKeyboardButton("⬅️ Назад к тарифам").WithCallbackData("action_payment"),
 		),
 	)
 }
@@ -312,7 +312,7 @@ func UpgradeOptionsKeyboard(currentTier string, diffAmount ...float64) *telego.I
 	}
 
 	if currentTier == "basic" {
-		diffAcc := 2910  // 6900 - 3990
+		diffAcc := 6910  // 10900 - 3990
 		diffVIP := 10910 // 14900 - 3990
 		if len(diffAmount) > 0 && diffAmount[0] > 0 {
 			diffAcc = int(diffAmount[0])
@@ -372,7 +372,7 @@ func AdminPanelKeyboard() *telego.InlineKeyboardMarkup {
 
 // BasicUpsellAuditKeyboard returns buttons for the +3 days upsell message (Upgrade to Accelerator or Text Audit).
 func BasicUpsellAuditKeyboard(diffAcc ...float64) *telego.InlineKeyboardMarkup {
-	accDiff := 2910.0
+	accDiff := 6910.0
 	if len(diffAcc) > 0 && diffAcc[0] > 0 {
 		accDiff = diffAcc[0]
 	}

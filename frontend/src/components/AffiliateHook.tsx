@@ -5,10 +5,11 @@ import Link from "next/link";
 import { motion } from "framer-motion";
 import { Coins, ArrowUpRight, TrendingUp } from "lucide-react";
 import { api } from "@/lib/api";
+import { DEFAULT_PRICING } from "@/lib/pricing-defaults";
 
 export function AffiliateHook() {
   const [friendsCount, setFriendsCount] = useState(3);
-  const [pricing, setPricing] = useState({ accelerator_price: 6900 });
+  const [pricing, setPricing] = useState({ accelerator_price: DEFAULT_PRICING.accelerator_price });
 
   useEffect(() => {
     api.getCoursePricing().then((p) => {

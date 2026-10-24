@@ -1,7 +1,6 @@
 package models
 
 import (
-	"math"
 	"strings"
 	"time"
 
@@ -13,8 +12,8 @@ type CoursePricing struct {
 	ID                  uint      `gorm:"primaryKey" json:"id"`
 	BasicPrice          float64   `gorm:"type:numeric(10,2);default:3990.00" json:"basic_price"`
 	BasicOldPrice       float64   `gorm:"type:numeric(10,2);default:5900.00" json:"basic_old_price"`
-	AcceleratorPrice    float64   `gorm:"type:numeric(10,2);default:6900.00" json:"accelerator_price"`
-	AcceleratorOldPrice float64   `gorm:"type:numeric(10,2);default:9900.00" json:"accelerator_old_price"`
+	AcceleratorPrice    float64   `gorm:"type:numeric(10,2);default:10900.00" json:"accelerator_price"`
+	AcceleratorOldPrice float64   `gorm:"type:numeric(10,2);default:10900.00" json:"accelerator_old_price"`
 	VIPPrice            float64   `gorm:"type:numeric(10,2);default:14900.00" json:"vip_price"`
 	VIPOldPrice         float64   `gorm:"type:numeric(10,2);default:19900.00" json:"vip_old_price"`
 	BankName            string    `gorm:"size:128;default:'БСПБ (Банк «Санкт-Петербург»)'" json:"bank_name"`
@@ -25,8 +24,8 @@ type CoursePricing struct {
 var DefaultCoursePricing = CoursePricing{
 	BasicPrice:          3990.00,
 	BasicOldPrice:       5900.00,
-	AcceleratorPrice:    6900.00,
-	AcceleratorOldPrice: 9900.00,
+	AcceleratorPrice:    10900.00,
+	AcceleratorOldPrice: 10900.00,
 	VIPPrice:            14900.00,
 	VIPOldPrice:         19900.00,
 	BankName:            "БСПБ (Банк «Санкт-Петербург»)",
@@ -47,20 +46,20 @@ func GetCoursePricing(db *gorm.DB) CoursePricing {
 	if pricing.BasicPrice <= 0 {
 		pricing.BasicPrice = 3990.00
 	}
-	if pricing.BasicOldPrice <= pricing.BasicPrice {
-		pricing.BasicOldPrice = math.Round((pricing.BasicPrice*1.4)/100) * 100
+	if pricing.BasicOldPrice <= 0 {
+		pricing.BasicOldPrice = pricing.BasicPrice
 	}
 	if pricing.AcceleratorPrice <= 0 {
-		pricing.AcceleratorPrice = 6900.00
+		pricing.AcceleratorPrice = 10900.00
 	}
-	if pricing.AcceleratorOldPrice <= pricing.AcceleratorPrice {
-		pricing.AcceleratorOldPrice = math.Round((pricing.AcceleratorPrice*1.4)/100) * 100
+	if pricing.AcceleratorOldPrice <= 0 {
+		pricing.AcceleratorOldPrice = 10900.00
 	}
 	if pricing.VIPPrice <= 0 {
 		pricing.VIPPrice = 14900.00
 	}
-	if pricing.VIPOldPrice <= pricing.VIPPrice {
-		pricing.VIPOldPrice = math.Round((pricing.VIPPrice*1.4)/100) * 100
+	if pricing.VIPOldPrice <= 0 {
+		pricing.VIPOldPrice = pricing.VIPPrice
 	}
 	// Migrate legacy Ozon Bank or empty bank to BSPB
 	if pricing.BankName == "" || strings.Contains(strings.ToLower(pricing.BankName), "озон") || strings.Contains(strings.ToLower(pricing.BankName), "ozon") {
@@ -81,8 +80,14 @@ func UpdateCoursePricing(db *gorm.DB, p CoursePricing) (CoursePricing, error) {
 		if p.BasicPrice <= 0 {
 			p.BasicPrice = 3990.00
 		}
-		if p.BasicOldPrice <= p.BasicPrice {
-			p.BasicOldPrice = math.Round((p.BasicPrice*1.4)/100) * 100
+		if p.BasicOldPrice <= 0 {
+			p.BasicOldPrice = p.BasicPrice
+		}
+		if p.AcceleratorPrice <= 0 {
+			p.AcceleratorPrice = 10900.00
+		}
+		if p.AcceleratorOldPrice <= 0 {
+			p.AcceleratorOldPrice = 10900.00
 		}
 		if strings.TrimSpace(p.BankName) == "" {
 			p.BankName = "БСПБ (Банк «Санкт-Петербург»)"
@@ -96,20 +101,20 @@ func UpdateCoursePricing(db *gorm.DB, p CoursePricing) (CoursePricing, error) {
 	if p.BasicPrice <= 0 {
 		p.BasicPrice = 3990.00
 	}
-	if p.BasicOldPrice <= p.BasicPrice {
-		p.BasicOldPrice = math.Round((p.BasicPrice*1.4)/100) * 100
+	if p.BasicOldPrice <= 0 {
+		p.BasicOldPrice = p.BasicPrice
 	}
 	if p.AcceleratorPrice <= 0 {
-		p.AcceleratorPrice = 6900.00
+		p.AcceleratorPrice = 10900.00
 	}
-	if p.AcceleratorOldPrice <= p.AcceleratorPrice {
-		p.AcceleratorOldPrice = math.Round((p.AcceleratorPrice*1.4)/100) * 100
+	if p.AcceleratorOldPrice <= 0 {
+		p.AcceleratorOldPrice = 10900.00
 	}
 	if p.VIPPrice <= 0 {
 		p.VIPPrice = 14900.00
 	}
-	if p.VIPOldPrice <= p.VIPPrice {
-		p.VIPOldPrice = math.Round((p.VIPPrice*1.4)/100) * 100
+	if p.VIPOldPrice <= 0 {
+		p.VIPOldPrice = p.VIPPrice
 	}
 	if strings.TrimSpace(p.BankName) == "" {
 		p.BankName = "БСПБ (Банк «Санкт-Петербург»)"
