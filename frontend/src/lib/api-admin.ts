@@ -146,6 +146,7 @@ export const adminApi = {
 
   async getAdminStudents(params?: {
     q?: string;
+    source?: string;
     tier?: string;
     access?: string;
     receipt_status?: string;
@@ -158,6 +159,7 @@ export const adminApi = {
     const queryObj = typeof params === "string" ? { q: params } : (params || {});
     const {
       q = "",
+      source = "",
       tier = "",
       access = "",
       receipt_status = "",
@@ -172,6 +174,7 @@ export const adminApi = {
     try {
       const sp = new URLSearchParams();
       if (q) sp.set("q", q);
+      if (source && source !== "all") sp.set("source", source);
       if (tier && tier !== "all") sp.set("tier", tier);
       if (access && access !== "all") sp.set("access", access);
       if (receipt_status && receipt_status !== "all") sp.set("receipt_status", receipt_status);

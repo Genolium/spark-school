@@ -30,6 +30,11 @@ type User struct {
 	AuditCredits                    int        `gorm:"default:0" json:"audit_credits"`
 	AttributionToken                string     `gorm:"size:64;index" json:"attribution_token,omitempty"`
 	VisitorID                       string     `gorm:"size:64;index" json:"visitor_id,omitempty"`
+	UTMSource                       string     `gorm:"column:utm_source;size:64;index" json:"utm_source,omitempty"`
+	UTMMedium                       string     `gorm:"column:utm_medium;size:64" json:"utm_medium,omitempty"`
+	UTMCampaign                     string     `gorm:"column:utm_campaign;size:80;index" json:"utm_campaign,omitempty"`
+	UTMContent                      string     `gorm:"column:utm_content;size:80" json:"utm_content,omitempty"`
+	InitialReferrer                 string     `gorm:"column:initial_referrer;size:255" json:"initial_referrer,omitempty"`
 	RemindersOptOut                 bool       `gorm:"default:false;index" json:"reminders_opt_out"`
 	DiagnosticStartedReminderSent   bool       `gorm:"default:false;index" json:"diagnostic_started_reminder_sent"`
 	DiagnosticCompletedReminderSent bool       `gorm:"default:false;index" json:"diagnostic_completed_reminder_sent"`

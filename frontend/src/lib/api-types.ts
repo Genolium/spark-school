@@ -22,6 +22,11 @@ export interface UserProfile {
   receipt_url?: string;
   receipt_number?: string;
   has_audit_upsell?: boolean;
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  utm_content?: string;
+  initial_referrer?: string;
 }
 
 export interface DailyRevenueStat {

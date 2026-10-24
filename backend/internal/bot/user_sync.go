@@ -1,6 +1,7 @@
 package bot
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"strings"
@@ -135,6 +136,26 @@ func (s *BotService) attributeLead(from *telego.User, token string) error {
 	if visitorID != "" {
 		updates["visitor_id"] = visitorID
 	}
+	if landing.Source != "" && user.UTMSource == "" {
+		updates["utm_source"] = landing.Source
+	}
+	if landing.Campaign != "" && user.UTMCampaign == "" {
+		updates["utm_campaign"] = landing.Campaign
+	}
+	if landing.Metadata != "" {
+		var metaMap map[string]interface{}
+		if err := json.Unmarshal([]byte(landing.Metadata), &metaMap); err == nil {
+			if med, ok := metaMap["utm_medium"].(string); ok && med != "" && user.UTMMedium == "" {
+				updates["utm_medium"] = med
+			}
+			if cnt, ok := metaMap["utm_content"].(string); ok && cnt != "" && user.UTMContent == "" {
+				updates["utm_content"] = cnt
+			}
+			if ref, ok := metaMap["initial_referrer"].(string); ok && ref != "" && user.InitialReferrer == "" {
+				updates["initial_referrer"] = ref
+			}
+		}
+	}
 	if err := s.db.Model(&models.User{}).Where("id = ?", user.ID).Updates(updates).Error; err != nil {
 		return err
 	}
@@ -199,6 +220,41 @@ func sanitizeAttributionToken(raw string) string {
 		}
 	}
 	return raw
+}
+
+// associateDirectTrafficSource registers advertising channel from direct bot links (e.g. /start src_channelname).
+func (s *BotService) associateDirectTrafficSource(from *telego.User, rawSource string) {
+	if s.db == nil || from == nil || rawSource == "" {
+		return
+	}
+	cleanSource := sanitizeAttributionToken(rawSource)
+	if cleanSource == "" {
+		return
+	}
+	user := s.syncTelegramUser(from)
+	if user == nil {
+		return
+	}
+	if user.UTMSource == "" {
+		s.db.Model(&models.User{}).Where("id = ?", user.ID).Update("utm_source", cleanSource)
+	}
+
+	// Record bot_lead event if not already tracked
+	var existing int64
+	s.db.Model(&models.AnalyticsEvent{}).
+		Where("step = ? AND metadata LIKE ?", "bot_lead", fmt.Sprintf("%%\"telegram_id\":%d%%", from.ID)).
+		Count(&existing)
+	if existing == 0 {
+		meta := fmt.Sprintf(`{"telegram_id":%d,"direct_source":%q}`, from.ID, cleanSource)
+		_ = s.db.Create(&models.AnalyticsEvent{
+			VisitorID: fmt.Sprintf("tg_%d", from.ID),
+			Step:      "bot_lead",
+			Source:    cleanSource,
+			Tier:      user.Tier,
+			Metadata:  meta,
+			CreatedAt: time.Now(),
+		}).Error
+	}
 }
 
 func extractTelegramLink(text string) string {

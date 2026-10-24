@@ -13,6 +13,7 @@ import { RevenueAnalyticsCharts } from "@/components/Admin/RevenueAnalyticsChart
 import { FunnelAnalytics } from "@/components/Admin/FunnelAnalytics";
 import { OutboxDeadLetter } from "@/components/Admin/OutboxDeadLetter";
 import { ExperimentsReport } from "@/components/Admin/ExperimentsReport";
+import { CampaignLinkGenerator } from "@/components/Admin/CampaignLinkGenerator";
 import { api, AdminStats, UserProfile, PayoutRequest, PromoCode } from "@/lib/api";
 import {
   ShieldCheck,
@@ -283,6 +284,7 @@ export default function AdminPage() {
             {/* Tab 1: Students & Financials */}
             {activeTab === "students" && (
               <div>
+                <CampaignLinkGenerator />
                 <FinancialStats stats={stats} />
                 <RevenueAnalyticsCharts stats={stats} />
                 <StudentsTable

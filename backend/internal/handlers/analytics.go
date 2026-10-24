@@ -52,6 +52,7 @@ var funnelOrder = []string{
 // second, unmanaged store of personal data.
 var allowedMetadataKeys = map[string]struct{}{
 	"utm_source": {}, "utm_medium": {}, "utm_campaign": {}, "utm_content": {},
+	"initial_referrer": {}, "referrer": {},
 	"source": {}, "tier": {}, "price": {}, "level": {}, "score": {},
 	"universityyear": {}, "tab": {}, "method": {},
 }

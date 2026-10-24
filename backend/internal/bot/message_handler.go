@@ -132,9 +132,19 @@ func (s *BotService) handleMessage(msg *telego.Message) error {
 
 			// 2. Attribution was already extracted from the start parameter.
 
-			// 3. Extract referral or promo code
+			// 3. Extract referral, traffic source, or promo code
 			refCode := ""
+			srcCode := ""
 			username := payload
+			if idx := strings.Index(payload, "_src_"); idx != -1 {
+				srcCode = payload[idx+len("_src_"):]
+				payload = payload[:idx]
+				username = payload
+			} else if strings.HasPrefix(payload, "src_") {
+				srcCode = strings.TrimPrefix(payload, "src_")
+				payload = ""
+				username = ""
+			}
 			if idx := strings.Index(payload, "_ref_"); idx != -1 {
 				username = payload[:idx]
 				refCode = payload[idx+len("_ref_"):]
@@ -146,6 +156,9 @@ func (s *BotService) handleMessage(msg *telego.Message) error {
 
 			if refCode != "" && msg.From != nil {
 				s.associateBotReferral(msg.From, username, refCode)
+			}
+			if srcCode != "" && msg.From != nil {
+				s.associateDirectTrafficSource(msg.From, srcCode)
 			}
 
 			// 3. If payload contains a valid active promo code in DB, auto-apply it
@@ -187,6 +200,13 @@ func (s *BotService) handleMessage(msg *telego.Message) error {
 			refCode := strings.TrimPrefix(param, "ref_")
 			if msg.From != nil {
 				s.associateBotReferral(msg.From, msg.From.Username, refCode)
+			}
+		}
+
+		if strings.HasPrefix(param, "src_") {
+			sourceName := strings.TrimPrefix(param, "src_")
+			if msg.From != nil {
+				s.associateDirectTrafficSource(msg.From, sourceName)
 			}
 		}
 

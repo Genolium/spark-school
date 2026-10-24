@@ -23,6 +23,16 @@ export interface FunnelEvent {
 const STORAGE_KEY = "spark_funnel_events";
 const VISITOR_KEY = "spark_visitor_id";
 const ATTRIBUTION_KEY = "spark_attribution_token";
+const CAMPAIGN_STORAGE_KEY = "spark_utm_context";
+
+interface StoredCampaign {
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  utm_content?: string;
+  initial_referrer?: string;
+  saved_at?: number;
+}
 
 function randomId(prefix: string, length: number): string {
   const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
@@ -122,11 +132,58 @@ function campaignContext(): Record<string, string> {
   if (typeof window === "undefined") return {};
   try {
     const params = new URLSearchParams(window.location.search);
-    const result: Record<string, string> = {};
+    const fromUrl: Record<string, string> = {};
     for (const key of ["utm_source", "utm_medium", "utm_campaign", "utm_content"]) {
       const value = params.get(key);
-      if (value) result[key] = value.slice(0, 80);
+      if (value) fromUrl[key] = value.slice(0, 80);
     }
+
+    // 30 days retention window for stored campaign attribution
+    const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+    let stored: StoredCampaign = {};
+    const rawStored = localStorage.getItem(CAMPAIGN_STORAGE_KEY);
+    if (rawStored) {
+      try {
+        const parsed = JSON.parse(rawStored);
+        if (parsed && typeof parsed.saved_at === "number" && Date.now() - parsed.saved_at < THIRTY_DAYS_MS) {
+          stored = parsed;
+        }
+      } catch {
+        // Safe fallback
+      }
+    }
+
+    // If URL has new UTMs, persist them (Last-touch update)
+    if (Object.keys(fromUrl).length > 0) {
+      stored = {
+        ...stored,
+        ...fromUrl,
+        initial_referrer: stored.initial_referrer || (typeof document !== "undefined" ? document.referrer.slice(0, 200) : ""),
+        saved_at: Date.now(),
+      };
+      try {
+        localStorage.setItem(CAMPAIGN_STORAGE_KEY, JSON.stringify(stored));
+      } catch {
+        // Ignore storage errors in private mode
+      }
+    } else if (typeof document !== "undefined" && document.referrer && !stored.initial_referrer) {
+      // Record organic or external referrer if no UTMs
+      stored.initial_referrer = document.referrer.slice(0, 200);
+      stored.saved_at = stored.saved_at || Date.now();
+      try {
+        localStorage.setItem(CAMPAIGN_STORAGE_KEY, JSON.stringify(stored));
+      } catch {
+        // Ignore
+      }
+    }
+
+    const result: Record<string, string> = {};
+    if (stored.utm_source) result.utm_source = stored.utm_source;
+    if (stored.utm_medium) result.utm_medium = stored.utm_medium;
+    if (stored.utm_campaign) result.utm_campaign = stored.utm_campaign;
+    if (stored.utm_content) result.utm_content = stored.utm_content;
+    if (stored.initial_referrer) result.initial_referrer = stored.initial_referrer;
+
     return result;
   } catch {
     return {};

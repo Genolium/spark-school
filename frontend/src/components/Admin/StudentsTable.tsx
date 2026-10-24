@@ -605,7 +605,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
             <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
             <input
               type="text"
-              placeholder="Поиск по @username, имени, TG ID, промокоду..."
+              placeholder="Поиск по @username, имени, TG ID, промокоду, источнику..."
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               className={`${inputCls} pl-10 pr-4`}
@@ -716,6 +716,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
             <tr className="border-b border-slate-200 dark:border-white/10 text-slate-500 dark:text-slate-400 uppercase tracking-wider">
               {renderSortHeader("Студент", "name")}
               <th className="pb-3 font-semibold">Telegram ID</th>
+              <th className="pb-3 font-semibold">Источник трафика</th>
               {renderSortHeader("Тариф", "tier")}
               {renderSortHeader("Оплачено", "paid_amount")}
               {renderSortHeader("Дата покупки", "purchase_date")}
@@ -729,7 +730,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
           <tbody className="divide-y divide-slate-100 dark:divide-white/5">
             {displayList.length === 0 && (
               <tr>
-                <td colSpan={10} className="py-8 text-center text-slate-500">
+                <td colSpan={11} className="py-8 text-center text-slate-500">
                   {isFiltered ? "По заданным фильтрам студенты не найдены" : "Студенты не найдены"}
                 </td>
               </tr>
@@ -767,6 +768,29 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
                   </td>
 
                   <td className="py-4 text-slate-600 dark:text-slate-300">{s.telegram_id}</td>
+
+                  {/* Traffic Acquisition Source */}
+                  <td className="py-4">
+                    {s.utm_source ? (
+                      <div className="flex flex-col gap-0.5 items-start">
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold bg-sky-500/10 text-sky-700 dark:text-sky-300 border border-sky-500/20" title={`utm_source: ${s.utm_source}${s.utm_campaign ? ` | campaign: ${s.utm_campaign}` : ''}`}>
+                          <span className="w-1.5 h-1.5 rounded-full bg-sky-500" />
+                          <span>{s.utm_source}</span>
+                        </span>
+                        {s.utm_campaign && (
+                          <span className="text-[9px] text-slate-600 dark:text-slate-400 font-mono truncate max-w-[110px]" title={s.utm_campaign}>
+                            {s.utm_campaign}
+                          </span>
+                        )}
+                      </div>
+                    ) : s.initial_referrer ? (
+                      <span className="text-[10px] text-slate-600 dark:text-slate-400 font-mono truncate max-w-[110px] block" title={s.initial_referrer}>
+                        {s.initial_referrer.replace(/^https?:\/\//, '').split('/')[0]}
+                      </span>
+                    ) : (
+                      <span className="text-slate-400 text-xs">—</span>
+                    )}
+                  </td>
 
                   {/* Tier Badge & Upsells */}
                   <td className="py-4">

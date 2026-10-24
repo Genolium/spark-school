@@ -460,13 +460,19 @@ func (h *AdminHandler) ListUsers(c *gin.Context) {
 
 	dbQuery := h.db.Model(&models.User{}).Preload("AffiliateProfile")
 
-	// 1. Search Query: username, first_name, last_name, telegram_id, promo_code
+	// 1. Search Query: username, first_name, last_name, telegram_id, promo_code, utm_source, utm_campaign
 	if query != "" {
 		search := "%" + query + "%"
 		dbQuery = dbQuery.Where(
-			"LOWER(username) LIKE LOWER(?) OR LOWER(first_name) LIKE LOWER(?) OR LOWER(last_name) LIKE LOWER(?) OR CAST(telegram_id AS TEXT) LIKE ? OR LOWER(promo_code) LIKE LOWER(?)",
-			search, search, search, search, search,
+			"LOWER(username) LIKE LOWER(?) OR LOWER(first_name) LIKE LOWER(?) OR LOWER(last_name) LIKE LOWER(?) OR CAST(telegram_id AS TEXT) LIKE ? OR LOWER(promo_code) LIKE LOWER(?) OR LOWER(utm_source) LIKE LOWER(?) OR LOWER(utm_campaign) LIKE LOWER(?)",
+			search, search, search, search, search, search, search,
 		)
+	}
+
+	// Filter by traffic source
+	sourceFilter := strings.ToLower(strings.TrimSpace(c.Query("source")))
+	if sourceFilter != "" && sourceFilter != "all" {
+		dbQuery = dbQuery.Where("LOWER(utm_source) = ?", sourceFilter)
 	}
 
 	// 2. Filter by Tier: accelerator, vip
