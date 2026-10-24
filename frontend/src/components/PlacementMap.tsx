@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { MapPin, Search, GraduationCap, Building2, ShieldCheck, Check } from "lucide-react";
+import { MapPin, Search, GraduationCap, Building2, ShieldCheck, Check, ExternalLink } from "lucide-react";
 import mapData from "@/data/us-map-data.json";
 
 interface Placement {
@@ -19,6 +19,7 @@ interface Placement {
   regionLabel: string;
   highlight: string;
   isAuthorCampus?: boolean;
+  website?: string;
 }
 
 const ROTATION_CAMPUSES = [
@@ -497,6 +498,24 @@ export function PlacementMap() {
                   <span className="text-emerald-700 dark:text-emerald-400 font-semibold">Full $20k Grant</span>
                 </div>
               </div>
+
+              {/* Official Campus Website Button */}
+              {selectedPlacement.website && (
+                <div className="mt-5 pt-4 border-t border-slate-200/80 dark:border-white/10">
+                  <a
+                    href={selectedPlacement.website}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full inline-flex items-center justify-between px-4 py-2.5 rounded-xl bg-slate-900/[0.04] dark:bg-white/[0.06] hover:bg-emerald-500/10 dark:hover:bg-emerald-500/15 hover:border-emerald-500/30 text-xs font-mono font-medium text-slate-800 dark:text-slate-200 transition-all border border-slate-900/10 dark:border-white/10 group shadow-sm"
+                  >
+                    <span className="flex items-center gap-2">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                      <span>Официальный сайт кампуса</span>
+                    </span>
+                    <ExternalLink className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400 group-hover:text-emerald-600 dark:group-hover:text-emerald-400 transition-colors" />
+                  </a>
+                </div>
+              )}
             </motion.div>
           </AnimatePresence>
         </div>
