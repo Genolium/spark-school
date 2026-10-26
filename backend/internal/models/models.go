@@ -401,3 +401,33 @@ type Diagnostic struct {
 	LinkedAt         *time.Time `json:"linked_at,omitempty"`
 	CreatedAt        time.Time  `json:"created_at"`
 }
+
+// CampaignLink is a short /r/<slug> link that redirects to a channel, the bot
+// or the landing with campaign UTMs. It holds no visitor data.
+type CampaignLink struct {
+	ID          uint      `gorm:"primaryKey" json:"id"`
+	Slug        string    `gorm:"uniqueIndex;size:40;not null" json:"slug"`
+	Title       string    `gorm:"size:120;not null" json:"title"`
+	TargetType  string    `gorm:"size:16;not null" json:"target_type"` // 'channel', 'bot', 'landing'
+	TargetValue string    `gorm:"size:255;not null;default:''" json:"target_value"`
+	UTMSource   string    `gorm:"size:64" json:"utm_source,omitempty"`
+	UTMMedium   string    `gorm:"size:64" json:"utm_medium,omitempty"`
+	UTMCampaign string    `gorm:"size:80" json:"utm_campaign,omitempty"`
+	UTMContent  string    `gorm:"size:80" json:"utm_content,omitempty"`
+	IsActive    bool      `gorm:"not null;default:true" json:"is_active"`
+	CreatedBy   string    `gorm:"size:64" json:"created_by,omitempty"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// CampaignLinkClick is one anonymous click on a campaign link. The IP is only
+// ever stored as a salted hash, never in clear text.
+type CampaignLinkClick struct {
+	ID               uint      `gorm:"primaryKey" json:"id"`
+	LinkID           uint      `gorm:"index;not null" json:"link_id"`
+	VisitorID        string    `gorm:"size:64;index" json:"visitor_id,omitempty"`
+	AttributionToken string    `gorm:"size:64;index" json:"attribution_token,omitempty"`
+	IPHash           string    `gorm:"size:64" json:"ip_hash,omitempty"`
+	UserAgent        string    `gorm:"size:255" json:"user_agent,omitempty"`
+	Referer          string    `gorm:"size:255" json:"referer,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+}

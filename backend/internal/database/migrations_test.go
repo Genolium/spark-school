@@ -58,7 +58,7 @@ func TestPostgresMigrations_EmptyDatabaseAndRerun(t *testing.T) {
 		"processed_telegram_updates", "course_pricings", "app_meta",
 		"order_intents", "experiment_assignments", "backup_heartbeat",
 		"revoked_tokens", "admin_audit_log", "rate_limits", "bot_sessions", "scheduler_leases",
-		"admin_revenue_daily", "diagnostics",
+		"admin_revenue_daily", "diagnostics", "campaign_links", "campaign_link_clicks",
 	} {
 		var exists bool
 		if err := sqlDB.QueryRow("SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema='public' AND table_name=$1)", table).Scan(&exists); err != nil {
@@ -149,6 +149,20 @@ func TestPostgresMigrations_EmptyDatabaseAndRerun(t *testing.T) {
 		if !exists {
 			t.Errorf("expected index %s", index)
 		}
+	}
+
+	var slugUnique bool
+	if err := sqlDB.QueryRow(`SELECT EXISTS (
+		SELECT 1 FROM pg_index i
+		JOIN pg_class t ON t.oid = i.indrelid
+		JOIN pg_namespace n ON n.oid = t.relnamespace
+		JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY(i.indkey)
+		WHERE n.nspname = 'public' AND t.relname = 'campaign_links'
+		  AND i.indisunique AND a.attname = 'slug')`).Scan(&slugUnique); err != nil {
+		t.Fatal(err)
+	}
+	if !slugUnique {
+		t.Errorf("expected a unique index on campaign_links.slug")
 	}
 }
 
