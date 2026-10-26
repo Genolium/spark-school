@@ -62,8 +62,8 @@ func (c *Cleaner) Stop() {
 	c.wg.Wait()
 }
 
-// RunOnce deletes analytics events and experiment assignments older than the
-// retention window. Financial tables are never touched.
+// RunOnce deletes analytics events, experiment assignments and campaign link
+// clicks older than the retention window. Financial tables are never touched.
 func (c *Cleaner) RunOnce(ctx context.Context) (int64, error) {
 	if c == nil || c.db == nil {
 		return 0, nil
@@ -80,6 +80,11 @@ func (c *Cleaner) RunOnce(ctx context.Context) (int64, error) {
 		return deleted, res.Error
 	}
 	deleted += res.RowsAffected
+	res = c.db.WithContext(ctx).Where("created_at < ?", cutoff).Delete(&models.CampaignLinkClick{})
+	if res.Error != nil {
+		return deleted, res.Error
+	}
+	deleted += res.RowsAffected
 	// Operational tables: expired leases/tokens/sessions and old rate-limit rows.
 	cutoff24 := time.Now().Add(-24 * time.Hour)
 	_ = c.db.WithContext(ctx).Where("window_start < ?", cutoff24).Delete(&models.RateLimit{}).Error
@@ -90,14 +95,15 @@ func (c *Cleaner) RunOnce(ctx context.Context) (int64, error) {
 		log.Printf("[Privacy] failed to ensure analytics partitions: %v", err)
 	}
 	if deleted > 0 {
-		log.Printf("[Privacy] removed %d analytics rows older than %d days", deleted, c.days)
+		log.Printf("[Privacy] removed %d analytics/click rows older than %d days", deleted, c.days)
 	}
 	return deleted, nil
 }
 
-// EraseUser removes analytics and experiment assignments linked to a user and
-// anonymizes personal profile fields. Financial transactions and their amounts
-// are intentionally preserved for accounting; only the identity is removed.
+// EraseUser removes analytics, experiment assignments and campaign link clicks
+// linked to a user and anonymizes personal profile fields. Financial
+// transactions and their amounts are intentionally preserved for accounting;
+// only the identity is removed.
 func EraseUser(db *gorm.DB, userID uint) error {
 	if db == nil {
 		return gorm.ErrInvalidDB
@@ -114,12 +120,18 @@ func EraseUser(db *gorm.DB, userID uint) error {
 			if err := tx.Where("visitor_id = ?", user.VisitorID).Delete(&models.ExperimentAssignment{}).Error; err != nil {
 				return err
 			}
+			if err := tx.Where("visitor_id = ?", user.VisitorID).Delete(&models.CampaignLinkClick{}).Error; err != nil {
+				return err
+			}
 		}
 		if user.AttributionToken != "" {
 			if err := tx.Where("attribution_token = ?", user.AttributionToken).Delete(&models.AnalyticsEvent{}).Error; err != nil {
 				return err
 			}
 			if err := tx.Where("attribution_token = ?", user.AttributionToken).Delete(&models.ExperimentAssignment{}).Error; err != nil {
+				return err
+			}
+			if err := tx.Where("attribution_token = ?", user.AttributionToken).Delete(&models.CampaignLinkClick{}).Error; err != nil {
 				return err
 			}
 		}

@@ -141,6 +141,7 @@ func TestPostgresMigrations_EmptyDatabaseAndRerun(t *testing.T) {
 	for _, index := range []string{
 		"idx_active_slot_key", "idx_active_user_booking",
 		"idx_student_submission_version", "idx_referral_payment_level",
+		"idx_campaign_clicks_created_at",
 	} {
 		var exists bool
 		if err := sqlDB.QueryRow("SELECT EXISTS (SELECT 1 FROM pg_indexes WHERE schemaname='public' AND indexname=$1)", index).Scan(&exists); err != nil {

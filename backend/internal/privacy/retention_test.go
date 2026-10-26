@@ -20,10 +20,21 @@ func privacyDB(t *testing.T) *gorm.DB {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.AutoMigrate(&models.User{}, &models.AnalyticsEvent{}, &models.ExperimentAssignment{}, &models.DripLead{}, &models.PaymentTransaction{}); err != nil {
+	if err := db.AutoMigrate(&models.User{}, &models.AnalyticsEvent{}, &models.ExperimentAssignment{}, &models.DripLead{}, &models.PaymentTransaction{}, &models.CampaignLink{}, &models.CampaignLinkClick{}); err != nil {
 		t.Fatal(err)
 	}
 	return db
+}
+
+// campaignLink creates a minimal link row so click inserts satisfy the foreign
+// key on PostgreSQL and stay readable in SQLite.
+func campaignLink(t *testing.T, db *gorm.DB, slug string) models.CampaignLink {
+	t.Helper()
+	link := models.CampaignLink{Slug: slug, Title: slug, TargetType: "landing", IsActive: true}
+	if err := db.Create(&link).Error; err != nil {
+		t.Fatal(err)
+	}
+	return link
 }
 
 func TestCleaner_Retention(t *testing.T) {
@@ -34,20 +45,31 @@ func TestCleaner_Retention(t *testing.T) {
 	db.Create(&models.AnalyticsEvent{VisitorID: "v-new", Step: "landing_view", CreatedAt: recent})
 	db.Create(&models.ExperimentAssignment{Experiment: "hero_cta_copy", Variant: "control", VisitorID: "v-old", CreatedAt: old})
 	db.Create(&models.ExperimentAssignment{Experiment: "hero_cta_copy", Variant: "control", VisitorID: "v-new", CreatedAt: recent})
+	link := campaignLink(t, db, "retention")
+	db.Create(&models.CampaignLinkClick{LinkID: link.ID, VisitorID: "v-old", CreatedAt: old})
+	db.Create(&models.CampaignLinkClick{LinkID: link.ID, VisitorID: "v-new", CreatedAt: recent})
 
 	cleaner := NewCleaner(db, 180)
 	deleted, err := cleaner.RunOnce(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if deleted != 2 {
-		t.Fatalf("expected 2 deleted rows, got %d", deleted)
+	if deleted != 3 {
+		t.Fatalf("expected 3 deleted rows, got %d", deleted)
 	}
-	var events, assignments int64
+	var events, assignments, clicks int64
 	db.Model(&models.AnalyticsEvent{}).Count(&events)
 	db.Model(&models.ExperimentAssignment{}).Count(&assignments)
-	if events != 1 || assignments != 1 {
-		t.Fatalf("recent rows must be kept: events=%d assignments=%d", events, assignments)
+	db.Model(&models.CampaignLinkClick{}).Count(&clicks)
+	if events != 1 || assignments != 1 || clicks != 1 {
+		t.Fatalf("recent rows must be kept: events=%d assignments=%d clicks=%d", events, assignments, clicks)
+	}
+	var kept models.CampaignLinkClick
+	if err := db.First(&kept).Error; err != nil {
+		t.Fatal(err)
+	}
+	if kept.VisitorID != "v-new" {
+		t.Fatalf("recent click must be kept, got visitor %q", kept.VisitorID)
 	}
 }
 
@@ -65,6 +87,10 @@ func TestEraseUser_AnonymizesAndKeepsFinance(t *testing.T) {
 	db.Create(&models.AnalyticsEvent{VisitorID: "visitor-erase", AttributionToken: "a_erase", Step: "landing_view", CreatedAt: now})
 	db.Create(&models.AnalyticsEvent{VisitorID: "other", Step: "landing_view", CreatedAt: now})
 	db.Create(&models.ExperimentAssignment{Experiment: "hero_cta_copy", Variant: "control", VisitorID: "visitor-erase", CreatedAt: now})
+	link := campaignLink(t, db, "erase")
+	db.Create(&models.CampaignLinkClick{LinkID: link.ID, VisitorID: "visitor-erase", CreatedAt: now})
+	db.Create(&models.CampaignLinkClick{LinkID: link.ID, AttributionToken: "a_erase", CreatedAt: now})
+	db.Create(&models.CampaignLinkClick{LinkID: link.ID, VisitorID: "other", CreatedAt: now})
 	db.Create(&models.PaymentTransaction{PaymentID: "keep-me", TelegramID: user.TelegramID, Amount: 6900, AmountKopecks: 690000, Status: "SUCCESS", CreatedAt: now})
 
 	if err := EraseUser(db, user.ID); err != nil {
@@ -87,6 +113,16 @@ func TestEraseUser_AnonymizesAndKeepsFinance(t *testing.T) {
 	db.Model(&models.ExperimentAssignment{}).Where("visitor_id = ?", "visitor-erase").Count(&assignments)
 	if assignments != 0 {
 		t.Fatalf("user experiment assignments must be deleted, got %d", assignments)
+	}
+	var clicks int64
+	db.Model(&models.CampaignLinkClick{}).Where("visitor_id = ? OR attribution_token = ?", "visitor-erase", "a_erase").Count(&clicks)
+	if clicks != 0 {
+		t.Fatalf("user click rows must be deleted, got %d", clicks)
+	}
+	var otherClicks int64
+	db.Model(&models.CampaignLinkClick{}).Where("visitor_id = ?", "other").Count(&otherClicks)
+	if otherClicks != 1 {
+		t.Fatalf("unrelated click must be preserved, got %d", otherClicks)
 	}
 	var txCount int64
 	db.Model(&models.PaymentTransaction{}).Where("payment_id = ?", "keep-me").Count(&txCount)
