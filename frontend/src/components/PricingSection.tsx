@@ -136,7 +136,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
               </div>
               <div className="flex items-center gap-2">
                 <Check className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                <span>Пошаговый визовый гайд J-1 и закрытый чат</span>
+                <span>Пошаговый визовый гайд J-1 и приватный Telegram-канал</span>
               </div>
             </div>
           </div>
@@ -334,7 +334,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
               </div>
               <div className="flex items-start gap-2.5">
                 <Check className="w-4 h-4 text-emerald-500 shrink-0 mt-0.5" />
-                <span>Закрытый Telegram-чат участников потока и ответы на вопросы</span>
+                <span>Приватный Telegram-канал участников потока и ответы на вопросы</span>
               </div>
             </div>
           </div>

@@ -1137,7 +1137,7 @@ func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 				inviteLink = h.cfg.TelegramInviteLink
 			}
 			if inviteLink == "" {
-				inviteLink = "https://t.me/+so_called_spark_private"
+				inviteLink = "https://t.me/+iP4vo_7H4UJhYjQy"
 			}
 			generatedInviteLink = inviteLink
 			msg := "🎉 Поздравляем! Ваш доступ к закрытому Telegram-каналу и комьюнити проекта «так называемый SPARK» успешно активирован.\n\nСсылка-приглашение в канал: " + inviteLink + "\n\nЧто дальше:\n1. Зайдите в канал по ссылке.\n2. Иль напишет вам в личку с несколькими вопросами — ответьте, пожалуйста.\n3. Все задания и материалы — в канале."
