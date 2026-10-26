@@ -419,8 +419,10 @@ type CampaignLink struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
-// CampaignLinkClick is one anonymous click on a campaign link. The IP is only
-// ever stored as a salted hash, never in clear text.
+// CampaignLinkClick is one click on a campaign link. It keeps an anonymous
+// visitor id, an attribution token and the User-Agent/Referer headers truncated
+// to 255 bytes. The IP is never persisted: ip_hash is reserved and currently
+// left empty.
 type CampaignLinkClick struct {
 	ID               uint      `gorm:"primaryKey" json:"id"`
 	LinkID           uint      `gorm:"index;not null" json:"link_id"`

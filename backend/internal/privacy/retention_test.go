@@ -73,6 +73,33 @@ func TestCleaner_Retention(t *testing.T) {
 	}
 }
 
+func TestCleaner_RetentionBoundary(t *testing.T) {
+	db := privacyDB(t)
+	link := campaignLink(t, db, "retention-boundary")
+	// A 180-day window: 179 days is inside and must survive, 181 is outside.
+	inside := time.Now().AddDate(0, 0, -179)
+	outside := time.Now().AddDate(0, 0, -181)
+	db.Create(&models.CampaignLinkClick{LinkID: link.ID, VisitorID: "v-inside", CreatedAt: inside})
+	db.Create(&models.CampaignLinkClick{LinkID: link.ID, VisitorID: "v-outside", CreatedAt: outside})
+
+	deleted, err := NewCleaner(db, 180).RunOnce(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if deleted != 1 {
+		t.Fatalf("expected only the 181-day-old click deleted, got %d", deleted)
+	}
+	var kept, removed int64
+	db.Model(&models.CampaignLinkClick{}).Where("visitor_id = ?", "v-inside").Count(&kept)
+	db.Model(&models.CampaignLinkClick{}).Where("visitor_id = ?", "v-outside").Count(&removed)
+	if kept != 1 {
+		t.Fatalf("click inside the retention window must be kept, got %d", kept)
+	}
+	if removed != 0 {
+		t.Fatalf("click outside the retention window must be deleted, got %d", removed)
+	}
+}
+
 func TestEraseUser_AnonymizesAndKeepsFinance(t *testing.T) {
 	db := privacyDB(t)
 	now := time.Now()
