@@ -999,6 +999,10 @@ func TestCampaignLinkAdmin_ListIncludesClickCounts(t *testing.T) {
 	if err := db.Create(&models.CampaignLinkClick{LinkID: busy.ID, VisitorID: "vbbbbbbbbbbbbbbbb"}).Error; err != nil {
 		t.Fatalf("failed to seed a click: %v", err)
 	}
+	// A click without a visitor id is still a click, but never a visitor.
+	if err := db.Create(&models.CampaignLinkClick{LinkID: busy.ID, VisitorID: ""}).Error; err != nil {
+		t.Fatalf("failed to seed a click: %v", err)
+	}
 
 	rec := performJSON(t, router, http.MethodGet, "/api/v1/admin/links", nil)
 	expectStatus(t, rec, http.StatusOK)
@@ -1011,8 +1015,8 @@ func TestCampaignLinkAdmin_ListIncludesClickCounts(t *testing.T) {
 	for _, link := range links {
 		bySlug[link.Slug] = link
 	}
-	if got := bySlug["busy"]; got.Clicks != 3 || got.UniqueVisitors != 2 {
-		t.Errorf("expected busy to have 3 clicks / 2 visitors, got %d / %d", got.Clicks, got.UniqueVisitors)
+	if got := bySlug["busy"]; got.Clicks != 4 || got.UniqueVisitors != 2 {
+		t.Errorf("expected busy to have 4 clicks / 2 visitors, got %d / %d", got.Clicks, got.UniqueVisitors)
 	}
 	if got := bySlug["quiet"]; got.Clicks != 0 || got.UniqueVisitors != 0 {
 		t.Errorf("expected quiet to have no clicks, got %d / %d", got.Clicks, got.UniqueVisitors)
@@ -1026,8 +1030,15 @@ func TestCampaignLinkReport_AggregatesTrafficAndMoney(t *testing.T) {
 
 	link := models.CampaignLink{Slug: "ytb", Title: "YouTube", TargetType: "landing", IsActive: true}
 	quiet := models.CampaignLink{Slug: "quiet", Title: "Quiet", TargetType: "channel", TargetValue: "https://t.me/spark_prep_channel", IsActive: true}
+	// A paused link keeps its history but stops collecting clicks; the report
+	// still lists it (zeroed here) so past periods never lose a row.
+	paused := models.CampaignLink{Slug: "paused", Title: "Paused", TargetType: "landing", IsActive: true}
 	seedCampaignLink(t, db, &link)
 	seedCampaignLink(t, db, &quiet)
+	seedCampaignLink(t, db, &paused)
+	if err := db.Model(&models.CampaignLink{}).Where("id = ?", paused.ID).Update("is_active", false).Error; err != nil {
+		t.Fatalf("failed to pause the link: %v", err)
+	}
 
 	const (
 		visitorOne = "vaaaaaaaaaaaaaaaa"
@@ -1078,8 +1089,12 @@ func TestCampaignLinkReport_AggregatesTrafficAndMoney(t *testing.T) {
 	expectStatus(t, rec, http.StatusOK)
 
 	report := decodeJSON[LinkReportResponse](t, rec)
-	if len(report.Rows) != 2 {
-		t.Fatalf("expected two report rows, got %d (%+v)", len(report.Rows), report.Rows)
+	if len(report.Rows) != 3 {
+		t.Fatalf("expected three report rows, got %d (%+v)", len(report.Rows), report.Rows)
+	}
+	bySlug := make(map[string]LinkReportRow, len(report.Rows))
+	for _, candidate := range report.Rows {
+		bySlug[candidate.Slug] = candidate
 	}
 	row := report.Rows[0]
 	if row.Slug != "ytb" {
@@ -1101,19 +1116,21 @@ func TestCampaignLinkReport_AggregatesTrafficAndMoney(t *testing.T) {
 		t.Errorf("expected 1 payment, got %d", row.Payments)
 	}
 	assertFloat(t, "revenue", row.Revenue, 10900)
-	assertFloat(t, "epc", row.EPC, 10900.0/3.0)
-	assertFloat(t, "rpv", row.RPV, 10900.0/2.0)
+	assertFloat(t, "epc", row.EPC, 3633.33)
+	assertFloat(t, "rpv", row.RPV, 5450)
 
-	empty := report.Rows[1]
-	if empty.Slug != "quiet" {
-		t.Fatalf("expected the quiet link second, got %q", empty.Slug)
+	for _, slug := range []string{"quiet", "paused"} {
+		empty, ok := bySlug[slug]
+		if !ok {
+			t.Fatalf("expected the %q link in the report", slug)
+		}
+		if empty.Clicks != 0 || empty.UniqueVisitors != 0 || empty.SiteVisits != 0 || empty.Leads != 0 || empty.Payments != 0 {
+			t.Errorf("expected a zeroed row for %q, got %+v", slug, empty)
+		}
+		assertFloat(t, slug+" revenue", empty.Revenue, 0)
+		assertFloat(t, slug+" epc", empty.EPC, 0)
+		assertFloat(t, slug+" rpv", empty.RPV, 0)
 	}
-	if empty.Clicks != 0 || empty.UniqueVisitors != 0 || empty.SiteVisits != 0 || empty.Leads != 0 || empty.Payments != 0 {
-		t.Errorf("expected a zeroed row for an unused link, got %+v", empty)
-	}
-	assertFloat(t, "quiet revenue", empty.Revenue, 0)
-	assertFloat(t, "quiet epc", empty.EPC, 0)
-	assertFloat(t, "quiet rpv", empty.RPV, 0)
 
 	assertFloat(t, "unattributed revenue", report.UnattributedRevenue, 5000)
 }
@@ -1212,5 +1229,201 @@ func TestCampaignLinkAdmin_CreateInactivePersistsFalse(t *testing.T) {
 	}
 	if stored.IsActive {
 		t.Fatalf("expected an explicitly inactive link to stay inactive in the database")
+	}
+}
+
+func TestCampaignLinkReport_AttributesEachPaymentToOneLink(t *testing.T) {
+	db := linksAdminPGDB(t)
+	router := newCampaignLinkAdminRouter(db)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	first := models.CampaignLink{Slug: "link-a", Title: "First", TargetType: "landing", IsActive: true}
+	second := models.CampaignLink{Slug: "link-b", Title: "Second", TargetType: "landing", IsActive: true}
+	seedCampaignLink(t, db, &first)
+	seedCampaignLink(t, db, &second)
+
+	const visitor = "vdddddddddddddddd"
+	for _, click := range []models.CampaignLinkClick{
+		{LinkID: first.ID, VisitorID: visitor, CreatedAt: now.Add(-2 * time.Hour)},
+		{LinkID: second.ID, VisitorID: visitor, CreatedAt: now.Add(-time.Hour)},
+	} {
+		if err := db.Create(&click).Error; err != nil {
+			t.Fatalf("failed to seed a click: %v", err)
+		}
+	}
+	if err := db.Create(&models.PaymentTransaction{
+		PaymentID: "pay_one",
+		VisitorID: visitor,
+		Amount:    1000,
+		Status:    "SUCCESS",
+		CreatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("failed to seed a payment: %v", err)
+	}
+
+	query := url.Values{}
+	query.Set("from", now.Add(-3*time.Hour).Format(time.RFC3339))
+	query.Set("to", now.Add(time.Hour).Format(time.RFC3339))
+	rec := performJSON(t, router, http.MethodGet, "/api/v1/admin/links/report?"+query.Encode(), nil)
+	expectStatus(t, rec, http.StatusOK)
+
+	report := decodeJSON[LinkReportResponse](t, rec)
+	bySlug := make(map[string]LinkReportRow, len(report.Rows))
+	for _, row := range report.Rows {
+		bySlug[row.Slug] = row
+	}
+	if got := bySlug["link-a"]; got.Payments != 1 || math.Abs(got.Revenue-1000) > 0.005 {
+		t.Fatalf("expected link-a (earliest click) to own the payment, got payments=%d revenue=%.2f", got.Payments, got.Revenue)
+	}
+	if got := bySlug["link-b"]; got.Payments != 0 || got.Revenue != 0 {
+		t.Fatalf("expected link-b to have no money, got payments=%d revenue=%.2f", got.Payments, got.Revenue)
+	}
+
+	var rowsRevenue float64
+	for _, row := range report.Rows {
+		rowsRevenue += row.Revenue
+	}
+	assertFloat(t, "sum(rows.revenue) + unattributed", rowsRevenue+report.UnattributedRevenue, 1000)
+}
+
+func TestCampaignLinkReport_IgnoresClicksAfterPayment(t *testing.T) {
+	db := linksAdminPGDB(t)
+	router := newCampaignLinkAdminRouter(db)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	link := models.CampaignLink{Slug: "late-click", Title: "Late click", TargetType: "landing", IsActive: true}
+	seedCampaignLink(t, db, &link)
+
+	const visitor = "veeeeeeeeeeeeeeee"
+	if err := db.Create(&models.PaymentTransaction{
+		PaymentID: "pay_before_click",
+		VisitorID: visitor,
+		Amount:    1000,
+		Status:    "SUCCESS",
+		CreatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("failed to seed a payment: %v", err)
+	}
+	if err := db.Create(&models.CampaignLinkClick{
+		LinkID:    link.ID,
+		VisitorID: visitor,
+		CreatedAt: now.Add(20 * time.Minute),
+	}).Error; err != nil {
+		t.Fatalf("failed to seed a click: %v", err)
+	}
+
+	query := url.Values{}
+	query.Set("from", now.Add(-time.Hour).Format(time.RFC3339))
+	query.Set("to", now.Add(time.Hour).Format(time.RFC3339))
+	rec := performJSON(t, router, http.MethodGet, "/api/v1/admin/links/report?"+query.Encode(), nil)
+	expectStatus(t, rec, http.StatusOK)
+
+	report := decodeJSON[LinkReportResponse](t, rec)
+	if len(report.Rows) != 1 {
+		t.Fatalf("expected one report row, got %d", len(report.Rows))
+	}
+	if got := report.Rows[0]; got.Payments != 0 || got.Revenue != 0 {
+		t.Fatalf("a click after the payment must not own it, got payments=%d revenue=%.2f", got.Payments, got.Revenue)
+	}
+	assertFloat(t, "unattributed revenue", report.UnattributedRevenue, 1000)
+}
+
+func TestCampaignLinkReport_ExcludesFailedAndPendingPayments(t *testing.T) {
+	db := linksAdminPGDB(t)
+	router := newCampaignLinkAdminRouter(db)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	link := models.CampaignLink{Slug: "no-money", Title: "No money", TargetType: "landing", IsActive: true}
+	seedCampaignLink(t, db, &link)
+
+	const visitor = "vffffffffffffffff"
+	if err := db.Create(&models.CampaignLinkClick{
+		LinkID:    link.ID,
+		VisitorID: visitor,
+		CreatedAt: now.Add(-time.Hour),
+	}).Error; err != nil {
+		t.Fatalf("failed to seed a click: %v", err)
+	}
+	for _, payment := range []models.PaymentTransaction{
+		{PaymentID: "pay_fail", VisitorID: visitor, Amount: 1000, Status: "FAIL", CreatedAt: now},
+		{PaymentID: "pay_pending", VisitorID: visitor, Amount: 500, Status: "PENDING", CreatedAt: now},
+	} {
+		if err := db.Create(&payment).Error; err != nil {
+			t.Fatalf("failed to seed a payment: %v", err)
+		}
+	}
+
+	query := url.Values{}
+	query.Set("from", now.Add(-2*time.Hour).Format(time.RFC3339))
+	query.Set("to", now.Add(time.Hour).Format(time.RFC3339))
+	rec := performJSON(t, router, http.MethodGet, "/api/v1/admin/links/report?"+query.Encode(), nil)
+	expectStatus(t, rec, http.StatusOK)
+
+	report := decodeJSON[LinkReportResponse](t, rec)
+	if len(report.Rows) != 1 {
+		t.Fatalf("expected one report row, got %d", len(report.Rows))
+	}
+	if got := report.Rows[0]; got.Payments != 0 || got.Revenue != 0 {
+		t.Fatalf("only SUCCESS payments count, got payments=%d revenue=%.2f", got.Payments, got.Revenue)
+	}
+	assertFloat(t, "unattributed revenue", report.UnattributedRevenue, 0)
+}
+
+func TestCampaignLinkReport_DoesNotCountEmptyVisitorAsUnique(t *testing.T) {
+	db := linksAdminPGDB(t)
+	router := newCampaignLinkAdminRouter(db)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	link := models.CampaignLink{Slug: "anonymous", Title: "Anonymous", TargetType: "landing", IsActive: true}
+	seedCampaignLink(t, db, &link)
+	for _, click := range []models.CampaignLinkClick{
+		{LinkID: link.ID, VisitorID: "", CreatedAt: now},
+		{LinkID: link.ID, VisitorID: "vaaaaaaaaaaaaaaab", CreatedAt: now},
+	} {
+		if err := db.Create(&click).Error; err != nil {
+			t.Fatalf("failed to seed a click: %v", err)
+		}
+	}
+
+	query := url.Values{}
+	query.Set("from", now.Add(-time.Hour).Format(time.RFC3339))
+	query.Set("to", now.Add(time.Hour).Format(time.RFC3339))
+	rec := performJSON(t, router, http.MethodGet, "/api/v1/admin/links/report?"+query.Encode(), nil)
+	expectStatus(t, rec, http.StatusOK)
+
+	report := decodeJSON[LinkReportResponse](t, rec)
+	if len(report.Rows) != 1 {
+		t.Fatalf("expected one report row, got %d", len(report.Rows))
+	}
+	if got := report.Rows[0]; got.Clicks != 2 || got.UniqueVisitors != 1 {
+		t.Fatalf("expected 2 clicks / 1 unique visitor, got %d / %d", got.Clicks, got.UniqueVisitors)
+	}
+}
+
+func TestCampaignLinkReport_DateOnlyToIncludesToday(t *testing.T) {
+	db := linksAdminPGDB(t)
+	router := newCampaignLinkAdminRouter(db)
+	now := time.Now()
+
+	link := models.CampaignLink{Slug: "today", Title: "Today", TargetType: "landing", IsActive: true}
+	seedCampaignLink(t, db, &link)
+	if err := db.Create(&models.CampaignLinkClick{
+		LinkID:    link.ID,
+		VisitorID: "vaaaaaaaaaaaaaaac",
+		CreatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("failed to seed a click: %v", err)
+	}
+
+	today := now.In(campaignReportZone).Format(campaignReportDateLayout)
+	rec := performJSON(t, router, http.MethodGet, "/api/v1/admin/links/report?to="+today, nil)
+	expectStatus(t, rec, http.StatusOK)
+
+	report := decodeJSON[LinkReportResponse](t, rec)
+	if len(report.Rows) != 1 {
+		t.Fatalf("expected one report row, got %d", len(report.Rows))
+	}
+	if got := report.Rows[0]; got.Clicks != 1 || got.UniqueVisitors != 1 {
+		t.Fatalf("a date-only to must cover the whole current day, got clicks=%d visitors=%d", got.Clicks, got.UniqueVisitors)
 	}
 }

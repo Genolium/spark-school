@@ -461,7 +461,26 @@ func (h *CampaignLinkHandler) Create(c *gin.Context) {
 		return
 	}
 
-	if err := h.db.Create(&link).Error; err != nil {
+	// Creating the row and forcing is_active=false happen in one transaction:
+	// a failed deactivate must not leave an active link behind while the
+	// request reports 500.
+	err = h.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(&link).Error; err != nil {
+			return err
+		}
+		// GORM omits the zero value of a default:true bool on insert and writes
+		// the default back into the struct, so an explicitly inactive link needs
+		// a second, explicit write.
+		if desiredActive {
+			return nil
+		}
+		if err := tx.Model(&models.CampaignLink{}).Where("id = ?", link.ID).Update("is_active", false).Error; err != nil {
+			return err
+		}
+		link.IsActive = false
+		return nil
+	})
+	if err != nil {
 		// A concurrent request may have taken the slug between the check and
 		// the insert; report that as a conflict rather than a server error.
 		if h.campaignLinkSlugTaken(link.Slug, 0) {
@@ -470,16 +489,6 @@ func (h *CampaignLinkHandler) Create(c *gin.Context) {
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Не удалось создать ссылку"})
 		return
-	}
-	// GORM omits the zero value of a default:true bool on insert and writes the
-	// default back into the struct, so an explicitly inactive link needs a
-	// second, explicit write.
-	if !desiredActive {
-		if err := h.db.Model(&models.CampaignLink{}).Where("id = ?", link.ID).Update("is_active", false).Error; err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Не удалось сохранить статус ссылки"})
-			return
-		}
-		link.IsActive = false
 	}
 
 	c.JSON(http.StatusCreated, link)
@@ -691,14 +700,24 @@ leads AS (
     GROUP BY c.link_id
 ),
 paid AS (
-    SELECT DISTINCT c.link_id, pt.payment_id, pt.amount
-    FROM campaign_link_clicks c
-    JOIN payment_transactions pt
-      ON pt.visitor_id = c.visitor_id
-     AND pt.status = 'SUCCESS'
-     AND pt.created_at >= ? AND pt.created_at < ?
-    WHERE c.created_at >= ? AND c.created_at < ?
+    -- A payment belongs to exactly one link: the link the visitor clicked
+    -- first, among clicks no later than the payment itself. Without this,
+    -- a visitor who clicked two links would have one payment counted twice.
+    -- Visits and leads stay per-link distinct counts: arriving on two links
+    -- legitimately produces a visit for each, while money is only spent once.
+    SELECT DISTINCT ON (pt.payment_id)
+           pt.payment_id,
+           pt.amount,
+           c.link_id
+    FROM payment_transactions pt
+    JOIN campaign_link_clicks c
+      ON c.visitor_id = pt.visitor_id
+     AND c.created_at <= pt.created_at
+    WHERE pt.status = 'SUCCESS'
+      AND pt.created_at >= ? AND pt.created_at < ?
+      AND c.created_at >= ? AND c.created_at < ?
       AND c.visitor_id <> ''
+    ORDER BY pt.payment_id, c.created_at, c.id
 ),
 money AS (
     SELECT link_id,
@@ -736,14 +755,15 @@ ORDER BY COALESCE(cl.clicks, 0) DESC, l.slug ASC`
 	}
 	for i := range rows {
 		if rows[i].Clicks > 0 {
-			rows[i].EPC = rows[i].Revenue / float64(rows[i].Clicks)
+			rows[i].EPC = roundAmount(rows[i].Revenue / float64(rows[i].Clicks))
 		}
 		if rows[i].UniqueVisitors > 0 {
-			rows[i].RPV = rows[i].Revenue / float64(rows[i].UniqueVisitors)
+			rows[i].RPV = roundAmount(rows[i].Revenue / float64(rows[i].UniqueVisitors))
 		}
 	}
 
-	// Revenue whose payer has no click in the window belongs to no link.
+	// Revenue whose payer has no click at or before the payment in the window
+	// belongs to no link.
 	var unattributed float64
 	if err := h.db.Raw(`
 SELECT COALESCE(SUM(pt.amount), 0)
@@ -755,6 +775,7 @@ WHERE pt.status = 'SUCCESS'
       FROM campaign_link_clicks c
       WHERE c.visitor_id = pt.visitor_id
         AND c.created_at >= ? AND c.created_at < ?
+        AND c.created_at <= pt.created_at
         AND c.visitor_id <> ''
   )`, from, to, from, to).Scan(&unattributed).Error; err != nil {
 		log.Printf("[links] failed to compute unattributed revenue: %v", err)
@@ -764,7 +785,7 @@ WHERE pt.status = 'SUCCESS'
 
 	c.JSON(http.StatusOK, LinkReportResponse{
 		Rows:                rows,
-		UnattributedRevenue: unattributed,
+		UnattributedRevenue: roundAmount(unattributed),
 	})
 }
 
@@ -796,20 +817,29 @@ func campaignCreatedBy(c *gin.Context) string {
 	return username
 }
 
+// campaignReportZone is the business day used by the funnel and revenue
+// reports: date-only from/to values mean Moscow midnights, not UTC ones.
+var campaignReportZone = time.FixedZone("MSK", 3*3600)
+
 // campaignReportWindow parses from/to, defaulting to the last seven days.
-// Accepted inputs are RFC3339, YYYY-MM-DD and YYYY-MM-DD HH:MM:SS (UTC).
+// Accepted inputs are RFC3339 (used verbatim), YYYY-MM-DD and
+// YYYY-MM-DD HH:MM:SS (both interpreted in Moscow time). A date-only `to`
+// covers the whole day, matching the funnel and revenue reports.
 func campaignReportWindow(c *gin.Context, now time.Time) (time.Time, time.Time, error) {
 	to := now
 	if raw := strings.TrimSpace(c.Query("to")); raw != "" {
-		parsed, err := parseCampaignReportTime(raw)
+		parsed, dateOnly, err := parseCampaignReportTime(raw)
 		if err != nil {
 			return time.Time{}, time.Time{}, errors.New("Параметр to должен быть датой (YYYY-MM-DD) или RFC3339")
 		}
 		to = parsed
+		if dateOnly {
+			to = to.Add(24 * time.Hour)
+		}
 	}
 	from := to.Add(-campaignReportDefaultWindow)
 	if raw := strings.TrimSpace(c.Query("from")); raw != "" {
-		parsed, err := parseCampaignReportTime(raw)
+		parsed, _, err := parseCampaignReportTime(raw)
 		if err != nil {
 			return time.Time{}, time.Time{}, errors.New("Параметр from должен быть датой (YYYY-MM-DD) или RFC3339")
 		}
@@ -821,11 +851,17 @@ func campaignReportWindow(c *gin.Context, now time.Time) (time.Time, time.Time, 
 	return from, to, nil
 }
 
-func parseCampaignReportTime(raw string) (time.Time, error) {
-	for _, layout := range []string{time.RFC3339, campaignReportDateLayout, campaignReportDateTimeLayout} {
-		if parsed, err := time.ParseInLocation(layout, raw, time.UTC); err == nil {
-			return parsed, nil
-		}
+// parseCampaignReportTime reports whether the value was date-only so the
+// caller can decide how to treat the end of the window.
+func parseCampaignReportTime(raw string) (time.Time, bool, error) {
+	if parsed, err := time.Parse(time.RFC3339, raw); err == nil {
+		return parsed, false, nil
 	}
-	return time.Time{}, errors.New("unsupported time format")
+	if parsed, err := time.ParseInLocation(campaignReportDateLayout, raw, campaignReportZone); err == nil {
+		return parsed, true, nil
+	}
+	if parsed, err := time.ParseInLocation(campaignReportDateTimeLayout, raw, campaignReportZone); err == nil {
+		return parsed, false, nil
+	}
+	return time.Time{}, false, errors.New("unsupported time format")
 }
