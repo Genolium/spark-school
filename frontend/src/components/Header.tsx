@@ -39,11 +39,12 @@ export function Header({ onOpenPayment }: HeaderProps) {
     };
   }, []);
 
-  const navLinks = [
+  const navLinks: { label: string; href: string; className?: string }[] = [
     { label: "Программа", href: "/#grant" },
     { label: "Маршрут", href: "/#roadmap" },
     { label: "Кампусы", href: "/#map" },
     { label: "Автор", href: "/#author" },
+    { label: "Принципы", href: "/principles", className: "hidden lg:inline" },
     { label: "Тариф", href: "/#pricing" },
     // { label: "Партнёрам", href: "/partner" },
   ];
@@ -105,7 +106,7 @@ export function Header({ onOpenPayment }: HeaderProps) {
                 key={link.label}
                 href={link.href}
                 onClick={(e) => handleNavClick(e, link.href)}
-                className="hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors duration-200"
+                className={`hover:text-emerald-600 dark:hover:text-emerald-400 transition-colors duration-200 ${link.className || ""}`}
               >
                 {link.label}
               </Link>

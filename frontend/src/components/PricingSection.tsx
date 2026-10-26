@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import { motion } from "framer-motion";
 import { Check, ArrowUpRight, ShieldCheck, CreditCard, Sparkles, Crown, TrendingUp } from "lucide-react";
 import { api, PlacesStats, CoursePricing } from "@/lib/api";
@@ -53,6 +54,13 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
         <p className="mt-4 text-base text-slate-600 dark:text-slate-300 leading-relaxed font-normal">
           Выбери комфортный формат подготовки: самостоятельный по видео- и аудиоурокам, полное персональное менторство от финалиста SPARK 2026 или VIP-сопровождение под ключ.
         </p>
+        <Link
+          href="/principles"
+          className="mt-3 inline-flex items-center gap-1.5 text-xs font-mono text-emerald-700 dark:text-emerald-400 hover:underline"
+        >
+          <span>Принципы нашей работы: не пишем заявку за вас и не гарантируем отбор</span>
+          <ArrowUpRight className="w-3.5 h-3.5" />
+        </Link>
 
         {/* Live Scarcity Counter Bar — only after a real API response */}
         <div className="mt-6 inline-flex flex-wrap items-center justify-center gap-3 px-4 py-2 rounded-full bg-amber-500/10 border border-amber-500/25 text-xs font-mono">

@@ -118,6 +118,14 @@ export function Footer() {
             </li>
             <li>
               <Link
+                href="/principles"
+                className="hover:text-emerald-600 dark:hover:text-white transition-colors"
+              >
+                Принципы нашей работы
+              </Link>
+            </li>
+            <li>
+              <Link
                 href="/#pricing"
                 onClick={(e) => handleNavClick(e, "/#pricing")}
                 className="hover:text-emerald-600 dark:hover:text-white transition-colors"
