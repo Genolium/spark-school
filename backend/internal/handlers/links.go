@@ -20,8 +20,8 @@ import (
 const (
 	// campaignBotURL is the only bot the redirect may send visitors to.
 	campaignBotURL = "https://t.me/spark_prep_bot"
-	// campaignTelegramPrefix is the only host allowed for channel links.
-	campaignTelegramPrefix = "https://t.me/"
+	// campaignTelegramHost is the only host allowed for channel links.
+	campaignTelegramHost = "t.me"
 
 	campaignVisitorIDLength     = 12
 	campaignAttributionIDLength = 12
@@ -85,7 +85,7 @@ func campaignTargetURL(link models.CampaignLink, visitorID, attributionToken, fr
 		return campaignBotTargetURL(link.TargetValue, attributionToken)
 	case "channel":
 		target := strings.TrimSpace(link.TargetValue)
-		if strings.HasPrefix(target, campaignTelegramPrefix) {
+		if campaignIsTelegramLink(target) {
 			return target
 		}
 		fallback := strings.TrimSpace(fallbackChannelURL)
@@ -123,18 +123,40 @@ func campaignTargetURL(link models.CampaignLink, visitorID, attributionToken, fr
 	}
 }
 
+// campaignIsTelegramLink reports whether target is an https link to t.me.
+// The host is compared case-insensitively and parsed rather than prefix-matched
+// so lookalike hosts (t.me.evil.example, t.me@evil.example) are rejected.
+func campaignIsTelegramLink(target string) bool {
+	parsed, err := url.Parse(target)
+	if err != nil {
+		return false
+	}
+	if !strings.EqualFold(parsed.Scheme, "https") {
+		return false
+	}
+	return strings.EqualFold(parsed.Hostname(), campaignTelegramHost)
+}
+
 // campaignBotTargetURL builds a bot deep link whose start payload carries the
-// target value and the attribution token, trimmed to Telegram's limit.
+// target value and the attribution token, trimmed to Telegram's limit. The
+// action is shortened first so the attribution token always survives intact.
 func campaignBotTargetURL(targetValue, attributionToken string) string {
 	action := campaignStartValueSanitizer.ReplaceAllString(strings.TrimSpace(targetValue), "")
 	var start string
-	switch {
-	case action != "" && attributionToken != "":
-		start = action + "_a_" + attributionToken
-	case attributionToken != "":
-		start = "a_" + attributionToken
-	default:
+	if attributionToken == "" {
 		start = action
+	} else if action == "" {
+		start = "a_" + attributionToken
+	} else {
+		suffix := "_a_" + attributionToken
+		maxAction := campaignStartParamMaxLength - len(suffix)
+		if maxAction < 0 {
+			maxAction = 0
+		}
+		if len(action) > maxAction {
+			action = action[:maxAction]
+		}
+		start = action + suffix
 	}
 	if len(start) > campaignStartParamMaxLength {
 		start = start[:campaignStartParamMaxLength]

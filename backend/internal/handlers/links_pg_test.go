@@ -76,12 +76,13 @@ func newCampaignLinksRouter(db *gorm.DB) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.GET("/r/:slug", RedirectCampaignLink(db, testLinksFrontendURL, testLinksChannelURL))
+	router.HEAD("/r/:slug", RedirectCampaignLink(db, testLinksFrontendURL, testLinksChannelURL))
 	return router
 }
 
-func seedCampaignLink(t *testing.T, db *gorm.DB, link models.CampaignLink) {
+func seedCampaignLink(t *testing.T, db *gorm.DB, link *models.CampaignLink) {
 	t.Helper()
-	if err := db.Create(&link).Error; err != nil {
+	if err := db.Create(link).Error; err != nil {
 		t.Fatalf("failed to seed campaign link: %v", err)
 	}
 }
@@ -97,14 +98,15 @@ func getCampaignLink(router *gin.Engine, slug string) *httptest.ResponseRecorder
 
 func TestRedirectCampaignLink_RecordsClickAndRedirects(t *testing.T) {
 	db := linksPGDB(t)
-	seedCampaignLink(t, db, models.CampaignLink{
+	link := models.CampaignLink{
 		Slug:        "yt",
 		Title:       "YouTube october",
 		TargetType:  "landing",
 		UTMSource:   "youtube",
 		UTMCampaign: "oct",
 		IsActive:    true,
-	})
+	}
+	seedCampaignLink(t, db, &link)
 	router := newCampaignLinksRouter(db)
 
 	rec := getCampaignLink(router, "yt")
@@ -142,6 +144,9 @@ func TestRedirectCampaignLink_RecordsClickAndRedirects(t *testing.T) {
 		t.Fatalf("expected exactly one recorded click, got %d", len(clicks))
 	}
 	click := clicks[0]
+	if click.LinkID != link.ID {
+		t.Errorf("expected click to reference link %d, got %d", link.ID, click.LinkID)
+	}
 	if click.VisitorID != visitorID {
 		t.Errorf("expected click visitor id %q, got %q", visitorID, click.VisitorID)
 	}
@@ -156,6 +161,28 @@ func TestRedirectCampaignLink_RecordsClickAndRedirects(t *testing.T) {
 	}
 	if click.Referer != "https://youtube.com/watch" {
 		t.Errorf("expected referer to be recorded, got %q", click.Referer)
+	}
+}
+
+func TestRedirectCampaignLink_HeadRequestRedirects(t *testing.T) {
+	db := linksPGDB(t)
+	seedCampaignLink(t, db, &models.CampaignLink{
+		Slug:       "yt",
+		Title:      "YouTube",
+		TargetType: "landing",
+		IsActive:   true,
+	})
+	router := newCampaignLinksRouter(db)
+
+	req := httptest.NewRequest(http.MethodHead, "/r/yt", nil)
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusFound {
+		t.Fatalf("expected status %d for HEAD, got %d", http.StatusFound, rec.Code)
+	}
+	if rec.Header().Get("Location") == "" {
+		t.Fatalf("expected a Location header for HEAD")
 	}
 }
 
@@ -185,7 +212,7 @@ func TestRedirectCampaignLink_InactiveSlugIs404(t *testing.T) {
 		TargetType: "landing",
 		IsActive:   true,
 	}
-	seedCampaignLink(t, db, link)
+	seedCampaignLink(t, db, &link)
 	// GORM omits the zero value on insert and lets the column default (true)
 	// win, so deactivate the row explicitly.
 	if err := db.Model(&models.CampaignLink{}).Where("slug = ?", "off").Update("is_active", false).Error; err != nil {
@@ -197,11 +224,19 @@ func TestRedirectCampaignLink_InactiveSlugIs404(t *testing.T) {
 	if rec.Code != http.StatusNotFound {
 		t.Fatalf("expected status %d for an inactive link, got %d", http.StatusNotFound, rec.Code)
 	}
+
+	var count int64
+	if err := db.Model(&models.CampaignLinkClick{}).Count(&count).Error; err != nil {
+		t.Fatalf("failed to count clicks: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("expected no click rows for an inactive slug, got %d", count)
+	}
 }
 
 func TestRedirectCampaignLink_BotTargetCarriesAttribution(t *testing.T) {
 	db := linksPGDB(t)
-	seedCampaignLink(t, db, models.CampaignLink{
+	seedCampaignLink(t, db, &models.CampaignLink{
 		Slug:        "yt",
 		Title:       "YouTube bot",
 		TargetType:  "bot",
@@ -239,7 +274,7 @@ func TestRedirectCampaignLink_BotTargetCarriesAttribution(t *testing.T) {
 
 func TestRedirectCampaignLink_TruncatesOversizedHeaders(t *testing.T) {
 	db := linksPGDB(t)
-	seedCampaignLink(t, db, models.CampaignLink{
+	seedCampaignLink(t, db, &models.CampaignLink{
 		Slug:       "yt",
 		Title:      "YouTube",
 		TargetType: "landing",
@@ -275,7 +310,7 @@ func TestRedirectCampaignLink_TruncatesOversizedHeaders(t *testing.T) {
 
 func TestRedirectCampaignLink_BotTargetWithoutTargetValue(t *testing.T) {
 	db := linksPGDB(t)
-	seedCampaignLink(t, db, models.CampaignLink{
+	seedCampaignLink(t, db, &models.CampaignLink{
 		Slug:       "yt",
 		Title:      "YouTube bot",
 		TargetType: "bot",
@@ -300,6 +335,50 @@ func TestRedirectCampaignLink_BotTargetWithoutTargetValue(t *testing.T) {
 	}
 }
 
+func TestRedirectCampaignLink_LongBotTargetKeepsAttribution(t *testing.T) {
+	db := linksPGDB(t)
+	longAction := strings.Repeat("x", 60)
+	seedCampaignLink(t, db, &models.CampaignLink{
+		Slug:        "yt",
+		Title:       "YouTube bot",
+		TargetType:  "bot",
+		TargetValue: longAction,
+		IsActive:    true,
+	})
+	router := newCampaignLinksRouter(db)
+
+	rec := getCampaignLink(router, "yt")
+	if rec.Code != http.StatusFound {
+		t.Fatalf("expected status %d, got %d", http.StatusFound, rec.Code)
+	}
+	parsed, err := url.Parse(rec.Header().Get("Location"))
+	if err != nil {
+		t.Fatalf("invalid Location header: %v", err)
+	}
+	start := parsed.Query().Get("start")
+	if len(start) > 64 {
+		t.Fatalf("expected the start payload to stay within 64 characters, got %d", len(start))
+	}
+	parts := strings.Split(start, "_a_")
+	if len(parts) != 2 {
+		t.Fatalf("expected the start payload to carry exactly one _a_ separator, got %q", start)
+	}
+	if parts[0] != longAction[:64-3-13] {
+		t.Errorf("expected the action to be shortened to %d characters, got %q", 64-3-13, parts[0])
+	}
+	if !testAttributionIDPattern.MatchString(parts[1]) {
+		t.Fatalf("expected an intact attribution token, got %q", parts[1])
+	}
+
+	var click models.CampaignLinkClick
+	if err := db.First(&click).Error; err != nil {
+		t.Fatalf("expected a recorded click, got %v", err)
+	}
+	if click.AttributionToken != parts[1] {
+		t.Fatalf("expected the payload token to match the recorded attribution token, payload %q click %q", parts[1], click.AttributionToken)
+	}
+}
+
 func TestRedirectCampaignLink_DoesNotOpenRedirect(t *testing.T) {
 	cases := []struct {
 		name        string
@@ -321,12 +400,17 @@ func TestRedirectCampaignLink_DoesNotOpenRedirect(t *testing.T) {
 			targetValue: "https://t.me/spark_prep_channel/42",
 			want:        "https://t.me/spark_prep_channel/42",
 		},
+		{
+			name:        "telegram host is matched case-insensitively",
+			targetValue: "https://T.ME/spark_prep_channel/7",
+			want:        "https://T.ME/spark_prep_channel/7",
+		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			db := linksPGDB(t)
-			seedCampaignLink(t, db, models.CampaignLink{
+			seedCampaignLink(t, db, &models.CampaignLink{
 				Slug:        "ch",
 				Title:       "Channel",
 				TargetType:  "channel",
