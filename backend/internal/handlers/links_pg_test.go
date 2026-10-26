@@ -1,16 +1,21 @@
 package handlers
 
 import (
+	"bytes"
 	"database/sql"
+	"encoding/json"
+	"math"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
+	"time"
 	"unicode/utf8"
 
 	"github.com/gin-gonic/gin"
@@ -622,5 +627,590 @@ func TestRedirectCampaignLink_DoesNotOpenRedirect(t *testing.T) {
 				t.Fatalf("open redirect is not allowed, got %q", rec.Header().Get("Location"))
 			}
 		})
+	}
+}
+
+// --- admin CRUD and report -------------------------------------------------
+
+// linksAdminPGDB prepares the campaign-link tables plus the analytics and
+// payment tables the report joins against.
+func linksAdminPGDB(t *testing.T) *gorm.DB {
+	t.Helper()
+	db := linksPGDB(t)
+	if err := db.AutoMigrate(&models.AnalyticsEvent{}, &models.PaymentTransaction{}); err != nil {
+		t.Fatalf("failed to migrate analytics/payment tables: %v", err)
+	}
+	return db
+}
+
+func newCampaignLinkAdminRouter(db *gorm.DB) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	handler := NewCampaignLinkHandler(db)
+	admin := router.Group("/api/v1/admin")
+	admin.GET("/links", handler.List)
+	admin.POST("/links", handler.Create)
+	admin.PUT("/links/:id", handler.Update)
+	admin.DELETE("/links/:id", handler.Delete)
+	admin.GET("/links/report", handler.Report)
+	return router
+}
+
+func performJSON(t *testing.T, router *gin.Engine, method, path string, payload any) *httptest.ResponseRecorder {
+	t.Helper()
+	var body []byte
+	if payload != nil {
+		encoded, err := json.Marshal(payload)
+		if err != nil {
+			t.Fatalf("failed to encode request: %v", err)
+		}
+		body = encoded
+	}
+	req := httptest.NewRequest(method, path, bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	return rec
+}
+
+func decodeJSON[T any](t *testing.T, rec *httptest.ResponseRecorder) T {
+	t.Helper()
+	var out T
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("failed to decode response %q: %v", rec.Body.String(), err)
+	}
+	return out
+}
+
+func expectStatus(t *testing.T, rec *httptest.ResponseRecorder, want int) {
+	t.Helper()
+	if rec.Code != want {
+		t.Fatalf("expected status %d, got %d (body %q)", want, rec.Code, rec.Body.String())
+	}
+}
+
+func assertFloat(t *testing.T, name string, got, want float64) {
+	t.Helper()
+	if math.Abs(got-want) > 0.005 {
+		t.Errorf("expected %s %.4f, got %.4f", name, want, got)
+	}
+}
+
+func TestSlugify(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "lowercases and hyphenates", raw: "YouTube Oct!", want: "youtube-oct"},
+		{name: "collapses separators", raw: "  --Hello__World--  ", want: "hello-world"},
+		{name: "drops dots to a separator", raw: "a.b", want: "a-b"},
+		{name: "drops query and slash noise", raw: "/r/Spring?x=1", want: "r-spring-x-1"},
+		{name: "keeps digits", raw: "Mixed CASE 42", want: "mixed-case-42"},
+		{name: "drops non-latin script", raw: "уже-латиница", want: ""},
+		{name: "truncates to forty characters", raw: strings.Repeat("x", 60), want: strings.Repeat("x", 40)},
+		{name: "trims a trailing dash after truncation", raw: strings.Repeat("a", 39) + " b", want: strings.Repeat("a", 39)},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := slugify(tc.raw); got != tc.want {
+				t.Fatalf("slugify(%q) = %q, want %q", tc.raw, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCampaignLinkAdmin_CreateNormalizesInput(t *testing.T) {
+	db := linksAdminPGDB(t)
+	router := newCampaignLinkAdminRouter(db)
+
+	rec := performJSON(t, router, http.MethodPost, "/api/v1/admin/links", map[string]any{
+		"slug":        "  YouTube-Oct_2026!! ",
+		"title":       "  YouTube October  ",
+		"target_type": " Landing ",
+		"utm_source":  "  youtube ",
+	})
+	expectStatus(t, rec, http.StatusCreated)
+
+	created := decodeJSON[models.CampaignLink](t, rec)
+	if created.ID == 0 {
+		t.Fatalf("expected the created link to carry an id")
+	}
+	if created.Slug != "youtube-oct-2026" {
+		t.Errorf("expected a normalized slug, got %q", created.Slug)
+	}
+	if created.Title != "YouTube October" {
+		t.Errorf("expected a trimmed title, got %q", created.Title)
+	}
+	if created.TargetType != "landing" {
+		t.Errorf("expected a normalized target type, got %q", created.TargetType)
+	}
+	if created.UTMSource != "youtube" {
+		t.Errorf("expected a trimmed utm_source, got %q", created.UTMSource)
+	}
+	if !created.IsActive {
+		t.Errorf("expected a new link to be active")
+	}
+
+	var stored models.CampaignLink
+	if err := db.First(&stored, created.ID).Error; err != nil {
+		t.Fatalf("expected the link in the database: %v", err)
+	}
+	if stored.Slug != "youtube-oct-2026" || !stored.IsActive {
+		t.Errorf("unexpected stored link: %+v", stored)
+	}
+
+	botRec := performJSON(t, router, http.MethodPost, "/api/v1/admin/links", map[string]any{
+		"slug":         "bot-link",
+		"title":        "Bot link",
+		"target_type":  "bot",
+		"target_value": "src_youtube",
+	})
+	expectStatus(t, botRec, http.StatusCreated)
+
+	emptyBotRec := performJSON(t, router, http.MethodPost, "/api/v1/admin/links", map[string]any{
+		"slug":        "bot-empty",
+		"title":       "Bot link without payload",
+		"target_type": "bot",
+	})
+	expectStatus(t, emptyBotRec, http.StatusCreated)
+}
+
+func TestCampaignLinkAdmin_CreateRejectsInvalidInput(t *testing.T) {
+	db := linksAdminPGDB(t)
+	router := newCampaignLinkAdminRouter(db)
+
+	base := func() map[string]any {
+		return map[string]any{
+			"slug":        "valid-slug",
+			"title":       "Valid title",
+			"target_type": "landing",
+		}
+	}
+
+	cases := []struct {
+		name   string
+		mutate func(map[string]any)
+	}{
+		{name: "slug without allowed characters", mutate: func(m map[string]any) { m["slug"] = "!!!" }},
+		{name: "slug too short", mutate: func(m map[string]any) { m["slug"] = "ab" }},
+		{name: "missing slug", mutate: func(m map[string]any) { delete(m, "slug") }},
+		{name: "missing title", mutate: func(m map[string]any) { m["title"] = "   " }},
+		{name: "title too long", mutate: func(m map[string]any) { m["title"] = strings.Repeat("т", 121) }},
+		{name: "unknown target type", mutate: func(m map[string]any) { m["target_type"] = "email" }},
+		{name: "missing target type", mutate: func(m map[string]any) { delete(m, "target_type") }},
+		{name: "channel with a foreign host", mutate: func(m map[string]any) {
+			m["target_type"] = "channel"
+			m["target_value"] = "https://evil.example/phish"
+		}},
+		{name: "channel lookalike host", mutate: func(m map[string]any) {
+			m["target_type"] = "channel"
+			m["target_value"] = "https://t.me.evil.example/phish"
+		}},
+		{name: "channel without tls", mutate: func(m map[string]any) {
+			m["target_type"] = "channel"
+			m["target_value"] = "http://t.me/spark_prep_channel"
+		}},
+		{name: "channel without a path", mutate: func(m map[string]any) {
+			m["target_type"] = "channel"
+			m["target_value"] = "https://t.me/"
+		}},
+		{name: "bot payload with spaces", mutate: func(m map[string]any) {
+			m["target_type"] = "bot"
+			m["target_value"] = "bad payload!"
+		}},
+		{name: "bot payload too long", mutate: func(m map[string]any) {
+			m["target_type"] = "bot"
+			m["target_value"] = strings.Repeat("a", 41)
+		}},
+		{name: "utm_source too long", mutate: func(m map[string]any) { m["utm_source"] = strings.Repeat("u", 65) }},
+		{name: "utm_campaign too long", mutate: func(m map[string]any) { m["utm_campaign"] = strings.Repeat("c", 81) }},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			payload := base()
+			tc.mutate(payload)
+			rec := performJSON(t, router, http.MethodPost, "/api/v1/admin/links", payload)
+			expectStatus(t, rec, http.StatusBadRequest)
+		})
+	}
+}
+
+func TestCampaignLinkAdmin_CreateRejectsDuplicateSlug(t *testing.T) {
+	db := linksAdminPGDB(t)
+	router := newCampaignLinkAdminRouter(db)
+
+	first := performJSON(t, router, http.MethodPost, "/api/v1/admin/links", map[string]any{
+		"slug":        "ytb",
+		"title":       "YouTube",
+		"target_type": "landing",
+	})
+	expectStatus(t, first, http.StatusCreated)
+
+	// The second slug normalizes to the same value, so it must collide even
+	// though the request spells it differently.
+	second := performJSON(t, router, http.MethodPost, "/api/v1/admin/links", map[string]any{
+		"slug":        "  YTB  ",
+		"title":       "YouTube duplicate",
+		"target_type": "landing",
+	})
+	expectStatus(t, second, http.StatusConflict)
+
+	var count int64
+	if err := db.Model(&models.CampaignLink{}).Count(&count).Error; err != nil {
+		t.Fatalf("failed to count links: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("expected exactly one link after a conflict, got %d", count)
+	}
+}
+
+func TestCampaignLinkAdmin_UpdateAndDeactivate(t *testing.T) {
+	db := linksAdminPGDB(t)
+	router := newCampaignLinkAdminRouter(db)
+
+	rec := performJSON(t, router, http.MethodPost, "/api/v1/admin/links", map[string]any{
+		"slug":        "ytb",
+		"title":       "YouTube",
+		"target_type": "landing",
+		"utm_source":  "youtube",
+	})
+	expectStatus(t, rec, http.StatusCreated)
+	link := decodeJSON[models.CampaignLink](t, rec)
+
+	// The bool column has default:true, so a struct update would silently drop
+	// false. The handler must persist an explicit deactivation.
+	deactivate := performJSON(t, router, http.MethodPut, "/api/v1/admin/links/"+strconv.FormatUint(uint64(link.ID), 10), map[string]any{
+		"title":     "YouTube (paused)",
+		"is_active": false,
+	})
+	expectStatus(t, deactivate, http.StatusOK)
+	updated := decodeJSON[models.CampaignLink](t, deactivate)
+	if updated.IsActive {
+		t.Errorf("expected the response to report an inactive link")
+	}
+	if updated.Title != "YouTube (paused)" {
+		t.Errorf("expected the title to change, got %q", updated.Title)
+	}
+	if updated.Slug != "ytb" || updated.UTMSource != "youtube" {
+		t.Errorf("omitted fields must be preserved, got %+v", updated)
+	}
+
+	var stored models.CampaignLink
+	if err := db.First(&stored, link.ID).Error; err != nil {
+		t.Fatalf("failed to reload the link: %v", err)
+	}
+	if stored.IsActive {
+		t.Fatalf("expected is_active=false in the database, got true")
+	}
+
+	activate := performJSON(t, router, http.MethodPut, "/api/v1/admin/links/"+strconv.FormatUint(uint64(link.ID), 10), map[string]any{
+		"is_active": true,
+	})
+	expectStatus(t, activate, http.StatusOK)
+	if !decodeJSON[models.CampaignLink](t, activate).IsActive {
+		t.Errorf("expected the link to be active again")
+	}
+	if err := db.First(&stored, link.ID).Error; err != nil {
+		t.Fatalf("failed to reload the link: %v", err)
+	}
+	if !stored.IsActive || stored.Title != "YouTube (paused)" {
+		t.Errorf("expected the link active with its title preserved, got %+v", stored)
+	}
+
+	other := performJSON(t, router, http.MethodPost, "/api/v1/admin/links", map[string]any{
+		"slug":        "other",
+		"title":       "Other",
+		"target_type": "landing",
+	})
+	expectStatus(t, other, http.StatusCreated)
+	otherLink := decodeJSON[models.CampaignLink](t, other)
+
+	collision := performJSON(t, router, http.MethodPut, "/api/v1/admin/links/"+strconv.FormatUint(uint64(otherLink.ID), 10), map[string]any{
+		"slug": "ytb",
+	})
+	expectStatus(t, collision, http.StatusConflict)
+
+	invalid := performJSON(t, router, http.MethodPut, "/api/v1/admin/links/"+strconv.FormatUint(uint64(link.ID), 10), map[string]any{
+		"target_type": "channel",
+	})
+	expectStatus(t, invalid, http.StatusBadRequest)
+
+	invalidSlug := performJSON(t, router, http.MethodPut, "/api/v1/admin/links/"+strconv.FormatUint(uint64(link.ID), 10), map[string]any{
+		"slug": "!!!",
+	})
+	expectStatus(t, invalidSlug, http.StatusBadRequest)
+
+	missing := performJSON(t, router, http.MethodPut, "/api/v1/admin/links/999999", map[string]any{"title": "nope"})
+	expectStatus(t, missing, http.StatusNotFound)
+
+	badID := performJSON(t, router, http.MethodPut, "/api/v1/admin/links/abc", map[string]any{"title": "nope"})
+	expectStatus(t, badID, http.StatusBadRequest)
+}
+
+func TestCampaignLinkAdmin_DeleteRemovesLinkAndClicks(t *testing.T) {
+	db := linksAdminPGDB(t)
+	router := newCampaignLinkAdminRouter(db)
+
+	rec := performJSON(t, router, http.MethodPost, "/api/v1/admin/links", map[string]any{
+		"slug":        "ytb",
+		"title":       "YouTube",
+		"target_type": "landing",
+	})
+	expectStatus(t, rec, http.StatusCreated)
+	link := decodeJSON[models.CampaignLink](t, rec)
+	if err := db.Create(&models.CampaignLinkClick{LinkID: link.ID, VisitorID: "vabcdef123456"}).Error; err != nil {
+		t.Fatalf("failed to seed a click: %v", err)
+	}
+
+	deleted := performJSON(t, router, http.MethodDelete, "/api/v1/admin/links/"+strconv.FormatUint(uint64(link.ID), 10), nil)
+	expectStatus(t, deleted, http.StatusOK)
+
+	var links, clicks int64
+	if err := db.Model(&models.CampaignLink{}).Count(&links).Error; err != nil {
+		t.Fatalf("failed to count links: %v", err)
+	}
+	if err := db.Model(&models.CampaignLinkClick{}).Count(&clicks).Error; err != nil {
+		t.Fatalf("failed to count clicks: %v", err)
+	}
+	if links != 0 || clicks != 0 {
+		t.Fatalf("expected the link and its clicks to be gone, got %d links and %d clicks", links, clicks)
+	}
+
+	again := performJSON(t, router, http.MethodDelete, "/api/v1/admin/links/"+strconv.FormatUint(uint64(link.ID), 10), nil)
+	expectStatus(t, again, http.StatusNotFound)
+}
+
+func TestCampaignLinkAdmin_ListIncludesClickCounts(t *testing.T) {
+	db := linksAdminPGDB(t)
+	router := newCampaignLinkAdminRouter(db)
+
+	busy := models.CampaignLink{Slug: "busy", Title: "Busy link", TargetType: "landing", IsActive: true}
+	quiet := models.CampaignLink{Slug: "quiet", Title: "Quiet link", TargetType: "landing", IsActive: true}
+	seedCampaignLink(t, db, &busy)
+	seedCampaignLink(t, db, &quiet)
+	if err := db.Create(&models.CampaignLinkClick{LinkID: busy.ID, VisitorID: "vaaaaaaaaaaaaaaaa"}).Error; err != nil {
+		t.Fatalf("failed to seed a click: %v", err)
+	}
+	if err := db.Create(&models.CampaignLinkClick{LinkID: busy.ID, VisitorID: "vaaaaaaaaaaaaaaaa"}).Error; err != nil {
+		t.Fatalf("failed to seed a click: %v", err)
+	}
+	if err := db.Create(&models.CampaignLinkClick{LinkID: busy.ID, VisitorID: "vbbbbbbbbbbbbbbbb"}).Error; err != nil {
+		t.Fatalf("failed to seed a click: %v", err)
+	}
+
+	rec := performJSON(t, router, http.MethodGet, "/api/v1/admin/links", nil)
+	expectStatus(t, rec, http.StatusOK)
+
+	links := decodeJSON[[]CampaignLinkWithClicks](t, rec)
+	if len(links) != 2 {
+		t.Fatalf("expected two links, got %d", len(links))
+	}
+	bySlug := make(map[string]CampaignLinkWithClicks, len(links))
+	for _, link := range links {
+		bySlug[link.Slug] = link
+	}
+	if got := bySlug["busy"]; got.Clicks != 3 || got.UniqueVisitors != 2 {
+		t.Errorf("expected busy to have 3 clicks / 2 visitors, got %d / %d", got.Clicks, got.UniqueVisitors)
+	}
+	if got := bySlug["quiet"]; got.Clicks != 0 || got.UniqueVisitors != 0 {
+		t.Errorf("expected quiet to have no clicks, got %d / %d", got.Clicks, got.UniqueVisitors)
+	}
+}
+
+func TestCampaignLinkReport_AggregatesTrafficAndMoney(t *testing.T) {
+	db := linksAdminPGDB(t)
+	router := newCampaignLinkAdminRouter(db)
+	now := time.Now().UTC().Truncate(time.Second)
+
+	link := models.CampaignLink{Slug: "ytb", Title: "YouTube", TargetType: "landing", IsActive: true}
+	quiet := models.CampaignLink{Slug: "quiet", Title: "Quiet", TargetType: "channel", TargetValue: "https://t.me/spark_prep_channel", IsActive: true}
+	seedCampaignLink(t, db, &link)
+	seedCampaignLink(t, db, &quiet)
+
+	const (
+		visitorOne = "vaaaaaaaaaaaaaaaa"
+		visitorTwo = "vbbbbbbbbbbbbbbbb"
+	)
+	for _, click := range []models.CampaignLinkClick{
+		{LinkID: link.ID, VisitorID: visitorOne, CreatedAt: now},
+		{LinkID: link.ID, VisitorID: visitorOne, CreatedAt: now},
+		{LinkID: link.ID, VisitorID: visitorTwo, CreatedAt: now},
+	} {
+		if err := db.Create(&click).Error; err != nil {
+			t.Fatalf("failed to seed a click: %v", err)
+		}
+	}
+	for _, event := range []models.AnalyticsEvent{
+		{VisitorID: visitorOne, Step: "landing_view", CreatedAt: now},
+		{VisitorID: visitorOne, Step: "bot_lead", CreatedAt: now},
+	} {
+		if err := db.Create(&event).Error; err != nil {
+			t.Fatalf("failed to seed an event: %v", err)
+		}
+	}
+	if err := db.Create(&models.PaymentTransaction{
+		PaymentID: "pay_1",
+		VisitorID: visitorOne,
+		Amount:    10900,
+		Status:    "SUCCESS",
+		Currency:  "RUB",
+		CreatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("failed to seed a payment: %v", err)
+	}
+	// Money without a visitor id is reported globally, not per link.
+	if err := db.Create(&models.PaymentTransaction{
+		PaymentID: "pay_orphan",
+		Amount:    5000,
+		Status:    "SUCCESS",
+		Currency:  "RUB",
+		CreatedAt: now,
+	}).Error; err != nil {
+		t.Fatalf("failed to seed an unattributed payment: %v", err)
+	}
+
+	query := url.Values{}
+	query.Set("from", now.Add(-time.Hour).Format(time.RFC3339))
+	query.Set("to", now.Add(time.Hour).Format(time.RFC3339))
+	rec := performJSON(t, router, http.MethodGet, "/api/v1/admin/links/report?"+query.Encode(), nil)
+	expectStatus(t, rec, http.StatusOK)
+
+	report := decodeJSON[LinkReportResponse](t, rec)
+	if len(report.Rows) != 2 {
+		t.Fatalf("expected two report rows, got %d (%+v)", len(report.Rows), report.Rows)
+	}
+	row := report.Rows[0]
+	if row.Slug != "ytb" {
+		t.Fatalf("expected the busiest link first, got %q", row.Slug)
+	}
+	if row.Clicks != 3 {
+		t.Errorf("expected 3 clicks, got %d", row.Clicks)
+	}
+	if row.UniqueVisitors != 2 {
+		t.Errorf("expected 2 unique visitors, got %d", row.UniqueVisitors)
+	}
+	if row.SiteVisits != 1 {
+		t.Errorf("expected 1 site visit, got %d", row.SiteVisits)
+	}
+	if row.Leads != 1 {
+		t.Errorf("expected 1 lead, got %d", row.Leads)
+	}
+	if row.Payments != 1 {
+		t.Errorf("expected 1 payment, got %d", row.Payments)
+	}
+	assertFloat(t, "revenue", row.Revenue, 10900)
+	assertFloat(t, "epc", row.EPC, 10900.0/3.0)
+	assertFloat(t, "rpv", row.RPV, 10900.0/2.0)
+
+	empty := report.Rows[1]
+	if empty.Slug != "quiet" {
+		t.Fatalf("expected the quiet link second, got %q", empty.Slug)
+	}
+	if empty.Clicks != 0 || empty.UniqueVisitors != 0 || empty.SiteVisits != 0 || empty.Leads != 0 || empty.Payments != 0 {
+		t.Errorf("expected a zeroed row for an unused link, got %+v", empty)
+	}
+	assertFloat(t, "quiet revenue", empty.Revenue, 0)
+	assertFloat(t, "quiet epc", empty.EPC, 0)
+	assertFloat(t, "quiet rpv", empty.RPV, 0)
+
+	assertFloat(t, "unattributed revenue", report.UnattributedRevenue, 5000)
+}
+
+func TestCampaignLinkReport_WindowFiltersEverySource(t *testing.T) {
+	db := linksAdminPGDB(t)
+	router := newCampaignLinkAdminRouter(db)
+	now := time.Now().UTC().Truncate(time.Second)
+	old := now.Add(-48 * time.Hour)
+
+	link := models.CampaignLink{Slug: "ytb", Title: "YouTube", TargetType: "landing", IsActive: true}
+	seedCampaignLink(t, db, &link)
+
+	const visitor = "vcccccccccccccccc"
+	for _, click := range []models.CampaignLinkClick{
+		{LinkID: link.ID, VisitorID: visitor, CreatedAt: old},
+		{LinkID: link.ID, VisitorID: visitor, CreatedAt: now},
+	} {
+		if err := db.Create(&click).Error; err != nil {
+			t.Fatalf("failed to seed a click: %v", err)
+		}
+	}
+	if err := db.Create(&models.AnalyticsEvent{VisitorID: visitor, Step: "landing_view", CreatedAt: old}).Error; err != nil {
+		t.Fatalf("failed to seed an old event: %v", err)
+	}
+	if err := db.Create(&models.PaymentTransaction{
+		PaymentID: "pay_old",
+		VisitorID: visitor,
+		Amount:    10900,
+		Status:    "SUCCESS",
+		CreatedAt: old,
+	}).Error; err != nil {
+		t.Fatalf("failed to seed an old payment: %v", err)
+	}
+
+	query := url.Values{}
+	query.Set("from", now.Add(-time.Hour).Format(time.RFC3339))
+	query.Set("to", now.Add(time.Hour).Format(time.RFC3339))
+	rec := performJSON(t, router, http.MethodGet, "/api/v1/admin/links/report?"+query.Encode(), nil)
+	expectStatus(t, rec, http.StatusOK)
+
+	report := decodeJSON[LinkReportResponse](t, rec)
+	if len(report.Rows) != 1 {
+		t.Fatalf("expected one report row, got %d", len(report.Rows))
+	}
+	row := report.Rows[0]
+	if row.Clicks != 1 || row.UniqueVisitors != 1 {
+		t.Errorf("expected only the in-window click, got %d clicks / %d visitors", row.Clicks, row.UniqueVisitors)
+	}
+	if row.SiteVisits != 0 {
+		t.Errorf("expected the old landing view to be excluded, got %d", row.SiteVisits)
+	}
+	if row.Payments != 0 {
+		t.Errorf("expected the old payment to be excluded, got %d", row.Payments)
+	}
+	assertFloat(t, "revenue", row.Revenue, 0)
+	assertFloat(t, "unattributed revenue", report.UnattributedRevenue, 0)
+}
+
+func TestCampaignLinkReport_RejectsBadWindow(t *testing.T) {
+	db := linksAdminPGDB(t)
+	router := newCampaignLinkAdminRouter(db)
+
+	cases := []string{
+		"from=not-a-date",
+		"to=2026-13-45",
+		"from=2026-10-20&to=2026-10-19",
+	}
+	for _, raw := range cases {
+		t.Run(raw, func(t *testing.T) {
+			rec := performJSON(t, router, http.MethodGet, "/api/v1/admin/links/report?"+raw, nil)
+			expectStatus(t, rec, http.StatusBadRequest)
+		})
+	}
+}
+
+func TestCampaignLinkAdmin_CreateInactivePersistsFalse(t *testing.T) {
+	db := linksAdminPGDB(t)
+	router := newCampaignLinkAdminRouter(db)
+
+	rec := performJSON(t, router, http.MethodPost, "/api/v1/admin/links", map[string]any{
+		"slug":        "draft-link",
+		"title":       "Draft",
+		"target_type": "landing",
+		"is_active":   false,
+	})
+	expectStatus(t, rec, http.StatusCreated)
+	created := decodeJSON[models.CampaignLink](t, rec)
+	if created.IsActive {
+		t.Errorf("expected the response to report an inactive link")
+	}
+
+	var stored models.CampaignLink
+	if err := db.First(&stored, created.ID).Error; err != nil {
+		t.Fatalf("failed to reload the link: %v", err)
+	}
+	if stored.IsActive {
+		t.Fatalf("expected an explicitly inactive link to stay inactive in the database")
 	}
 }
