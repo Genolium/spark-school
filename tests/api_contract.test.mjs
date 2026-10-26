@@ -32,6 +32,8 @@ const pairs = [
   ['/admin/analytics/funnel', '/admin/analytics/funnel'],
   ['/admin/analytics/experiments', '/admin/analytics/experiments'],
   ['/admin/outbox/dead', '/admin/outbox/dead'],
+  ['/admin/links', '/admin/links'],
+  ['/admin/links/report', '/admin/links/report'],
 ];
 
 test('frontend API paths have backend routes', () => {

@@ -191,6 +191,63 @@ export interface DeadOutboxEvent {
   created_at: string;
 }
 
+export interface CampaignLink {
+  id: number;
+  slug: string;
+  title: string;
+  target_type: "channel" | "bot" | "landing";
+  target_value: string;
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  utm_content?: string;
+  is_active: boolean;
+  created_by?: string;
+  created_at: string;
+}
+
+// The admin list endpoint adds lifetime click totals to each link.
+export interface CampaignLinkWithClicks extends CampaignLink {
+  clicks: number;
+  unique_visitors: number;
+}
+
+export interface CreateCampaignLinkInput {
+  slug: string;
+  title: string;
+  target_type: "channel" | "bot" | "landing";
+  target_value?: string;
+  utm_source?: string;
+  utm_medium?: string;
+  utm_campaign?: string;
+  utm_content?: string;
+  is_active?: boolean;
+}
+
+export type UpdateCampaignLinkInput = Partial<CreateCampaignLinkInput>;
+
+// One link's traffic and money inside the report window. RPV is revenue per
+// unique visitor, EPC is revenue per click.
+export interface LinkReportRow {
+  slug: string;
+  title: string;
+  clicks: number;
+  unique_visitors: number;
+  site_visits: number;
+  leads: number;
+  payments: number;
+  revenue: number;
+  rpv: number;
+  epc: number;
+}
+
+// The report envelope also carries the global unattributed revenue, which by
+// definition cannot belong to a single link and must never be added to a row.
+export interface LinkReport {
+  rows: LinkReportRow[];
+  unattributed_revenue: number;
+}
+
 export interface FunnelData {
   filters: { from: string; to: string; source: string; campaign: string; tier: string; promo: string };
   steps: FunnelStepMetric[];

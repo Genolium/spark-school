@@ -1,7 +1,7 @@
 "use client";
 
 import { API_BASE, getAdminToken, handleAdminAuthFailure } from "./api-base";
-import type { PlacesStats, CoursePricing, ValidatePromoResponse, UserProfile, AdminStats, PayoutRequest, PromoCode, AffiliateStats, ExperimentMetric, ExperimentReport, DeadOutboxEvent, FunnelData } from "./api-types";
+import type { PlacesStats, CoursePricing, ValidatePromoResponse, UserProfile, AdminStats, PayoutRequest, PromoCode, AffiliateStats, ExperimentMetric, ExperimentReport, DeadOutboxEvent, FunnelData, CampaignLink, CampaignLinkWithClicks, CreateCampaignLinkInput, UpdateCampaignLinkInput, LinkReport, LinkReportRow } from "./api-types";
 
 async function fetchAdmin(endpoint: string, options: RequestInit = {}): Promise<Response> {
   const token = getAdminToken();
@@ -481,6 +481,103 @@ export const adminApi = {
       return { success: false };
     } catch {
       return { success: false };
+    }
+  },
+
+  // Campaign short links. A failed list degrades to an empty table; the report
+  // returns null so the UI can tell an error from genuinely no traffic.
+  async getLinks(): Promise<CampaignLinkWithClicks[]> {
+    try {
+      const res = await fetchAdmin(`/admin/links`);
+      if (!res.ok) return [];
+      const data = await res.json();
+      if (!Array.isArray(data)) return [];
+      return data.map((link: CampaignLinkWithClicks) => ({
+        ...link,
+        clicks: link.clicks ?? 0,
+        unique_visitors: link.unique_visitors ?? 0,
+      }));
+    } catch {
+      return [];
+    }
+  },
+
+  async createLink(data: CreateCampaignLinkInput): Promise<{ success: boolean; link?: CampaignLink; error?: string }> {
+    try {
+      const res = await fetchAdmin(`/admin/links`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok) return { success: true, link: json as CampaignLink };
+      return { success: false, error: json.error || "Не удалось создать ссылку" };
+    } catch (e: any) {
+      return { success: false, error: e?.message || "Сетевая ошибка при создании ссылки" };
+    }
+  },
+
+  async updateLink(id: number, data: UpdateCampaignLinkInput): Promise<{ success: boolean; link?: CampaignLink; error?: string }> {
+    try {
+      const res = await fetchAdmin(`/admin/links/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (res.ok) return { success: true, link: json as CampaignLink };
+      return { success: false, error: json.error || "Не удалось сохранить ссылку" };
+    } catch (e: any) {
+      return { success: false, error: e?.message || "Сетевая ошибка при сохранении ссылки" };
+    }
+  },
+
+  async deleteLink(id: number): Promise<{ success: boolean; error?: string }> {
+    try {
+      const res = await fetchAdmin(`/admin/links/${id}`, {
+        method: "DELETE",
+      });
+      if (res.ok) return { success: true };
+      const json = await res.json().catch(() => ({}));
+      return { success: false, error: json.error || "Не удалось удалить ссылку" };
+    } catch (e: any) {
+      return { success: false, error: e?.message || "Сетевая ошибка при удалении ссылки" };
+    }
+  },
+
+  // GET /admin/links/report returns an envelope: rows plus the global,
+  // unattributed revenue. `to` is date-only, so the backend includes that day.
+  async getLinksReport(params: { from?: string; to?: string } = {}): Promise<LinkReport | null> {
+    const sp = new URLSearchParams();
+    if (params.from) sp.set("from", params.from);
+    if (params.to) sp.set("to", params.to);
+    const qs = sp.toString();
+    try {
+      const res = await fetchAdmin(`/admin/links/report${qs ? `?${qs}` : ""}`);
+      if (!res.ok) return null;
+      const json = await res.json();
+      return {
+        rows: Array.isArray(json.rows)
+          ? json.rows.map((row: LinkReportRow) => ({
+              ...row,
+              clicks: row.clicks ?? 0,
+              unique_visitors: row.unique_visitors ?? 0,
+              site_visits: row.site_visits ?? 0,
+              leads: row.leads ?? 0,
+              payments: row.payments ?? 0,
+              revenue: row.revenue ?? 0,
+              rpv: row.rpv ?? 0,
+              epc: row.epc ?? 0,
+            }))
+          : [],
+        unattributed_revenue: json.unattributed_revenue ?? 0,
+      };
+    } catch {
+      return null;
     }
   },
 
