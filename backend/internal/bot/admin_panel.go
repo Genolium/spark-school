@@ -271,6 +271,10 @@ func (s *BotService) ExecuteBroadcast(adminChatID telego.ChatID, broadcastText s
 	}(users, broadcastText)
 }
 
+// mskZone is the business timezone: the digest schedule and its date window
+// must use Moscow time, not the container clock (which runs in UTC).
+var mskZone = time.FixedZone("MSK", 3*3600)
+
 // DailyDigestData encapsulates key metrics summarized in daily digest.
 type DailyDigestData struct {
 	Date                  string
@@ -298,9 +302,8 @@ func (s *BotService) SendCuratorDailyDigest(targetChatID ...int64) (*DailyDigest
 		return nil, nil
 	}
 
-	msk := time.FixedZone("MSK", 3*3600)
-	now := time.Now().In(msk)
-	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, msk)
+	now := time.Now().In(mskZone)
+	todayStart := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, mskZone)
 
 	data := &DailyDigestData{
 		Date: now.Format("02.01.2006"),

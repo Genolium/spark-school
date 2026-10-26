@@ -618,15 +618,24 @@ func (s *BotService) startDigestWorker() {
 			return
 		case <-ticker.C:
 			now := time.Now()
-			today := now.Format("2006-01-02")
-			if now.Hour() == targetHour && now.Minute() == 0 && lastSentDate != today {
-				if !s.acquireSchedulerLease("bot:digest", 2*time.Minute) {
-					continue
-				}
-				lastSentDate = today
-				log.Printf("[Daily Digest Cron] Automatically triggering curator daily digest for %s at %02d:%02d...", today, now.Hour(), now.Minute())
-				_, _ = s.SendCuratorDailyDigest()
+			if !shouldSendDailyDigest(now, targetHour, lastSentDate) {
+				continue
 			}
+			if !s.acquireSchedulerLease("bot:digest", 2*time.Minute) {
+				continue
+			}
+			local := now.In(mskZone)
+			lastSentDate = local.Format("2006-01-02")
+			log.Printf("[Daily Digest Cron] Automatically triggering curator daily digest for %s at %02d:%02d MSK...", lastSentDate, local.Hour(), local.Minute())
+			_, _ = s.SendCuratorDailyDigest()
 		}
 	}
+}
+
+// shouldSendDailyDigest checks the Moscow wall clock, not the container clock:
+// with DIGEST_HOUR=21 the digest must fire at 21:00 MSK, not at 21:00 UTC
+// (which is midnight in Moscow and always reports an empty day).
+func shouldSendDailyDigest(now time.Time, targetHour int, lastSentDate string) bool {
+	local := now.In(mskZone)
+	return local.Hour() == targetHour && local.Minute() == 0 && lastSentDate != local.Format("2006-01-02")
 }
