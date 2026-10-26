@@ -2,6 +2,14 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer utilities {
+  /* The mono family was retired in favour of PT Root UI; keep numeric
+     columns aligned with tabular figures. */
+  .font-mono {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
 @layer base {
   :root {
     --bg-base: #F8FAF9;

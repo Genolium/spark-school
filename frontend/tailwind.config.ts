@@ -21,7 +21,7 @@ const config: Config = {
         display: ["var(--font-heading)", "var(--font-sans)", "Golos Text", "PT Root UI", "sans-serif"],
         heading: ["var(--font-heading)", "var(--font-sans)", "Golos Text", "PT Root UI", "sans-serif"],
         editorial: ["var(--font-heading)", "var(--font-sans)", "Golos Text", "PT Root UI", "sans-serif"],
-        mono: ["var(--font-mono)", "IBM Plex Mono", "ui-monospace", "monospace"],
+        mono: ["var(--font-sans)", "PT Root UI", "sans-serif"],
         serif: ["var(--font-serif)", "Spectral", "Georgia", "serif"],
         doc: ["var(--font-doc)", "PT Astra Sans", "sans-serif"],
       },

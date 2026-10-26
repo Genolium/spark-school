@@ -38,18 +38,6 @@ const ptAstraSans = localFont({
   display: "swap",
 });
 
-// 4. IBM Plex Mono (IBM) — моноширинный супершрифт для тегов, цифр, баллов и кодов (из статьи)
-const ibmPlexMono = localFont({
-  src: [
-    { path: "../../public/fonts/ibm-plex-mono/IBMPlexMono-Regular.ttf", weight: "400", style: "normal" },
-    { path: "../../public/fonts/ibm-plex-mono/IBMPlexMono-Medium.ttf", weight: "500", style: "normal" },
-    { path: "../../public/fonts/ibm-plex-mono/IBMPlexMono-SemiBold.ttf", weight: "600", style: "normal" },
-    { path: "../../public/fonts/ibm-plex-mono/IBMPlexMono-Bold.ttf", weight: "700", style: "normal" },
-  ],
-  variable: "--font-mono",
-  display: "swap",
-});
-
 // 5. Spectral (Production Type / type.today) — премиальная экранная антиква для эдиториал-акцентов (из статьи)
 const spectral = localFont({
   src: [
@@ -306,7 +294,7 @@ export default async function RootLayout({
     <html
       lang="ru"
       suppressHydrationWarning
-      className={`scroll-smooth ${golosHeading.variable} ${ptRootUI.variable} ${ptAstraSans.variable} ${ibmPlexMono.variable} ${spectral.variable}`}
+      className={`scroll-smooth ${golosHeading.variable} ${ptRootUI.variable} ${ptAstraSans.variable} ${spectral.variable}`}
     >
       <head>
         <meta name="yandex-verification" content="345a2f8dfaaff053" />
