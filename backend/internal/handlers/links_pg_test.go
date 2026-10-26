@@ -78,10 +78,14 @@ func linksPGDB(t *testing.T) *gorm.DB {
 }
 
 func newCampaignLinksRouter(db *gorm.DB) *gin.Engine {
+	return newCampaignLinksRouterWithTargets(db, testLinksFrontendURL, testLinksChannelURL)
+}
+
+func newCampaignLinksRouterWithTargets(db *gorm.DB, frontendURL, fallbackChannelURL string) *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
-	router.GET("/r/:slug", RedirectCampaignLink(db, testLinksFrontendURL, testLinksChannelURL))
-	router.HEAD("/r/:slug", RedirectCampaignLink(db, testLinksFrontendURL, testLinksChannelURL))
+	router.GET("/r/:slug", RedirectCampaignLink(db, frontendURL, fallbackChannelURL))
+	router.HEAD("/r/:slug", RedirectCampaignLink(db, frontendURL, fallbackChannelURL))
 	return router
 }
 
@@ -279,8 +283,8 @@ func TestRedirectCampaignLink_SetsVisitorCookie(t *testing.T) {
 	if cookie.HttpOnly {
 		t.Errorf("expected HttpOnly=false so the site JS can read the cookie")
 	}
-	if cookie.Secure {
-		t.Errorf("expected Secure=false on a plain HTTP request")
+	if !cookie.Secure {
+		t.Errorf("expected Secure=true because the configured frontend URL is HTTPS")
 	}
 
 	location, err := url.Parse(rec.Header().Get("Location"))
@@ -340,20 +344,38 @@ func TestRedirectCampaignLink_ReplacesInvalidVisitorCookie(t *testing.T) {
 	}
 }
 
-func TestRedirectCampaignLink_VisitorCookieSecureOnTLS(t *testing.T) {
+func TestRedirectCampaignLink_VisitorCookieSecureFollowsFrontendURL(t *testing.T) {
 	cases := []struct {
-		name  string
-		setup func(*http.Request)
+		name        string
+		frontendURL string
+		requestURL  string
+		forwarded   string
+		wantSecure  bool
 	}{
 		{
-			name:  "tls connection",
-			setup: func(*http.Request) {},
+			name:        "https frontend URL",
+			frontendURL: "https://spark.example",
+			requestURL:  "http://spark.example/r/yt",
+			wantSecure:  true,
 		},
 		{
-			name: "proxy terminated tls",
-			setup: func(req *http.Request) {
-				req.Header.Set("X-Forwarded-Proto", "https")
-			},
+			name:        "http frontend URL",
+			frontendURL: "http://spark.example",
+			requestURL:  "http://spark.example/r/yt",
+			wantSecure:  false,
+		},
+		{
+			name:        "http frontend URL ignores spoofed forwarded proto",
+			frontendURL: "http://spark.example",
+			requestURL:  "http://spark.example/r/yt",
+			forwarded:   "https",
+			wantSecure:  false,
+		},
+		{
+			name:        "direct TLS connection is always secure",
+			frontendURL: "http://spark.example",
+			requestURL:  "https://spark.example/r/yt",
+			wantSecure:  true,
 		},
 	}
 
@@ -366,18 +388,20 @@ func TestRedirectCampaignLink_VisitorCookieSecureOnTLS(t *testing.T) {
 				TargetType: "landing",
 				IsActive:   true,
 			})
-			router := newCampaignLinksRouter(db)
+			router := newCampaignLinksRouterWithTargets(db, tc.frontendURL, testLinksChannelURL)
 
-			req := httptest.NewRequest(http.MethodGet, "https://spark.example/r/yt", nil)
-			tc.setup(req)
+			req := httptest.NewRequest(http.MethodGet, tc.requestURL, nil)
+			if tc.forwarded != "" {
+				req.Header.Set("X-Forwarded-Proto", tc.forwarded)
+			}
 			rec := httptest.NewRecorder()
 			router.ServeHTTP(rec, req)
 
 			if rec.Code != http.StatusFound {
 				t.Fatalf("expected status %d, got %d", http.StatusFound, rec.Code)
 			}
-			if !setVisitorCookie(t, rec).Secure {
-				t.Fatalf("expected the visitor cookie to be Secure")
+			if got := setVisitorCookie(t, rec).Secure; got != tc.wantSecure {
+				t.Fatalf("expected cookie Secure=%v, got %v", tc.wantSecure, got)
 			}
 		})
 	}
@@ -630,6 +654,30 @@ func TestRedirectCampaignLink_DoesNotOpenRedirect(t *testing.T) {
 	}
 }
 
+func TestRedirectCampaignLink_InvalidFallbackFallsBackToBot(t *testing.T) {
+	db := linksPGDB(t)
+	seedCampaignLink(t, db, &models.CampaignLink{
+		Slug:        "ch",
+		Title:       "Channel",
+		TargetType:  "channel",
+		TargetValue: "https://evil.example/phish",
+		IsActive:    true,
+	})
+
+	for _, fallback := range []string{"", "https://evil.example/phish", "http://t.me/spark_prep_channel"} {
+		t.Run(fallback, func(t *testing.T) {
+			router := newCampaignLinksRouterWithTargets(db, testLinksFrontendURL, fallback)
+			rec := getCampaignLink(router, "ch")
+			if rec.Code != http.StatusFound {
+				t.Fatalf("expected status %d, got %d", http.StatusFound, rec.Code)
+			}
+			if got := rec.Header().Get("Location"); got != campaignBotURL {
+				t.Fatalf("expected an invalid fallback to resolve to %q, got %q", campaignBotURL, got)
+			}
+		})
+	}
+}
+
 // --- admin CRUD and report -------------------------------------------------
 
 // linksAdminPGDB prepares the campaign-link tables plus the analytics and
@@ -822,6 +870,10 @@ func TestCampaignLinkAdmin_CreateRejectsInvalidInput(t *testing.T) {
 		{name: "bot payload too long", mutate: func(m map[string]any) {
 			m["target_type"] = "bot"
 			m["target_value"] = strings.Repeat("a", 41)
+		}},
+		{name: "bot payload contains the attribution separator", mutate: func(m map[string]any) {
+			m["target_type"] = "bot"
+			m["target_value"] = "src_a_b"
 		}},
 		{name: "utm_source too long", mutate: func(m map[string]any) { m["utm_source"] = strings.Repeat("u", 65) }},
 		{name: "utm_campaign too long", mutate: func(m map[string]any) { m["utm_campaign"] = strings.Repeat("c", 81) }},

@@ -39,6 +39,7 @@ func setupTestBot(t *testing.T) (*BotService, *gorm.DB) {
 		&models.OutboxEvent{},
 		&models.PaymentOrder{},
 		&models.Diagnostic{},
+		&models.CampaignLinkClick{},
 	)
 	if err != nil {
 		t.Fatalf("failed to automigrate models: %v", err)

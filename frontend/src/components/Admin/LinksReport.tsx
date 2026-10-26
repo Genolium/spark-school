@@ -367,8 +367,18 @@ export function LinksReport() {
                     <th className="py-2 pr-3 font-medium">Ссылка</th>
                     <th className="py-2 px-3 text-right font-medium">Переходы</th>
                     <th className="py-2 px-3 text-right font-medium">Уникальные</th>
-                    <th className="py-2 px-3 text-right font-medium">Визиты на сайт</th>
-                    <th className="py-2 px-3 text-right font-medium">Лиды</th>
+                    <th
+                      className="py-2 px-3 text-right font-medium"
+                      title="по ссылкам, могут пересекаться"
+                    >
+                      Визиты на сайт
+                    </th>
+                    <th
+                      className="py-2 px-3 text-right font-medium"
+                      title="по ссылкам, могут пересекаться"
+                    >
+                      Лиды
+                    </th>
                     <th className="py-2 px-3 text-right font-medium">Оплаты</th>
                     <th className="py-2 px-3 text-right font-medium">Выручка</th>
                     <th
@@ -530,7 +540,8 @@ export function LinksReport() {
 
             <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
               Переходы включают предпросмотры мессенджеров и проверки доступности (HEAD) — уникальные посетители
-              могут быть завышены.
+              могут быть завышены. Визиты и лиды считаются по каждой ссылке отдельно: посетитель, пришедший по
+              двум ссылкам, учитывается в обеих, поэтому их сумма может пересекаться.
             </p>
           </>
         )}

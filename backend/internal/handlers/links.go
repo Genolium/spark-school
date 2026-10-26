@@ -80,7 +80,7 @@ func RedirectCampaignLink(db *gorm.DB, frontendURL, fallbackChannelURL string) g
 			campaignVisitorCookieMaxAge,
 			"/",
 			"",
-			campaignCookieSecure(c),
+			campaignCookieSecure(c, frontendURL),
 			false,
 		)
 
@@ -105,7 +105,7 @@ func campaignTargetURL(link models.CampaignLink, visitorID, attributionToken, fr
 			return target
 		}
 		fallback := strings.TrimSpace(fallbackChannelURL)
-		if fallback == "" {
+		if !campaignIsTelegramLink(fallback) {
 			fallback = campaignBotURL
 		}
 		return fallback
@@ -212,13 +212,16 @@ func resolveCampaignVisitorID(c *gin.Context) string {
 	return campaignRandomID("v", campaignVisitorIDLength)
 }
 
-// campaignCookieSecure marks the visitor cookie Secure only on TLS requests,
-// including TLS terminated by the reverse proxy.
-func campaignCookieSecure(c *gin.Context) bool {
+// campaignCookieSecure marks the visitor cookie Secure when the site itself is
+// served over HTTPS or the backend sees a TLS connection. The configured
+// frontend URL is the source of truth: Caddy ignores untrusted incoming
+// X-Forwarded-* headers, so a proxy-terminated HTTPS request still reaches the
+// backend as plain HTTP and must not downgrade the shared spark_vid cookie.
+func campaignCookieSecure(c *gin.Context, frontendURL string) bool {
 	if c.Request.TLS != nil {
 		return true
 	}
-	return strings.EqualFold(strings.TrimSpace(c.GetHeader("X-Forwarded-Proto")), "https")
+	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(frontendURL)), "https://")
 }
 
 // campaignExistingID accepts an id supplied by the caller only when it matches
@@ -414,6 +417,11 @@ func validateCampaignLink(link models.CampaignLink) error {
 	case "bot":
 		if !campaignBotStartPattern.MatchString(link.TargetValue) {
 			return errors.New("Для бота допустимы только латиница, цифры, _ и - (до 40 символов)")
+		}
+		// The bot splits the start payload on the first "_a_", so a target
+		// value containing it would silently shift the attribution token.
+		if strings.Contains(link.TargetValue, "_a_") {
+			return errors.New("Значение цели для бота не должно содержать _a_")
 		}
 		return nil
 	default:

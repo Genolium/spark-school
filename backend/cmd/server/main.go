@@ -194,8 +194,12 @@ func main() {
 
 	// Public campaign links: /r/<slug> records an anonymous click and redirects.
 	// HEAD is mapped too because link checkers and chat previews probe with it.
-	router.GET("/r/:slug", handlers.RedirectCampaignLink(db, cfg.FrontendURL, cfg.TelegramInviteLink))
-	router.HEAD("/r/:slug", handlers.RedirectCampaignLink(db, cfg.FrontendURL, cfg.TelegramInviteLink))
+	// This is a public writing endpoint, so it gets its own generous in-memory
+	// per-IP limit (600/min) instead of the shared database limiter used by the
+	// API: the redirect must stay cheap and must not touch the DB for throttling.
+	campaignLinkLimiter := security.RateLimitMiddleware(600, 1*time.Minute, "Слишком много запросов по коротким ссылкам. Пожалуйста, подождите.")
+	router.GET("/r/:slug", campaignLinkLimiter, handlers.RedirectCampaignLink(db, cfg.FrontendURL, cfg.TelegramInviteLink))
+	router.HEAD("/r/:slug", campaignLinkLimiter, handlers.RedirectCampaignLink(db, cfg.FrontendURL, cfg.TelegramInviteLink))
 
 	// API v1 Routes with general Rate Limiting (120 req/min per IP)
 	api := router.Group("/api/v1")

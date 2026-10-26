@@ -2,6 +2,7 @@ package bot
 
 import (
 	"testing"
+	"time"
 
 	"github.com/mymmrac/telego"
 	"github.com/spark-school/backend/internal/models"
@@ -86,5 +87,50 @@ func TestAttributeLeadRetriesUntilLandingEventExists(t *testing.T) {
 	db.Model(&models.AnalyticsEvent{}).Where("step = ?", "bot_lead").Count(&leads)
 	if leads != 1 {
 		t.Fatalf("expected bot_lead to stay idempotent, got %d", leads)
+	}
+}
+
+func TestAttributeLeadUsesClickWhenDirectBotLinkHasNoLandingEvent(t *testing.T) {
+	service, db := setupTestBot(t)
+	from := &telego.User{ID: 888002, Username: "direct"}
+	if err := db.Create(&models.User{TelegramID: from.ID, FirstName: "Direct"}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	// A /r/<slug> bot link records a click but never a landing_view event,
+	// because the visitor goes straight to Telegram.
+	if err := db.Create(&models.CampaignLinkClick{
+		LinkID:           1,
+		VisitorID:        "visitor-click",
+		AttributionToken: "apy1xadvhvmo1",
+		CreatedAt:        time.Now(),
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if err := service.attributeLead(from, "apy1xadvhvmo1"); err != nil {
+		t.Fatal(err)
+	}
+
+	var user models.User
+	if err := db.Where("telegram_id = ?", from.ID).First(&user).Error; err != nil {
+		t.Fatal(err)
+	}
+	if user.AttributionToken != "apy1xadvhvmo1" {
+		t.Fatalf("expected the attribution token to be stored, got %q", user.AttributionToken)
+	}
+	if user.VisitorID != "visitor-click" {
+		t.Fatalf("expected the visitor id from the campaign click, got %q", user.VisitorID)
+	}
+
+	var leads []models.AnalyticsEvent
+	if err := db.Where("step = ?", "bot_lead").Find(&leads).Error; err != nil {
+		t.Fatal(err)
+	}
+	if len(leads) != 1 {
+		t.Fatalf("expected exactly one bot_lead event, got %d", len(leads))
+	}
+	if leads[0].VisitorID != "visitor-click" {
+		t.Fatalf("expected the bot_lead to use the click visitor id, got %q", leads[0].VisitorID)
 	}
 }

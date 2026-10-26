@@ -524,6 +524,17 @@ describe('Tier 4: Repository Hygiene & Acceptance Scan', () => {
     assert.match(analyticsContent, /export function compactStartParam/, 'start payload must be compacted under Telegram 64-char cap');
     assert.match(analyticsContent, /slice\(0,\s*64\)/, 'compactStartParam must truncate to 64 characters');
   });
+
+  it('4.8 Short links: Caddyfile proxies /r/* to the backend', () => {
+    const caddyPath = path.join(ROOT, 'Caddyfile');
+    assert.ok(fs.existsSync(caddyPath), 'Caddyfile must exist');
+    const caddyContent = fs.readFileSync(caddyPath, 'utf8');
+    assert.match(
+      caddyContent,
+      /handle\s+\/r\/\*\s*\{[^}]*reverse_proxy\s+backend:8080/,
+      'Caddyfile must keep a "handle /r/*" block that reverse-proxies to backend:8080'
+    );
+  });
 });
 
 // ============================================================================

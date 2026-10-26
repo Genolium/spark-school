@@ -131,6 +131,16 @@ func (s *BotService) attributeLead(from *telego.User, token string) error {
 	if err == nil && landing.VisitorID != "" {
 		visitorID = landing.VisitorID
 	}
+	if visitorID == "" {
+		// A direct bot link (/r/<slug> with target_type=bot) never creates a
+		// landing_view event, so the click is the only place the visitor id
+		// survives. Use the newest click carrying this token.
+		var click models.CampaignLinkClick
+		if clickErr := s.db.Where("attribution_token = ? AND visitor_id <> ''", attributionToken).
+			Order("created_at DESC, id DESC").First(&click).Error; clickErr == nil && click.VisitorID != "" {
+			visitorID = click.VisitorID
+		}
+	}
 
 	updates := map[string]interface{}{"attribution_token": attributionToken}
 	if visitorID != "" {
