@@ -283,6 +283,7 @@ import { ThemeProvider } from "@/context/ThemeContext";
 import { ReferralTracker } from "@/components/ReferralTracker";
 import { YandexMetrikaTracker } from "@/components/YandexMetrikaTracker";
 import { ErrorReporter } from "@/components/ErrorReporter";
+import { VisitorParamCleanup } from "@/components/VisitorParamCleanup";
 
 export default async function RootLayout({
   children,
@@ -360,6 +361,7 @@ export default async function RootLayout({
           <ReferralTracker />
           <YandexMetrikaTracker />
           <ErrorReporter />
+          <VisitorParamCleanup />
           {children}
         </ThemeProvider>
       </body>

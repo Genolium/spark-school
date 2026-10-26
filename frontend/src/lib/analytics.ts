@@ -1,3 +1,9 @@
+import {
+  parseVisitorParam,
+  stripVisitorFromUrl,
+  VISITOR_PARAM,
+} from "./visitor-param.mjs";
+
 export type FunnelStep =
   | "landing_view"
   | "demo_lesson_view"
@@ -24,9 +30,11 @@ const STORAGE_KEY = "spark_funnel_events";
 const VISITOR_KEY = "spark_visitor_id";
 const ATTRIBUTION_KEY = "spark_attribution_token";
 const CAMPAIGN_STORAGE_KEY = "spark_utm_context";
-const VISITOR_PARAM = "spark_vid";
-/** Must match the visitor ids minted by the /r/:slug redirect. */
-const VISITOR_PATTERN = /^v[a-z0-9]{6,40}$/;
+/** Cookie the /r/:slug redirect and the site share, so repeat clicks reuse one id. */
+const VISITOR_COOKIE_MAX_AGE = 60 * 60 * 24 * 365; // 31 536 000 seconds
+const VISITOR_ID_LENGTH = 20;
+/** Resolved id for this page view: survives a throwing localStorage. */
+let cachedVisitorId: string | null = null;
 
 interface StoredCampaign {
   utm_source?: string;
@@ -50,60 +58,113 @@ function randomId(prefix: string, length: number): string {
   return result;
 }
 
+function visitorCookieAttributes(): string {
+  const secure =
+    typeof window !== "undefined" && window.location.protocol === "https:" ? "; Secure" : "";
+  return `; Path=/; Max-Age=${VISITOR_COOKIE_MAX_AGE}; SameSite=Lax${secure}`;
+}
+
+function readVisitorCookie(): string {
+  if (typeof document === "undefined") return "";
+  try {
+    for (const entry of document.cookie ? document.cookie.split(";") : []) {
+      const eq = entry.indexOf("=");
+      const name = (eq === -1 ? entry : entry.slice(0, eq)).trim();
+      if (name !== VISITOR_PARAM) continue;
+      const value = (eq === -1 ? "" : entry.slice(eq + 1)).trim();
+      if (!value) return "";
+      try {
+        return decodeURIComponent(value);
+      } catch {
+        return value;
+      }
+    }
+  } catch {
+    // Cookies can be blocked; fall through to minting a fresh id.
+  }
+  return "";
+}
+
+function writeVisitorCookie(id: string): void {
+  if (typeof document === "undefined") return;
+  try {
+    document.cookie = `${VISITOR_PARAM}=${encodeURIComponent(id)}${visitorCookieAttributes()}`;
+  } catch {
+    // Cookies can be blocked; the other stores still carry the id.
+  }
+}
+
+/** Keep localStorage and the shared cookie in sync; neither is required to work. */
+function persistVisitorId(id: string): void {
+  try {
+    localStorage.setItem(VISITOR_KEY, id);
+  } catch {
+    // Private mode: the module cache and the cookie still carry the id.
+  }
+  writeVisitorCookie(id);
+}
+
+/**
+ * Remove `spark_vid` from the current address bar, keeping the path, the hash
+ * and every other parameter. Safe to call when the parameter is absent.
+ */
+export function stripVisitorParamFromUrl(): void {
+  if (typeof window === "undefined") return;
+  try {
+    const { pathname, search, hash } = window.location;
+    const original = `${pathname}${search}${hash}`;
+    const target = stripVisitorFromUrl(original);
+    if (target === original) return;
+    window.history.replaceState(window.history.state, "", target);
+  } catch {
+    // The id is already stored; a failed URL rewrite is not worth breaking on.
+  }
+}
+
 /**
  * A campaign redirect arrives as `?spark_vid=<id>&utm_*`. Adopt that visitor id
  * so the landing event joins the click row, then drop the parameter from the
  * address bar so it never ends up in a copied or shared URL. Values that do not
  * look like a redirect id are ignored and storage is left untouched.
  */
-function adoptVisitorIdFromUrl(): string | null {
-  if (typeof window === "undefined") return null;
+function adoptVisitorIdFromUrl(): string {
+  if (typeof window === "undefined") return "";
   try {
-    const params = new URLSearchParams(window.location.search);
-    const candidate = params.get(VISITOR_PARAM);
-    if (!candidate || !VISITOR_PATTERN.test(candidate)) return null;
+    const candidate = parseVisitorParam(window.location.search);
+    if (!candidate) return "";
 
-    try {
-      localStorage.setItem(VISITOR_KEY, candidate);
-    } catch {
-      // Private mode: the id still applies to this page view.
-    }
-
-    params.delete(VISITOR_PARAM);
-    const query = params.toString();
-    try {
-      window.history.replaceState(
-        window.history.state,
-        "",
-        `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
-      );
-    } catch {
-      // The id is stored, so a failed URL rewrite is not worth breaking on.
-    }
-
+    // Persist before rewriting the URL so a failure cannot lose the id.
+    persistVisitorId(candidate);
+    stripVisitorParamFromUrl();
     return candidate;
   } catch {
-    return null;
+    return "";
   }
 }
 
 /** Stable anonymous browser identifier. Contains no personal data. */
 export function getVisitorId(): string {
   if (typeof window === "undefined") return "";
+  if (cachedVisitorId) return cachedVisitorId;
+
   const adopted = adoptVisitorIdFromUrl();
-  if (adopted) return adopted;
-  try {
-    let id = localStorage.getItem(VISITOR_KEY);
-    if (!id) {
-      id = typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
-        ? crypto.randomUUID()
-        : randomId("v", 24);
-      localStorage.setItem(VISITOR_KEY, id);
-    }
-    return id;
-  } catch {
-    return "";
+  if (adopted) {
+    cachedVisitorId = adopted;
+    return adopted;
   }
+
+  let id = "";
+  try {
+    id = localStorage.getItem(VISITOR_KEY) || "";
+  } catch {
+    id = "";
+  }
+  if (!id) id = readVisitorCookie();
+  if (!id) id = randomId("v", VISITOR_ID_LENGTH);
+
+  cachedVisitorId = id;
+  persistVisitorId(id);
+  return id;
 }
 
 /**
