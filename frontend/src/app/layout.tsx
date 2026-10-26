@@ -2,13 +2,13 @@ import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import Script from "next/script";
 import localFont from "next/font/local";
-import { IBM_Plex_Mono, Spectral, Golos_Text } from "next/font/google";
 import "./globals.css";
 
-// 1. Golos Text (ParaType / Google Fonts) — сверхжирный (Black 900 / ExtraBold 800) акцидентный гротеск для мощных заголовков
-const golosHeading = Golos_Text({
-  subsets: ["latin", "cyrillic"],
-  weight: ["600", "700", "800", "900"],
+// 1. Golos Text (ParaType, OFL) — сверхжирный (Black 900 / ExtraBold 800) акцидентный гротеск для мощных заголовков.
+// Самохостинг: сборка не зависит от доступности fonts.googleapis.com.
+const golosHeading = localFont({
+  src: "../../public/fonts/golos-text/GolosText-Variable.ttf",
+  weight: "400 900",
   variable: "--font-heading",
   display: "swap",
 });
@@ -39,18 +39,29 @@ const ptAstraSans = localFont({
 });
 
 // 4. IBM Plex Mono (IBM) — моноширинный супершрифт для тегов, цифр, баллов и кодов (из статьи)
-const ibmPlexMono = IBM_Plex_Mono({
-  subsets: ["latin", "cyrillic"],
-  weight: ["400", "500", "600", "700"],
+const ibmPlexMono = localFont({
+  src: [
+    { path: "../../public/fonts/ibm-plex-mono/IBMPlexMono-Regular.ttf", weight: "400", style: "normal" },
+    { path: "../../public/fonts/ibm-plex-mono/IBMPlexMono-Medium.ttf", weight: "500", style: "normal" },
+    { path: "../../public/fonts/ibm-plex-mono/IBMPlexMono-SemiBold.ttf", weight: "600", style: "normal" },
+    { path: "../../public/fonts/ibm-plex-mono/IBMPlexMono-Bold.ttf", weight: "700", style: "normal" },
+  ],
   variable: "--font-mono",
   display: "swap",
 });
 
 // 5. Spectral (Production Type / type.today) — премиальная экранная антиква для эдиториал-акцентов (из статьи)
-const spectral = Spectral({
-  subsets: ["latin", "cyrillic"],
-  weight: ["400", "500", "600", "700"],
-  style: ["normal", "italic"],
+const spectral = localFont({
+  src: [
+    { path: "../../public/fonts/spectral/Spectral-Regular.ttf", weight: "400", style: "normal" },
+    { path: "../../public/fonts/spectral/Spectral-Italic.ttf", weight: "400", style: "italic" },
+    { path: "../../public/fonts/spectral/Spectral-Medium.ttf", weight: "500", style: "normal" },
+    { path: "../../public/fonts/spectral/Spectral-MediumItalic.ttf", weight: "500", style: "italic" },
+    { path: "../../public/fonts/spectral/Spectral-SemiBold.ttf", weight: "600", style: "normal" },
+    { path: "../../public/fonts/spectral/Spectral-SemiBoldItalic.ttf", weight: "600", style: "italic" },
+    { path: "../../public/fonts/spectral/Spectral-Bold.ttf", weight: "700", style: "normal" },
+    { path: "../../public/fonts/spectral/Spectral-BoldItalic.ttf", weight: "700", style: "italic" },
+  ],
   variable: "--font-serif",
   display: "swap",
 });
