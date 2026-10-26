@@ -23,12 +23,20 @@ const (
 	// campaignTelegramHost is the only host allowed for channel links.
 	campaignTelegramHost = "t.me"
 
-	campaignVisitorIDLength     = 12
+	campaignVisitorIDLength     = 20
 	campaignAttributionIDLength = 12
+	// campaignVisitorCookieMaxAge is one year, matching the site's cookie.
+	campaignVisitorCookieMaxAge = 60 * 60 * 24 * 365
 	// Telegram caps the start payload at 64 characters.
 	campaignStartParamMaxLength = 64
 	// campaign_links_clicks.user_agent and referer are VARCHAR(255).
 	campaignHeaderMaxBytes = 255
+)
+
+const (
+	// campaignVisitorCookieName is the first-party cookie shared with the site
+	// so repeat /r clicks and later page views reuse one visitor id.
+	campaignVisitorCookieName = "spark_vid"
 )
 
 var (
@@ -59,14 +67,22 @@ func RedirectCampaignLink(db *gorm.DB, frontendURL, fallbackChannelURL string) g
 			return
 		}
 
-		visitorID := campaignExistingID(c.Query("visitor_id"), campaignVisitorIDPattern)
-		if visitorID == "" {
-			visitorID = campaignRandomID("v", campaignVisitorIDLength)
-		}
+		visitorID := resolveCampaignVisitorID(c)
 		attributionToken := campaignExistingID(c.Query("attribution_token"), campaignAttributionIDPattern)
 		if attributionToken == "" {
 			attributionToken = campaignRandomID("a", campaignAttributionIDLength)
 		}
+
+		c.SetSameSite(http.SameSiteLaxMode)
+		c.SetCookie(
+			campaignVisitorCookieName,
+			visitorID,
+			campaignVisitorCookieMaxAge,
+			"/",
+			"",
+			campaignCookieSecure(c),
+			false,
+		)
 
 		recordCampaignClick(db, link, visitorID, attributionToken, c)
 
@@ -179,6 +195,30 @@ func recordCampaignClick(db *gorm.DB, link models.CampaignLink, visitorID, attri
 	if err := db.Create(&click).Error; err != nil {
 		log.Printf("[links] failed to record click for slug %q: %v", link.Slug, err)
 	}
+}
+
+// resolveCampaignVisitorID reuses the id the caller already carries, preferring
+// the documented ?visitor_id= contract and then the shared spark_vid cookie.
+// Only well-formed ids are trusted; anything else is replaced with a fresh one.
+func resolveCampaignVisitorID(c *gin.Context) string {
+	if id := campaignExistingID(c.Query("visitor_id"), campaignVisitorIDPattern); id != "" {
+		return id
+	}
+	if cookie, err := c.Cookie(campaignVisitorCookieName); err == nil {
+		if id := campaignExistingID(cookie, campaignVisitorIDPattern); id != "" {
+			return id
+		}
+	}
+	return campaignRandomID("v", campaignVisitorIDLength)
+}
+
+// campaignCookieSecure marks the visitor cookie Secure only on TLS requests,
+// including TLS terminated by the reverse proxy.
+func campaignCookieSecure(c *gin.Context) bool {
+	if c.Request.TLS != nil {
+		return true
+	}
+	return strings.EqualFold(strings.TrimSpace(c.GetHeader("X-Forwarded-Proto")), "https")
 }
 
 // campaignExistingID accepts an id supplied by the caller only when it matches

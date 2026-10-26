@@ -27,7 +27,7 @@ const (
 )
 
 var (
-	testVisitorIDPattern     = regexp.MustCompile(`^v[a-z0-9]{12}$`)
+	testVisitorIDPattern     = regexp.MustCompile(`^v[a-z0-9]{20}$`)
 	testAttributionIDPattern = regexp.MustCompile(`^a[a-z0-9]{12}$`)
 )
 
@@ -94,6 +94,25 @@ func getCampaignLink(router *gin.Engine, slug string) *httptest.ResponseRecorder
 	rec := httptest.NewRecorder()
 	router.ServeHTTP(rec, req)
 	return rec
+}
+
+func getCampaignLinkWithVisitorCookie(router *gin.Engine, slug, cookieValue string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodGet, "/r/"+slug, nil)
+	req.AddCookie(&http.Cookie{Name: "spark_vid", Value: cookieValue})
+	rec := httptest.NewRecorder()
+	router.ServeHTTP(rec, req)
+	return rec
+}
+
+func setVisitorCookie(t *testing.T, rec *httptest.ResponseRecorder) *http.Cookie {
+	t.Helper()
+	for _, cookie := range rec.Result().Cookies() {
+		if cookie.Name == "spark_vid" {
+			return cookie
+		}
+	}
+	t.Fatalf("expected the redirect to set a spark_vid cookie, headers: %v", rec.Header())
+	return nil
 }
 
 func TestRedirectCampaignLink_RecordsClickAndRedirects(t *testing.T) {
@@ -183,6 +202,179 @@ func TestRedirectCampaignLink_HeadRequestRedirects(t *testing.T) {
 	}
 	if rec.Header().Get("Location") == "" {
 		t.Fatalf("expected a Location header for HEAD")
+	}
+}
+
+func TestRedirectCampaignLink_ReusesVisitorCookie(t *testing.T) {
+	db := linksPGDB(t)
+	seedCampaignLink(t, db, &models.CampaignLink{
+		Slug:       "yt",
+		Title:      "YouTube",
+		TargetType: "landing",
+		IsActive:   true,
+	})
+	router := newCampaignLinksRouter(db)
+
+	const visitorID = "va1b2c3d4e5f6g7h8i9j0"
+	for i := 0; i < 2; i++ {
+		rec := getCampaignLinkWithVisitorCookie(router, "yt", visitorID)
+		if rec.Code != http.StatusFound {
+			t.Fatalf("request %d: expected status %d, got %d", i+1, http.StatusFound, rec.Code)
+		}
+		location, err := url.Parse(rec.Header().Get("Location"))
+		if err != nil {
+			t.Fatalf("request %d: invalid Location header: %v", i+1, err)
+		}
+		if got := location.Query().Get("spark_vid"); got != visitorID {
+			t.Errorf("request %d: expected the cookie id in Location, got %q", i+1, got)
+		}
+		if got := setVisitorCookie(t, rec).Value; got != visitorID {
+			t.Errorf("request %d: expected the cookie to be refreshed with %q, got %q", i+1, visitorID, got)
+		}
+	}
+
+	var clicks []models.CampaignLinkClick
+	if err := db.Order("id asc").Find(&clicks).Error; err != nil {
+		t.Fatalf("failed to load clicks: %v", err)
+	}
+	if len(clicks) != 2 {
+		t.Fatalf("expected two click rows, got %d", len(clicks))
+	}
+	for i, click := range clicks {
+		if click.VisitorID != visitorID {
+			t.Errorf("click %d: expected visitor id %q, got %q", i+1, visitorID, click.VisitorID)
+		}
+	}
+}
+
+func TestRedirectCampaignLink_SetsVisitorCookie(t *testing.T) {
+	db := linksPGDB(t)
+	seedCampaignLink(t, db, &models.CampaignLink{
+		Slug:       "yt",
+		Title:      "YouTube",
+		TargetType: "landing",
+		IsActive:   true,
+	})
+	router := newCampaignLinksRouter(db)
+
+	rec := getCampaignLink(router, "yt")
+	cookie := setVisitorCookie(t, rec)
+	if !testVisitorIDPattern.MatchString(cookie.Value) {
+		t.Fatalf("expected a minted visitor id, got %q", cookie.Value)
+	}
+	if cookie.Path != "/" {
+		t.Errorf("expected cookie Path=/, got %q", cookie.Path)
+	}
+	if cookie.MaxAge != 31536000 {
+		t.Errorf("expected cookie MaxAge=31536000, got %d", cookie.MaxAge)
+	}
+	if cookie.SameSite != http.SameSiteLaxMode {
+		t.Errorf("expected SameSite=Lax, got %v", cookie.SameSite)
+	}
+	if cookie.HttpOnly {
+		t.Errorf("expected HttpOnly=false so the site JS can read the cookie")
+	}
+	if cookie.Secure {
+		t.Errorf("expected Secure=false on a plain HTTP request")
+	}
+
+	location, err := url.Parse(rec.Header().Get("Location"))
+	if err != nil {
+		t.Fatalf("invalid Location header: %v", err)
+	}
+	if got := location.Query().Get("spark_vid"); got != cookie.Value {
+		t.Errorf("expected Location spark_vid %q, got %q", cookie.Value, got)
+	}
+
+	var click models.CampaignLinkClick
+	if err := db.First(&click).Error; err != nil {
+		t.Fatalf("expected a recorded click, got %v", err)
+	}
+	if click.VisitorID != cookie.Value {
+		t.Errorf("expected the click to use the cookie id %q, got %q", cookie.Value, click.VisitorID)
+	}
+}
+
+func TestRedirectCampaignLink_ReplacesInvalidVisitorCookie(t *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+	}{
+		{name: "uuid", value: "8f14e45f-ea3b-4c1d-9e2f-3a4b5c6d7e8f"},
+		{name: "uppercase", value: "VABCDEF1234567890ABCDE"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := linksPGDB(t)
+			seedCampaignLink(t, db, &models.CampaignLink{
+				Slug:       "yt",
+				Title:      "YouTube",
+				TargetType: "landing",
+				IsActive:   true,
+			})
+			router := newCampaignLinksRouter(db)
+
+			rec := getCampaignLinkWithVisitorCookie(router, "yt", tc.value)
+			cookie := setVisitorCookie(t, rec)
+			if cookie.Value == tc.value {
+				t.Fatalf("expected the invalid cookie %q to be replaced", tc.value)
+			}
+			if !testVisitorIDPattern.MatchString(cookie.Value) {
+				t.Fatalf("expected a minted visitor id, got %q", cookie.Value)
+			}
+
+			var click models.CampaignLinkClick
+			if err := db.First(&click).Error; err != nil {
+				t.Fatalf("expected a recorded click, got %v", err)
+			}
+			if click.VisitorID != cookie.Value {
+				t.Errorf("expected the click to use the replacement id %q, got %q", cookie.Value, click.VisitorID)
+			}
+		})
+	}
+}
+
+func TestRedirectCampaignLink_VisitorCookieSecureOnTLS(t *testing.T) {
+	cases := []struct {
+		name  string
+		setup func(*http.Request)
+	}{
+		{
+			name:  "tls connection",
+			setup: func(*http.Request) {},
+		},
+		{
+			name: "proxy terminated tls",
+			setup: func(req *http.Request) {
+				req.Header.Set("X-Forwarded-Proto", "https")
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			db := linksPGDB(t)
+			seedCampaignLink(t, db, &models.CampaignLink{
+				Slug:       "yt",
+				Title:      "YouTube",
+				TargetType: "landing",
+				IsActive:   true,
+			})
+			router := newCampaignLinksRouter(db)
+
+			req := httptest.NewRequest(http.MethodGet, "https://spark.example/r/yt", nil)
+			tc.setup(req)
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			if rec.Code != http.StatusFound {
+				t.Fatalf("expected status %d, got %d", http.StatusFound, rec.Code)
+			}
+			if !setVisitorCookie(t, rec).Secure {
+				t.Fatalf("expected the visitor cookie to be Secure")
+			}
+		})
 	}
 }
 
