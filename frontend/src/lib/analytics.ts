@@ -24,6 +24,9 @@ const STORAGE_KEY = "spark_funnel_events";
 const VISITOR_KEY = "spark_visitor_id";
 const ATTRIBUTION_KEY = "spark_attribution_token";
 const CAMPAIGN_STORAGE_KEY = "spark_utm_context";
+const VISITOR_PARAM = "spark_vid";
+/** Must match the visitor ids minted by the /r/:slug redirect. */
+const VISITOR_PATTERN = /^v[a-z0-9]{6,40}$/;
 
 interface StoredCampaign {
   utm_source?: string;
@@ -47,9 +50,48 @@ function randomId(prefix: string, length: number): string {
   return result;
 }
 
+/**
+ * A campaign redirect arrives as `?spark_vid=<id>&utm_*`. Adopt that visitor id
+ * so the landing event joins the click row, then drop the parameter from the
+ * address bar so it never ends up in a copied or shared URL. Values that do not
+ * look like a redirect id are ignored and storage is left untouched.
+ */
+function adoptVisitorIdFromUrl(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const candidate = params.get(VISITOR_PARAM);
+    if (!candidate || !VISITOR_PATTERN.test(candidate)) return null;
+
+    try {
+      localStorage.setItem(VISITOR_KEY, candidate);
+    } catch {
+      // Private mode: the id still applies to this page view.
+    }
+
+    params.delete(VISITOR_PARAM);
+    const query = params.toString();
+    try {
+      window.history.replaceState(
+        window.history.state,
+        "",
+        `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`,
+      );
+    } catch {
+      // The id is stored, so a failed URL rewrite is not worth breaking on.
+    }
+
+    return candidate;
+  } catch {
+    return null;
+  }
+}
+
 /** Stable anonymous browser identifier. Contains no personal data. */
 export function getVisitorId(): string {
   if (typeof window === "undefined") return "";
+  const adopted = adoptVisitorIdFromUrl();
+  if (adopted) return adopted;
   try {
     let id = localStorage.getItem(VISITOR_KEY);
     if (!id) {
