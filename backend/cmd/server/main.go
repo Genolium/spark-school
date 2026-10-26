@@ -191,6 +191,9 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "ready", "migration_version": version, "time": time.Now().Format(time.RFC3339)})
 	})
 
+	// Public campaign links: /r/<slug> records an anonymous click and redirects.
+	router.GET("/r/:slug", handlers.RedirectCampaignLink(db, cfg.FrontendURL, cfg.TelegramInviteLink))
+
 	// API v1 Routes with general Rate Limiting (120 req/min per IP)
 	api := router.Group("/api/v1")
 	api.Use(limit(120, 1*time.Minute, "api", "Превышен лимит запросов к API. Пожалуйста, подождите."))
