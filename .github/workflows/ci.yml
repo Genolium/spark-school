@@ -49,12 +49,18 @@ jobs:
           PGPASSWORD: spark_test_password
         run: |
           set -euo pipefail
-          psql -h 127.0.0.1 -U spark -d spark_test -v ON_ERROR_STOP=1 \
+          # The Go test packages share spark_test and each resets its schema, so
+          # the drill uses a dedicated database and applies migrations first.
+          export TEST_DATABASE_URL="postgres://spark:spark_test_password@127.0.0.1:5432/spark_drill?sslmode=disable"
+          dropdb -h 127.0.0.1 -U spark --if-exists spark_drill
+          createdb -h 127.0.0.1 -U spark spark_drill
+          (cd backend && go test ./internal/database -run TestPostgresMigrations_EmptyDatabaseAndRerun -count=1)
+          psql -h 127.0.0.1 -U spark -d spark_drill -v ON_ERROR_STOP=1 \
             -c "INSERT INTO users (telegram_id, first_name, has_access) VALUES (999999, 'Restore Drill', TRUE) ON CONFLICT (telegram_id) DO NOTHING"
-          psql -h 127.0.0.1 -U spark -d spark_test -v ON_ERROR_STOP=1 \
+          psql -h 127.0.0.1 -U spark -d spark_drill -v ON_ERROR_STOP=1 \
             -c "INSERT INTO payment_transactions (payment_id, amount, status, tier, currency) VALUES ('RESTORE_DRILL', 1, 'SUCCESS', 'accelerator', 'RUB') ON CONFLICT (payment_id) DO NOTHING"
           mkdir -p /tmp/spark-backups
-          pg_dump -h 127.0.0.1 -U spark -d spark_test | gzip > /tmp/spark-backups/spark_test.sql.gz
+          pg_dump -h 127.0.0.1 -U spark -d spark_drill | gzip > /tmp/spark-backups/spark_test.sql.gz
           chmod +x scripts/restore-drill.sh
           scripts/restore-drill.sh /tmp/spark-backups/spark_test.sql.gz 2>&1 | tee /tmp/restore-drill.log
           echo "### Restore drill" >> "$GITHUB_STEP_SUMMARY"
