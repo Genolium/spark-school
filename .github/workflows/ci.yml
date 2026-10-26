@@ -84,7 +84,7 @@ jobs:
         with:
           node-version: '22'
       - run: node scripts/package-deploy.js
-      - run: node --test tests/e2e_verification.test.mjs tests/api_contract.test.mjs frontend/tests/visitor_param.test.mjs
+      - run: node --test tests/e2e_verification.test.mjs tests/api_contract.test.mjs frontend/tests/visitor_param.test.mjs frontend/tests/campaign_links.test.mjs
       - run: docker compose config --quiet
 
   frontend-smoke:

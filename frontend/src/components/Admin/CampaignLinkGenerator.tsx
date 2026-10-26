@@ -1,10 +1,16 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { Link2, Copy, Check, ExternalLink, Send, Route, Loader2 } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { Link2, Copy, Check, ExternalLink, Send, Route, Loader2, Plus } from "lucide-react";
 import { api } from "@/lib/api";
 import type { CampaignLink } from "@/lib/api-types";
-import { notifyCampaignLinksChanged, shortLinkUrl, slugifyCampaignLink } from "@/lib/campaign-links";
+import {
+  copyTextToClipboard,
+  notifyCampaignLinksChanged,
+  selectElementText,
+  shortLinkUrl,
+} from "@/lib/campaign-links";
+import { isValidCampaignSlug, slugifyCampaignLink } from "@/lib/campaign-links.mjs";
 
 export function CampaignLinkGenerator() {
   const [targetType, setTargetType] = useState<"landing" | "pricing" | "calc" | "bot">("landing");
@@ -26,6 +32,13 @@ export function CampaignLinkGenerator() {
   const [creatingLink, setCreatingLink] = useState(false);
   const [linkError, setLinkError] = useState<string | null>(null);
   const [createdLink, setCreatedLink] = useState<CampaignLink | null>(null);
+  const [copyError, setCopyError] = useState<string | null>(null);
+  const [copyErrorTarget, setCopyErrorTarget] = useState<string | null>(null);
+
+  const webUrlRef = useRef<HTMLParagraphElement | null>(null);
+  const botUrlRef = useRef<HTMLParagraphElement | null>(null);
+  const createdLinkCodeRef = useRef<HTMLElement | null>(null);
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Derive production base URL
   const baseUrl = typeof window !== "undefined" ? window.location.origin : "https://so-called-spark.ru";
@@ -49,6 +62,12 @@ export function CampaignLinkGenerator() {
       setLinkTarget(targetType === "bot" ? "bot" : "landing");
     }
   }, [targetType, linkTargetTouched]);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    };
+  }, []);
 
   // Build Web Landing URL
   const buildWebUrl = () => {
@@ -92,19 +111,82 @@ export function CampaignLinkGenerator() {
   const webUrl = buildWebUrl();
   const botUrl = buildBotUrl();
 
-  const handleCopy = (text: string, type: string) => {
-    if (navigator?.clipboard) {
-      navigator.clipboard.writeText(text).catch(() => {});
-      setCopied(type);
-      setTimeout(() => setCopied(null), 2000);
+  const handleCopy = async (text: string, type: string, element: HTMLElement | null) => {
+    setCopyError(null);
+    setCopyErrorTarget(null);
+    const result = await copyTextToClipboard(text);
+    if (!result.ok) {
+      selectElementText(element);
+      setCopied(null);
+      setCopyError("Не удалось скопировать — ссылка выделена, нажмите Ctrl+C / ⌘C");
+      setCopyErrorTarget(type);
+      return;
     }
+    setCopied(type);
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    copyTimerRef.current = setTimeout(() => setCopied(null), 2000);
+  };
+
+  // Any edit after a successful create clears the "created" state. Changing
+  // source/campaign also releases the slug so it re-derives for the next link.
+  const handleSourceChange = (value: string) => {
+    if (createdLink) setCreatedLink(null);
+    // Source changes always re-derive the suggested slug so a previously
+    // created slug cannot stick and cause a duplicate on the next POST.
+    setSlugTouched(false);
+    setLinkError(null);
+    setCopyError(null);
+    setCopyErrorTarget(null);
+    setSource(value);
+  };
+
+  const handleCampaignChange = (value: string) => {
+    if (createdLink) setCreatedLink(null);
+    setSlugTouched(false);
+    setLinkError(null);
+    setCopyError(null);
+    setCopyErrorTarget(null);
+    setCampaign(value);
+  };
+
+  const clearCreatedLink = () => {
+    if (createdLink) {
+      setCreatedLink(null);
+      setSlugTouched(false);
+    }
+    setLinkError(null);
+    setCopyError(null);
+    setCopyErrorTarget(null);
+  };
+
+  const resetLinkForm = () => {
+    setTargetType("landing");
+    setSource("");
+    setCampaign("");
+    setPromo("");
+    setTier("accelerator");
+    setLinkTitle("");
+    setLinkSlug("");
+    setSlugTouched(false);
+    setLinkTarget("landing");
+    setLinkTargetTouched(false);
+    setChannelUrl("");
+    setBotAction("");
+    setLinkError(null);
+    setCopyError(null);
+    setCopyErrorTarget(null);
+    setCreatedLink(null);
+    if (copyTimerRef.current) clearTimeout(copyTimerRef.current);
+    setCopied(null);
   };
 
   const handleCreateLink = async () => {
     setLinkError(null);
+    setCopyError(null);
+    setCopyErrorTarget(null);
 
     const slug = slugifyCampaignLink(linkSlug);
-    if (slug.length < 3) {
+    if (!isValidCampaignSlug(slug)) {
       setLinkError("Slug: от 3 до 40 символов — строчная латиница, цифры и дефис");
       return;
     }
@@ -136,6 +218,7 @@ export function CampaignLinkGenerator() {
       utm_source: cleanSource,
       utm_medium: linkTarget === "landing" ? "cpa" : linkTarget === "channel" ? "telegram" : "bot",
       utm_campaign: cleanCampaign,
+      utm_content: cleanPromo,
     });
     setCreatingLink(false);
 
@@ -178,7 +261,10 @@ export function CampaignLinkGenerator() {
           </label>
           <select
             value={targetType}
-            onChange={(e) => setTargetType(e.target.value as any)}
+            onChange={(e) => {
+              clearCreatedLink();
+              setTargetType(e.target.value as "landing" | "pricing" | "calc" | "bot");
+            }}
             className="w-full text-xs font-mono rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-sky-500"
           >
             <option value="landing">Главная страница (Лендинг)</option>
@@ -196,7 +282,7 @@ export function CampaignLinkGenerator() {
             type="text"
             placeholder="например: nemtsov, tg_study_usa"
             value={source}
-            onChange={(e) => setSource(e.target.value)}
+            onChange={(e) => handleSourceChange(e.target.value)}
             className="w-full text-xs font-mono rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-sky-500"
           />
         </div>
@@ -209,7 +295,7 @@ export function CampaignLinkGenerator() {
             type="text"
             placeholder="например: post_october, stories_1"
             value={campaign}
-            onChange={(e) => setCampaign(e.target.value)}
+            onChange={(e) => handleCampaignChange(e.target.value)}
             className="w-full text-xs font-mono rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-sky-500"
           />
         </div>
@@ -222,7 +308,10 @@ export function CampaignLinkGenerator() {
             type="text"
             placeholder="например: SPARK5"
             value={promo}
-            onChange={(e) => setPromo(e.target.value)}
+            onChange={(e) => {
+              clearCreatedLink();
+              setPromo(e.target.value);
+            }}
             className="w-full text-xs font-mono rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-sky-500 uppercase"
           />
         </div>
@@ -234,21 +323,30 @@ export function CampaignLinkGenerator() {
           <div className="inline-flex rounded-lg border border-slate-200 dark:border-white/10 p-0.5 text-xs font-mono">
             <button
               type="button"
-              onClick={() => setTier("basic")}
+              onClick={() => {
+                clearCreatedLink();
+                setTier("basic");
+              }}
               className={`px-2.5 py-1 rounded-md transition-colors ${tier === "basic" ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 font-bold" : "text-slate-600 dark:text-slate-400"}`}
             >
               Базовый
             </button>
             <button
               type="button"
-              onClick={() => setTier("accelerator")}
+              onClick={() => {
+                clearCreatedLink();
+                setTier("accelerator");
+              }}
               className={`px-2.5 py-1 rounded-md transition-colors ${tier === "accelerator" ? "bg-emerald-600 text-white font-bold" : "text-slate-600 dark:text-slate-400"}`}
             >
               Акселератор
             </button>
             <button
               type="button"
-              onClick={() => setTier("vip")}
+              onClick={() => {
+                clearCreatedLink();
+                setTier("vip");
+              }}
               className={`px-2.5 py-1 rounded-md transition-colors ${tier === "vip" ? "bg-amber-600 text-white font-bold" : "text-slate-600 dark:text-slate-400"}`}
             >
               VIP
@@ -268,14 +366,14 @@ export function CampaignLinkGenerator() {
               </span>
               <span className="text-[11px] text-slate-500">Для постов, баннеров, сторис и рекламы</span>
             </div>
-            <p className="text-xs text-slate-800 dark:text-slate-200 truncate select-all">
+            <p ref={webUrlRef} className="text-xs text-slate-800 dark:text-slate-200 truncate select-all">
               {webUrl}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
-              onClick={() => handleCopy(webUrl, "web")}
+              onClick={() => handleCopy(webUrl, "web", webUrlRef.current)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-white/10 hover:bg-slate-100 dark:hover:bg-white/15 text-xs font-medium text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-white/10 shadow-sm transition-all active:scale-95"
             >
               {copied === "web" ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
@@ -302,14 +400,14 @@ export function CampaignLinkGenerator() {
               </span>
               <span className="text-[11px] text-slate-500">Фиксирует источник прямо при старте бота</span>
             </div>
-            <p className="text-xs text-slate-800 dark:text-slate-200 truncate select-all">
+            <p ref={botUrlRef} className="text-xs text-slate-800 dark:text-slate-200 truncate select-all">
               {botUrl}
             </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
               type="button"
-              onClick={() => handleCopy(botUrl, "bot")}
+              onClick={() => handleCopy(botUrl, "bot", botUrlRef.current)}
               className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-white/10 hover:bg-slate-100 dark:hover:bg-white/15 text-xs font-medium text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-white/10 shadow-sm transition-all active:scale-95"
             >
               {copied === "bot" ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
@@ -327,6 +425,15 @@ export function CampaignLinkGenerator() {
           </div>
         </div>
       </div>
+
+      {copyError && copyErrorTarget !== "short" && (
+        <p
+          role="alert"
+          className="mt-3 rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-600 dark:text-rose-300"
+        >
+          {copyError}
+        </p>
+      )}
 
       {/* Stored short link: counts clicks, visits, leads and payments. */}
       <div className="mt-6 pt-5 border-t border-slate-100 dark:border-white/5">
@@ -352,7 +459,10 @@ export function CampaignLinkGenerator() {
             <input
               type="text"
               value={linkTitle}
-              onChange={(e) => setLinkTitle(e.target.value)}
+              onChange={(e) => {
+                clearCreatedLink();
+                setLinkTitle(e.target.value);
+              }}
               placeholder="Например: Немцов — пост в октябре"
               className="w-full text-xs font-mono rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
             />
@@ -368,6 +478,7 @@ export function CampaignLinkGenerator() {
                 type="text"
                 value={linkSlug}
                 onChange={(e) => {
+                  clearCreatedLink();
                   setSlugTouched(true);
                   setLinkSlug(e.target.value);
                 }}
@@ -384,6 +495,7 @@ export function CampaignLinkGenerator() {
             <select
               value={linkTarget}
               onChange={(e) => {
+                clearCreatedLink();
                 setLinkTargetTouched(true);
                 setLinkTarget(e.target.value as "landing" | "channel" | "bot");
               }}
@@ -404,7 +516,10 @@ export function CampaignLinkGenerator() {
             <input
               type="text"
               value={channelUrl}
-              onChange={(e) => setChannelUrl(e.target.value)}
+              onChange={(e) => {
+                clearCreatedLink();
+                setChannelUrl(e.target.value);
+              }}
               placeholder="https://t.me/..."
               className="w-full text-xs font-mono rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
             />
@@ -419,7 +534,10 @@ export function CampaignLinkGenerator() {
             <input
               type="text"
               value={botAction}
-              onChange={(e) => setBotAction(e.target.value)}
+              onChange={(e) => {
+                clearCreatedLink();
+                setBotAction(e.target.value);
+              }}
               placeholder="например: src_nemtsov (латиница, цифры, _ и -)"
               className="w-full text-xs font-mono rounded-xl border border-slate-200 dark:border-white/10 bg-slate-50 dark:bg-white/5 px-3 py-2 text-slate-900 dark:text-white focus:outline-none focus:border-emerald-500"
             />
@@ -451,25 +569,41 @@ export function CampaignLinkGenerator() {
 
         {createdLink && (
           <div className="mt-4 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4">
-            <div className="mb-2 flex flex-wrap items-center gap-2">
-              <Check className="w-4 h-4 text-emerald-500" />
-              <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
-                Короткая ссылка создана
-              </span>
-              {!createdLink.is_active && (
-                <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-500 dark:bg-white/10 dark:text-slate-400">
-                  выключена
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Check className="w-4 h-4 text-emerald-500" />
+                <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                  Короткая ссылка создана
                 </span>
-              )}
+                {!createdLink.is_active && (
+                  <span className="rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-bold text-slate-500 dark:bg-white/10 dark:text-slate-400">
+                    выключена
+                  </span>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={resetLinkForm}
+                className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/30 bg-white/70 px-2.5 py-1 text-[11px] font-bold text-emerald-700 hover:bg-white dark:bg-black/20 dark:text-emerald-300 dark:hover:bg-black/30"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Новая ссылка</span>
+              </button>
             </div>
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-              <code className="flex-1 min-w-0 text-xs font-mono text-slate-800 dark:text-slate-200 break-all select-all">
+              <code
+                ref={createdLinkCodeRef}
+                data-short-link-text
+                className="flex-1 min-w-0 text-xs font-mono text-slate-800 dark:text-slate-200 break-all select-all"
+              >
                 {shortLinkUrl(createdLink.slug)}
               </code>
               <div className="flex items-center gap-2 shrink-0">
                 <button
                   type="button"
-                  onClick={() => handleCopy(shortLinkUrl(createdLink.slug), "short")}
+                  onClick={() =>
+                    handleCopy(shortLinkUrl(createdLink.slug), "short", createdLinkCodeRef.current)
+                  }
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white dark:bg-white/10 hover:bg-slate-100 dark:hover:bg-white/15 text-xs font-medium text-slate-800 dark:text-slate-200 border border-slate-200 dark:border-white/10 shadow-sm transition-all active:scale-95"
                 >
                   {copied === "short" ? (
@@ -490,6 +624,11 @@ export function CampaignLinkGenerator() {
                 </a>
               </div>
             </div>
+            {copyError && copyErrorTarget === "short" && (
+              <p role="alert" className="mt-2 text-[11px] text-rose-600 dark:text-rose-300">
+                {copyError}
+              </p>
+            )}
             <p className="mt-2 text-[11px] text-slate-500 dark:text-slate-400">
               Ссылка сохранена. Переходы и оплаты появятся в отчёте ниже; деактивировать или удалить её можно там же.
             </p>

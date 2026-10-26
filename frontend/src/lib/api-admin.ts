@@ -484,21 +484,22 @@ export const adminApi = {
     }
   },
 
-  // Campaign short links. A failed list degrades to an empty table; the report
-  // returns null so the UI can tell an error from genuinely no traffic.
-  async getLinks(): Promise<CampaignLinkWithClicks[]> {
+  // Campaign short links. A failed list returns null so the report can show an
+  // explicit error and disable row actions instead of pretending there are no
+  // links. A failed report also returns null.
+  async getLinks(): Promise<CampaignLinkWithClicks[] | null> {
     try {
       const res = await fetchAdmin(`/admin/links`);
-      if (!res.ok) return [];
+      if (!res.ok) return null;
       const data = await res.json();
-      if (!Array.isArray(data)) return [];
+      if (!Array.isArray(data)) return null;
       return data.map((link: CampaignLinkWithClicks) => ({
         ...link,
         clicks: link.clicks ?? 0,
         unique_visitors: link.unique_visitors ?? 0,
       }));
     } catch {
-      return [];
+      return null;
     }
   },
 
