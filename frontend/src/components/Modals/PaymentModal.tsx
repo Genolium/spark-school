@@ -18,21 +18,21 @@ interface PaymentModalProps {
 const TIERS: Record<PricingTier, { name: string; price: number; discountPrice: number; discountAmount: number; tag: string }> = {
   basic: {
     name: "Базовый",
-    price: 3990,
+    price: 3333,
     discountPrice: 3790,
     discountAmount: 200,
     tag: "Без обратной связи",
   },
   accelerator: {
     name: "Акселератор",
-    price: 10900,
+    price: 10990,
     discountPrice: 10355,
     discountAmount: 545,
     tag: "Хит продаж",
   },
   vip: {
     name: "VIP",
-    price: 14900,
+    price: 19990,
     discountPrice: 14155,
     discountAmount: 745,
     tag: "Строго 3 места",

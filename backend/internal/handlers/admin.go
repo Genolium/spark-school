@@ -828,7 +828,7 @@ func (h *AdminHandler) IssueReceipt(c *gin.Context) {
 	now := time.Now()
 
 	if h.db == nil {
-		amount := 10900.0
+		amount := 10990.0
 		if req.Amount != nil && *req.Amount > 0 {
 			amount = *req.Amount
 		}

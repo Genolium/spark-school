@@ -104,14 +104,14 @@ function getFilesRecursively(dir, filterFn) {
 // ============================================================================
 describe('Tier 1: Feature Coverage', () => {
 
-  it('1.1 Pricing Tiers: 3 tiers: Базовый (3990), Акселератор (10900 / lower 9990), and VIP (14900) exist with proper features', () => {
+  it('1.1 Pricing Tiers: 3 tiers: Базовый (3333), Акселератор (10990 / lower 9990), and VIP (19990) exist with proper features', () => {
     const defaultsPath = path.join(ROOT, 'frontend', 'src', 'lib', 'pricing-defaults.ts');
     assert.ok(fs.existsSync(defaultsPath), 'pricing-defaults.ts must exist');
     const defaultsContent = fs.readFileSync(defaultsPath, 'utf8');
-    assert.match(defaultsContent, /basic_price:\s*3990/, 'list price for Базовый must be 3990');
-    assert.match(defaultsContent, /accelerator_price:\s*10900/, 'list price for Акселератор must be 10900');
+    assert.match(defaultsContent, /basic_price:\s*3333/, 'list price for Базовый must be 3333');
+    assert.match(defaultsContent, /accelerator_price:\s*10990/, 'list price for Акселератор must be 10990');
     assert.match(defaultsContent, /ACCELERATOR_LOWER_PRICE = 9990/, 'lower experiment must be 9990');
-    assert.match(defaultsContent, /vip_price:\s*14900/, 'list price for VIP must be 14900');
+    assert.match(defaultsContent, /vip_price:\s*19990/, 'list price for VIP must be 19990');
 
     const pricingSectionPath = path.join(ROOT, 'frontend', 'src', 'components', 'PricingSection.tsx');
     assert.ok(fs.existsSync(pricingSectionPath), 'PricingSection.tsx must exist');
@@ -134,17 +134,17 @@ describe('Tier 1: Feature Coverage', () => {
     assert.ok(fs.existsSync(paymentModalPath), 'PaymentModal.tsx must exist');
     const modalContent = fs.readFileSync(paymentModalPath, 'utf8');
 
-    assert.match(modalContent, /basic:\s*\{[\s\S]*?price:\s*3990/, 'PaymentModal must have basic price 3990');
-    assert.match(modalContent, /accelerator:\s*\{[\s\S]*?price:\s*10900/, 'PaymentModal must have accelerator list price 10900');
-    assert.match(modalContent, /vip:\s*\{[\s\S]*?price:\s*14900/, 'PaymentModal must have vip price 14900');
+    assert.match(modalContent, /basic:\s*\{[\s\S]*?price:\s*3333/, 'PaymentModal must have basic price 3333');
+    assert.match(modalContent, /accelerator:\s*\{[\s\S]*?price:\s*10990/, 'PaymentModal must have accelerator list price 10990');
+    assert.match(modalContent, /vip:\s*\{[\s\S]*?price:\s*19990/, 'PaymentModal must have vip price 19990');
     assert.match(modalContent, /vip:\s*\{[\s\S]*?name:\s*["']VIP["']/, 'PaymentModal VIP tier name must be strictly "VIP"');
 
     const backendPromoPath = path.join(ROOT, 'backend', 'internal', 'handlers', 'promo.go');
     assert.ok(fs.existsSync(backendPromoPath), 'backend/internal/handlers/promo.go must exist');
     const backendPromoContent = fs.readFileSync(backendPromoPath, 'utf8');
-    assert.match(backendPromoContent, /case\s+"basic"(?:,\s*"базовый")?:\s*return\s*3990/, 'backend GetTierPrice must return 3990 for basic');
-    assert.match(backendPromoContent, /case\s+"vip":\s*return\s*14900/, 'backend GetTierPrice must return 14900 for vip');
-    assert.match(backendPromoContent, /case\s+"accelerator"[\s\S]*?return\s*10900/, 'backend GetTierPrice must return 10900 for accelerator');
+    assert.match(backendPromoContent, /case\s+"basic"(?:,\s*"базовый")?:\s*return\s*3333/, 'backend GetTierPrice must return 3333 for basic');
+    assert.match(backendPromoContent, /case\s+"vip":\s*return\s+19990/, 'backend GetTierPrice must return 19990 for vip');
+    assert.match(backendPromoContent, /case\s+"accelerator"[\s\S]*?return\s*10990/, 'backend GetTierPrice must return 10990 for accelerator');
   });
 
   it('1.2 Promo Code Engine: 5% discount calculation (3990 -> 3790, 10900 -> 10355, 14900 -> 14155 for 3 active tiers)', () => {
