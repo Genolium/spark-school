@@ -642,4 +642,15 @@ export const adminApi = {
       return false;
     }
   },
+
+  async ignoreOutbox(id: number): Promise<boolean> {
+    try {
+      const res = await fetchAdmin(`/admin/outbox/${id}/ignore`, {
+        method: "POST",
+      });
+      return res.ok;
+    } catch {
+      return false;
+    }
+  },
 };

@@ -26,7 +26,7 @@ export function OutboxDeadLetter() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="font-semibold text-lg">Outbox: недоставленные события</h3>
-          <p className="text-xs text-slate-500">События после исчерпания retry. Можно повторить вручную.</p>
+          <p className="text-xs text-slate-500">События после исчерпания retry. Можно повторить вручную или пометить как проигнорированные.</p>
         </div>
         <button onClick={load} className="inline-flex items-center gap-1 rounded-lg bg-emerald-600 text-white px-3 py-1 text-sm">
           <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} /> Обновить
@@ -56,14 +56,31 @@ export function OutboxDeadLetter() {
                   <td className="py-2 max-w-xs truncate text-xs text-rose-500" title={event.last_error}>{event.last_error || "—"}</td>
                   <td className="py-2 text-xs">{new Date(event.created_at).toLocaleString("ru-RU")}</td>
                   <td className="py-2">
-                    <button
-                      onClick={async () => {
-                        if (await api.retryOutbox(event.id)) load();
-                      }}
-                      className="rounded-lg border px-2 py-1 text-xs"
-                    >
-                      Повторить
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={async () => {
+                          if (await api.retryOutbox(event.id)) load();
+                        }}
+                        className="rounded-lg border px-2 py-1 text-xs"
+                      >
+                        Повторить
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (
+                            !window.confirm(
+                              "Пометить событие как проигнорированное? Оно исчезнет из очереди и больше не будет доставлено.",
+                            )
+                          ) {
+                            return;
+                          }
+                          if (await api.ignoreOutbox(event.id)) load();
+                        }}
+                        className="rounded-lg border border-slate-300 dark:border-white/20 px-2 py-1 text-xs text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/10"
+                      >
+                        Игнорировать
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

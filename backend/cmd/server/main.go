@@ -359,6 +359,7 @@ func main() {
 			adminGroup.GET("/audit-log", adminHandler.ListAuditLog)
 			adminGroup.GET("/outbox/dead", adminHandler.ListDeadOutbox)
 			adminGroup.POST("/outbox/:id/retry", adminHandler.RetryOutbox)
+			adminGroup.POST("/outbox/:id/ignore", adminHandler.IgnoreOutbox)
 			adminGroup.GET("/stats", adminHandler.GetStats)
 			adminGroup.GET("/analytics/funnel", handlers.GetFunnel(db))
 			adminGroup.GET("/analytics/experiments", handlers.GetExperiments(db))
