@@ -59,12 +59,15 @@ function DecisionCell({ row }: { row: ExperimentMetric }) {
 export function ExperimentsReport() {
   const [report, setReport] = useState<ExperimentReport | null>(null);
   const [error, setError] = useState(false);
+  // The experiments keep running; a longer window keeps early observations
+  // instead of dropping everything older than two weeks.
+  const [days, setDays] = useState(30);
 
   const load = useCallback(async () => {
-    const result = await api.getExperiments();
+    const result = await api.getExperiments(days);
     setReport(result);
     setError(!result);
-  }, []);
+  }, [days]);
 
   useEffect(() => {
     load();
@@ -87,9 +90,22 @@ export function ExperimentsReport() {
             </p>
           )}
         </div>
-        <button onClick={load} className="rounded-lg bg-emerald-600 text-white px-3 py-1 text-sm">
-          Обновить
-        </button>
+        <div className="flex items-center gap-2">
+          <select
+            value={days}
+            onChange={(e) => setDays(Number(e.target.value))}
+            className="rounded-lg border border-slate-200 dark:border-white/15 bg-transparent px-2 py-1 text-sm"
+            aria-label="Окно эксперимента"
+          >
+            <option value={14}>14 дней</option>
+            <option value={30}>30 дней</option>
+            <option value={60}>60 дней</option>
+            <option value={90}>90 дней</option>
+          </select>
+          <button onClick={load} className="rounded-lg bg-emerald-600 text-white px-3 py-1 text-sm">
+            Обновить
+          </button>
+        </div>
       </div>
       {error && <p className="text-sm text-red-500">Не удалось загрузить эксперименты.</p>}
       {!error && rows.length === 0 && <p className="text-sm text-slate-500">Пока нет назначений.</p>}

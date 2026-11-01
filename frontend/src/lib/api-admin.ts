@@ -603,9 +603,9 @@ export const adminApi = {
     }
   },
 
-  async getExperiments(): Promise<ExperimentReport | null> {
+  async getExperiments(days = 30): Promise<ExperimentReport | null> {
     try {
-      const res = await fetchAdmin(`/admin/analytics/experiments`);
+      const res = await fetchAdmin(`/admin/analytics/experiments?days=${days}`);
       if (!res.ok) return null;
       const json = await res.json();
       return {
