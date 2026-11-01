@@ -9,6 +9,13 @@ interface FinancialStatsProps {
 }
 
 export function FinancialStats({ stats }: FinancialStatsProps) {
+  // Paid transactions across tiers. active_students counts people, and one
+  // student can pay more than once (upgrade), so the two numbers differ.
+  const paidTransactions = Object.values(stats.tier_breakdown || {}).reduce(
+    (sum, tier) => sum + (tier?.count || 0),
+    0,
+  );
+
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
       {/* Gross Revenue */}
@@ -25,7 +32,7 @@ export function FinancialStats({ stats }: FinancialStatsProps) {
           {stats.gross_volume.toLocaleString("ru-RU")} ₽
         </div>
         <div className="text-xs font-mono text-emerald-400 mt-1 flex items-center gap-1 font-semibold">
-          <span>● Оплат тарифа: {stats.active_students}</span>
+          <span>● Оплат тарифа: {paidTransactions}</span>
         </div>
       </div>
 

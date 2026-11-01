@@ -79,7 +79,7 @@ export default function AdminPage() {
     setLoading(true);
     const [statsData, studentsData, payoutsData, promosData] = await Promise.all([
       api.getAdminStats(),
-      api.getAdminStudents(),
+      api.getAdminStudents({ pageSize: 200 }),
       api.getAdminPayouts(),
       api.getAdminPromoCodes(),
     ]);
