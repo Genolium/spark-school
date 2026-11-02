@@ -200,3 +200,28 @@ func TestReconcileHistoricalSales_UpgradePreservesInitialPurchase(t *testing.T) 
 		t.Fatalf("expected idempotent reconciliation: got %d transactions", len(txsAfter))
 	}
 }
+
+// GORM derives "v_ip_price_experiment" from VIPPriceExperiment, while the
+// migration creates "vip_price_experiment". The explicit column tag keeps the
+// model and the real schema aligned.
+func TestBotSessionColumnNamesMatchMigration(t *testing.T) {
+	db := setupTestDB(t)
+	stmt := &gorm.Statement{DB: db}
+	if err := stmt.Parse(&models.BotSession{}); err != nil {
+		t.Fatal(err)
+	}
+	for field, want := range map[string]string{
+		"TelegramID":         "telegram_id",
+		"State":              "state",
+		"PriceExperiment":    "price_experiment",
+		"VIPPriceExperiment": "vip_price_experiment",
+	} {
+		f := stmt.Schema.LookUpField(field)
+		if f == nil {
+			t.Fatalf("field %s not found on BotSession", field)
+		}
+		if f.DBName != want {
+			t.Fatalf("%s maps to column %q, want %q", field, f.DBName, want)
+		}
+	}
+}
