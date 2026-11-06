@@ -738,90 +738,59 @@ export function RevenueAnalyticsCharts({ stats }: RevenueAnalyticsChartsProps) {
           </div>
         </div>
 
-        {/* Visual Dual Progress Bar */}
+        {/* Tier breakdown: every tier that has sales, straight from stats.tier_breakdown */}
         <div className="space-y-4">
           {(() => {
-            const acc = stats.tier_breakdown?.accelerator || {
-              count: 36,
-              revenue: 204870,
-              percentage: 70.7,
-            };
-            const vip = stats.tier_breakdown?.vip || {
-              count: 6,
-              revenue: 84930,
-              percentage: 29.3,
-            };
-            const accPct = acc.percentage || 70.7;
-            const vipPct = vip.percentage || 29.3;
+            const tiers = [
+              { key: "basic", label: "Базовый", bar: "bg-amber-500", dot: "bg-amber-500", text: "text-amber-400", chip: "bg-amber-500/10 border-amber-500/20", border: "border-amber-500/20 hover:border-amber-500/40" },
+              { key: "accelerator", label: "Акселератор", bar: "bg-emerald-500", dot: "bg-emerald-500", text: "text-emerald-400", chip: "bg-emerald-500/10 border-emerald-500/20", border: "border-emerald-500/20 hover:border-emerald-500/40" },
+              { key: "vip", label: "VIP", bar: "bg-sky-500", dot: "bg-sky-400", text: "text-sky-400", chip: "bg-sky-500/10 border-sky-500/20", border: "border-sky-500/20 hover:border-sky-500/40" },
+            ] as const;
+
+            const rows = tiers
+              .map((tier) => {
+                const data = stats.tier_breakdown?.[tier.key as keyof typeof stats.tier_breakdown];
+                return { ...tier, count: data?.count || 0, revenue: data?.revenue || 0, pct: data?.percentage || 0 };
+              })
+              .filter((tier) => tier.count > 0 || tier.revenue > 0);
 
             return (
               <>
                 <div className="w-full h-4 rounded-full bg-black/40 overflow-hidden flex border border-white/10 p-0.5">
-                  <div
-                    style={{ width: `${accPct}%` }}
-                    className="h-full rounded-l-full bg-gradient-to-r from-emerald-500 to-amber-500 transition-all duration-500 relative group"
-                    title={`Акселератор: ${acc.revenue.toLocaleString("ru-RU")} ₽ (${accPct.toFixed(1)}%)`}
-                  />
-                  <div
-                    style={{ width: `${vipPct}%` }}
-                    className="h-full rounded-r-full bg-gradient-to-r from-sky-500 to-blue-600 transition-all duration-500 relative group"
-                    title={`VIP: ${vip.revenue.toLocaleString("ru-RU")} ₽ (${vipPct.toFixed(1)}%)`}
-                  />
+                  {rows.map((tier, i) => (
+                    <div
+                      key={tier.key}
+                      style={{ width: `${tier.pct}%` }}
+                      className={`h-full ${tier.bar} ${i === 0 ? "rounded-l-full" : ""} ${i === rows.length - 1 ? "rounded-r-full" : ""} transition-all duration-500`}
+                      title={`${tier.label}: ${tier.revenue.toLocaleString("ru-RU")} ₽ (${tier.pct.toFixed(1)}%)`}
+                    />
+                  ))}
                 </div>
 
-                {/* Cards for each tier */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-                  {/* Accelerator Tier */}
-                  <div className="p-4 rounded-2xl bg-white/[0.03] border border-emerald-500/20 hover:border-emerald-500/40 transition-all">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-                        <span className="font-mono font-bold text-white text-sm">Тариф «Акселератор»</span>
-                      </div>
-                      <span className="text-xs font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                        {accPct.toFixed(1)}% кассы
-                      </span>
-                    </div>
-                    <div className="flex items-baseline justify-between mt-2">
-                      <div>
-                        <div className="text-2xl font-black font-mono text-white">
-                          {acc.revenue.toLocaleString("ru-RU")} ₽
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-2">
+                  {rows.map((tier) => (
+                    <div key={tier.key} className={`p-4 rounded-2xl bg-white/[0.03] border ${tier.border} transition-all`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2.5 h-2.5 rounded-full ${tier.dot}`} />
+                          <span className="font-mono font-bold text-white text-sm">Тариф «{tier.label}»</span>
                         </div>
-                        <div className="text-xs font-mono text-slate-400 mt-0.5">
-                          {acc.count} студентов (10 900 ₽ / 9 990 ₽)
-                        </div>
+                        <span className={`text-xs font-mono font-bold ${tier.text} ${tier.chip} px-2 py-0.5 rounded-full border`}>
+                          {tier.pct.toFixed(1)}% кассы
+                        </span>
                       </div>
-                      <div className="text-right text-xs font-mono text-slate-400">
-                        Личный аудит + созвон 45–60 мин
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* VIP Tier */}
-                  <div className="p-4 rounded-2xl bg-white/[0.03] border border-sky-500/20 hover:border-sky-500/40 transition-all">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full bg-sky-400" />
-                        <span className="font-mono font-bold text-white text-sm">Тариф «VIP»</span>
-                      </div>
-                      <span className="text-xs font-mono font-bold text-sky-400 bg-sky-500/10 px-2 py-0.5 rounded-full border border-sky-500/20">
-                        {vipPct.toFixed(1)}% кассы
-                      </span>
-                    </div>
-                    <div className="flex items-baseline justify-between mt-2">
-                      <div>
-                        <div className="text-2xl font-black font-mono text-white">
-                          {vip.revenue.toLocaleString("ru-RU")} ₽
-                        </div>
-                        <div className="text-xs font-mono text-slate-400 mt-0.5">
-                          {vip.count} студентов (14 900 ₽ / 14 155 ₽)
+                      <div className="flex items-baseline justify-between mt-2">
+                        <div>
+                          <div className="text-2xl font-black font-mono text-white">
+                            {tier.revenue.toLocaleString("ru-RU")} ₽
+                          </div>
+                          <div className="text-xs font-mono text-slate-400 mt-0.5">
+                            {tier.count} оплат
+                          </div>
                         </div>
                       </div>
-                      <div className="text-right text-xs font-mono text-slate-400">
-                        3 Zoom-симуляции + личный чат
-                      </div>
                     </div>
-                  </div>
+                  ))}
                 </div>
               </>
             );
