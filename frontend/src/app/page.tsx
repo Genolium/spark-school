@@ -46,7 +46,23 @@ export default function HomePage() {
         // Safe fallback
       }
     }
-    const startParam = buildCheckoutStartParam(tier, refCode);
+    // A campaign link can carry ?promo=DEADLINE; remember it so every tier
+    // click keeps the code, and pass it to the bot in the start payload.
+    let promoCode = "";
+    if (typeof window !== "undefined") {
+      try {
+        const urlPromo = new URLSearchParams(window.location.search).get("promo");
+        const storedPromo = localStorage.getItem("spark_promo");
+        const raw = (urlPromo || storedPromo || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16);
+        if (raw) {
+          promoCode = raw;
+          if (urlPromo) localStorage.setItem("spark_promo", raw);
+        }
+      } catch {
+        // Safe fallback
+      }
+    }
+    const startParam = buildCheckoutStartParam(tier, refCode, promoCode);
     window.location.href = `${BOT_URL}?start=${startParam}`;
   };
 

@@ -93,6 +93,41 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 	var text string
 	var keyboard *telego.InlineKeyboardMarkup
 
+	pricing := s.pricingForSession(session)
+	text, keyboard = s.paymentDetailsContent(session, pricing, withPromo)
+
+	targetMedia := MediaBuyCourse
+	if withPromo || session.DiscountPct > 0 {
+		targetMedia = MediaPromoApplied
+	}
+
+	photoFile := s.ResolvePhotoFile(targetMedia)
+	photoMsg := tu.Photo(chatID, photoFile).
+		WithCaption(text).
+		WithParseMode(telego.ModeHTML).
+		WithReplyMarkup(keyboard)
+
+	sentMsg, err := s.bot.SendPhoto(photoMsg)
+	if err == nil && sentMsg != nil {
+		s.CacheSentPhoto(targetMedia, sentMsg)
+	} else if err != nil {
+		log.Printf("[Bot Error] sendPaymentDetails SendPhoto failed: %v. Sending fallback...", err)
+		cleanText := StripTgEmoji(text)
+		m := tu.Message(chatID, cleanText).WithParseMode(telego.ModeHTML).WithReplyMarkup(keyboard)
+		if _, textErr := s.bot.SendMessage(m); textErr != nil {
+			plainMsg := tu.Message(chatID, cleanText).WithReplyMarkup(keyboard)
+			_, _ = s.bot.SendMessage(plainMsg)
+		}
+	}
+}
+
+// paymentDetailsContent renders the tariff message and keyboard for the
+// current session. Extracted from sendPaymentDetails so promo prices can be
+// tested without a live Telegram connection.
+func (s *BotService) paymentDetailsContent(session *UserSession, pricing models.CoursePricing, withPromo bool) (string, *telego.InlineKeyboardMarkup) {
+	var text string
+	var keyboard *telego.InlineKeyboardMarkup
+
 	sparkle := TgEmoji(EmojiStarGreen, "✨")
 	clipGreen := TgEmoji(EmojiPaperclipGreen, "📎")
 
@@ -101,7 +136,6 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 	num3 := TgEmoji(EmojiNum3, "3️⃣")
 	paperclip := TgEmoji(EmojiPaperclip, "📎")
 
-	pricing := s.pricingForSession(session)
 	basicBase := int(pricing.BasicPrice)
 	accBase := int(pricing.AcceleratorPrice)
 	vipBase := int(pricing.VIPPrice)
@@ -187,29 +221,7 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 		keyboard = PaymentKeyboard(pricing)
 	}
 
-	targetMedia := MediaBuyCourse
-	if withPromo || session.DiscountPct > 0 {
-		targetMedia = MediaPromoApplied
-	}
-
-	photoFile := s.ResolvePhotoFile(targetMedia)
-	photoMsg := tu.Photo(chatID, photoFile).
-		WithCaption(text).
-		WithParseMode(telego.ModeHTML).
-		WithReplyMarkup(keyboard)
-
-	sentMsg, err := s.bot.SendPhoto(photoMsg)
-	if err == nil && sentMsg != nil {
-		s.CacheSentPhoto(targetMedia, sentMsg)
-	} else if err != nil {
-		log.Printf("[Bot Error] sendPaymentDetails SendPhoto failed: %v. Sending fallback...", err)
-		cleanText := StripTgEmoji(text)
-		m := tu.Message(chatID, cleanText).WithParseMode(telego.ModeHTML).WithReplyMarkup(keyboard)
-		if _, textErr := s.bot.SendMessage(m); textErr != nil {
-			plainMsg := tu.Message(chatID, cleanText).WithReplyMarkup(keyboard)
-			_, _ = s.bot.SendMessage(plainMsg)
-		}
-	}
+	return text, keyboard
 }
 
 func (s *BotService) handleSbpPayment(chatID telego.ChatID, from *telego.User, tier string) {

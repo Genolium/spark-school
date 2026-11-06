@@ -74,8 +74,11 @@ function compactStartParam(action, attributionToken = '', ref = '') {
 }
 
 function generatePaymentDeepLink(tier, username = '', promoCode = '', refCode = '') {
-  const ref = (refCode || promoCode || username || '').replace('@', '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 12);
-  return `https://t.me/spark_prep_bot?start=${compactStartParam(`pay_${tier}`, '', ref)}`;
+  // Promo goes right after the tier; a referral is a separate suffix.
+  const promo = (promoCode || username || '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 16);
+  const ref = (refCode || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 12);
+  const action = promo ? `pay_${tier}_${promo}` : `pay_${tier}`;
+  return `https://t.me/spark_prep_bot?start=${compactStartParam(action, '', ref)}`;
 }
 
 // Helper: Recursively find files in directory
@@ -393,7 +396,16 @@ describe('Tier 3: Cross-Feature & Deep-Links', () => {
     assert.equal(linkVip, 'https://t.me/spark_prep_bot?start=pay_vip');
 
     const linkWithPromo = generatePaymentDeepLink('vip', '', 'SPARK5');
-    assert.equal(linkWithPromo, 'https://t.me/spark_prep_bot?start=pay_vip_ref_SPARK5');
+    assert.equal(linkWithPromo, 'https://t.me/spark_prep_bot?start=pay_vip_SPARK5');
+
+    const linkWithPromoAndRef = generatePaymentDeepLink('vip', '', 'DEADLINE', 'alex');
+    assert.equal(linkWithPromoAndRef, 'https://t.me/spark_prep_bot?start=pay_vip_DEADLINE_ref_alex');
+
+    const pagePath = path.join(ROOT, 'frontend', 'src', 'app', 'page.tsx');
+    const pageContent = fs.readFileSync(pagePath, 'utf8');
+    assert.match(pageContent, /get\("promo"\)/, 'landing must read the promo query parameter');
+    assert.match(pageContent, /buildCheckoutStartParam\(tier,\s*refCode,\s*promoCode\)/, 'landing must pass the promo to the bot link');
+    assert.match(analyticsContent, /pay_\$\{tier\}_\$\{cleanPromo\}/, 'checkout params must put the promo after the tier');
 
     const compact = compactStartParam('pay_accelerator', 'apy1xadvhvmo1', 'partneril');
     assert.equal(compact, 'pay_accelerator_a_apy1xadvhvmo1_ref_partneril');
