@@ -74,7 +74,6 @@ type analyticsTrackRequest struct {
 // the server derives it deterministically from the anonymous visitor id.
 var experimentVariants = map[string][]string{
 	"hero_cta_copy":    {"control", "benefit", "diagnostic"},
-	"hero_headline":    {"control", "benefit", "urgency"},
 	"pricing_cta_copy": {"control", "action"},
 	"pricing_price":    {"control", "lower"},
 	"vip_price":        {"control", "mid", "low"},

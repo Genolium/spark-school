@@ -5,7 +5,7 @@ import { API_BASE } from "./api-base";
 import type { CoursePricing } from "./api-types";
 import { ACCELERATOR_LIST_PRICE, ACCELERATOR_LOWER_PRICE } from "./pricing-defaults";
 
-export type ExperimentName = "hero_cta_copy" | "hero_headline" | "pricing_cta_copy" | "pricing_price" | "vip_price";
+export type ExperimentName = "hero_cta_copy" | "pricing_cta_copy" | "pricing_price" | "vip_price";
 
 export interface ExperimentDefinition {
   name: ExperimentName;
@@ -14,7 +14,6 @@ export interface ExperimentDefinition {
 
 export const EXPERIMENTS: ExperimentDefinition[] = [
   { name: "hero_cta_copy", variants: ["control", "benefit", "diagnostic"] },
-  { name: "hero_headline", variants: ["control", "benefit", "urgency"] },
   { name: "pricing_cta_copy", variants: ["control", "action"] },
   { name: "pricing_price", variants: ["control", "lower"] },
   { name: "vip_price", variants: ["control", "mid", "low"] },

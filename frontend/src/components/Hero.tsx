@@ -36,33 +36,17 @@ export function Hero({ onOpenChances }: HeroProps) {
   ].filter((p): p is number => typeof p === "number" && p > 0);
   const minPrice = validPrices.length > 0 ? Math.min(...validPrices) : 3990;
 
-  const headlineVariant = getExperiment("hero_headline");
-  const headline =
-    headlineVariant === "benefit" ? (
-      <>
-        ПРОЙДИ ПУТЬ
-        <br />
-        ДО ГРАНТА $20,000
-        <br />
-        С ЛИЧНЫМ МЕНТОРОМ
-      </>
-    ) : headlineVariant === "urgency" ? (
-      <>
-        УСПЕЙ В ПОТОК SPARK 2027!
-        <br />
-        ГРАНТ $20,000
-        <br />
-        НА УЧЁБУ В США
-      </>
-    ) : (
-      <>
-        ВЫИГРАЙ ГРАНТ $20,000
-        <br />
-        НА УЧЁБУ В США
-        <br />
-        ЭТИМ ЛЕТОМ
-      </>
-    );
+  // A/B winner (p = 0.049, 7 payments vs 1 for the control): the "path to
+  // the grant" headline is now permanent.
+  const headline = (
+    <>
+      ПРОЙДИ ПУТЬ
+      <br />
+      ДО ГРАНТА $20,000
+      <br />
+      С ЛИЧНЫМ МЕНТОРОМ
+    </>
+  );
 
   const ctaVariant = getExperiment("hero_cta_copy");
   const ctaLabel =

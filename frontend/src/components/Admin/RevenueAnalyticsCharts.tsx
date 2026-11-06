@@ -699,11 +699,11 @@ export function RevenueAnalyticsCharts({ stats }: RevenueAnalyticsChartsProps) {
               <div className="flex items-center gap-5">
                 <div className="flex items-center gap-2">
                   <span className="w-3 h-3 rounded bg-gradient-to-t from-emerald-500 to-amber-500 shadow-sm" />
-                  <span>Акселератор (9 990 – 10 900 ₽)</span>
+                  <span>Акселератор</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="w-3 h-3 rounded bg-gradient-to-t from-blue-600 to-sky-400 shadow-sm" />
-                  <span>VIP (14 155 – 14 900 ₽)</span>
+                  <span>VIP</span>
                 </div>
               </div>
               <div className="text-slate-400 text-xs flex items-center gap-2">

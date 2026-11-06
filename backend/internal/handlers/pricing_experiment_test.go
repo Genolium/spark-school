@@ -134,7 +134,7 @@ func TestVIPPriceExperiment_AppliesToPricingAndCheckout(t *testing.T) {
 }
 
 func TestExperimentVariants_IncludePriceAndHeadline(t *testing.T) {
-	for _, name := range []string{"pricing_price", "vip_price", "hero_headline", "hero_cta_copy", "pricing_cta_copy"} {
+	for _, name := range []string{"pricing_price", "vip_price", "hero_cta_copy", "pricing_cta_copy"} {
 		if len(experimentVariants[name]) < 2 {
 			t.Fatalf("experiment %s must have at least two variants", name)
 		}
