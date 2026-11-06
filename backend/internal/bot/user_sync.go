@@ -234,10 +234,6 @@ func (s *BotService) applyLandingExperiments(session *UserSession, attributionTo
 			if session.PriceExperiment == "" {
 				session.PriceExperiment = row.Variant
 			}
-		case "vip_price":
-			if session.VIPPriceExperiment == "" {
-				session.VIPPriceExperiment = row.Variant
-			}
 		}
 	}
 }

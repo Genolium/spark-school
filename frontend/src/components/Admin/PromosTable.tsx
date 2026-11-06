@@ -35,6 +35,7 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
   const [newCode, setNewCode] = useState("");
   const [newOwner, setNewOwner] = useState("");
   const [newDiscount, setNewDiscount] = useState(5);
+  const [newTiers, setNewTiers] = useState<string[]>([]);
   const [newReward, setNewReward] = useState(1000);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +89,7 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
     setNewCode("");
     setNewOwner("");
     setNewDiscount(5);
+    setNewTiers([]);
     setNewReward(1000);
     setError(null);
     setShowCreateModal(true);
@@ -98,6 +100,7 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
     setNewCode(p.code);
     setNewOwner(p.owner_username || "");
     setNewDiscount(p.discount_percent || 5);
+    setNewTiers((p.applicable_tiers || "").split(",").filter(Boolean));
     setNewReward(p.reward_amount);
     setError(null);
     setShowCreateModal(true);
@@ -121,6 +124,7 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
       owner_username: newOwner.trim().replace(/^@/, ""),
       discount_percent: newDiscount,
       reward_amount: newReward,
+      applicable_tiers: newTiers.join(","),
     };
     const res = editingId
       ? await api.updateAdminPromoCode(editingId, payload)
@@ -299,8 +303,12 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
             ) : (
               filtered.map((promo) => {
                 const discountPct = promo.discount_percent || 5;
+                const allowedTiers = (promo.applicable_tiers || "").split(",").filter(Boolean);
+                const appliesToAccelerator = allowedTiers.length === 0 || allowedTiers.includes("accelerator");
                 const discountRub = Math.round(coursePricing.accelerator_price * (discountPct / 100));
                 const discountedPrice = coursePricing.accelerator_price - discountRub;
+                const tierNames: Record<string, string> = { basic: "Базовый", accelerator: "Акселератор", vip: "VIP" };
+                const tiersLabel = allowedTiers.length === 0 ? "Все тарифы" : allowedTiers.map((t) => tierNames[t] || t).join(", ");
 
                 const promoRevenue = promo.total_revenue || 0;
                 const paidUses = promo.paid_uses || 0;
@@ -331,8 +339,11 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
 
                     {/* Discount */}
                     <td className="py-3.5 px-4 font-bold text-emerald-600 dark:text-emerald-400">
-                      <div>-{discountPct}% ({discountRub.toLocaleString("ru-RU")} ₽)</div>
-                      <div className="text-[10px] text-slate-400 font-normal">курс: {discountedPrice.toLocaleString("ru-RU")} ₽</div>
+                      <div>-{discountPct}%{appliesToAccelerator ? ` (${discountRub.toLocaleString("ru-RU")} ₽)` : ""}</div>
+                      <div className="text-[10px] text-slate-400 font-normal">
+                        {appliesToAccelerator ? `курс: ${discountedPrice.toLocaleString("ru-RU")} ₽` : "не для Акселератора"}
+                      </div>
+                      <div className="text-[10px] text-slate-500 font-normal">{tiersLabel}</div>
                     </td>
 
                     {/* Owner */}
@@ -587,6 +598,34 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
                     className="w-full px-3 py-2 bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/10 rounded-xl text-slate-900 dark:text-white focus:outline-none focus:border-amber-500"
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-slate-600 dark:text-slate-400 mb-1">Действует на тарифы:</label>
+                <div className="flex flex-wrap gap-3">
+                  {[
+                    { key: "basic", label: "Базовый" },
+                    { key: "accelerator", label: "Акселератор" },
+                    { key: "vip", label: "VIP" },
+                  ].map((tier) => (
+                    <label key={tier.key} className="inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-black/50 border border-slate-300 dark:border-white/10 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={newTiers.includes(tier.key)}
+                        onChange={(e) =>
+                          setNewTiers((prev) =>
+                            e.target.checked ? [...prev, tier.key] : prev.filter((t) => t !== tier.key),
+                          )
+                        }
+                        className="accent-amber-500"
+                      />
+                      <span className="text-slate-700 dark:text-slate-300">{tier.label}</span>
+                    </label>
+                  ))}
+                </div>
+                <span className="text-[10px] text-slate-500 dark:text-slate-400 mt-1 block">
+                  Ничего не выбрано — промокод действует на все тарифы.
+                </span>
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2">

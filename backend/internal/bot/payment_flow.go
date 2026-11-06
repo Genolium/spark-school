@@ -16,18 +16,56 @@ const lowerAcceleratorPrice = 9990.0
 // so the amount shown on the site and the amount requested in Telegram match.
 func (s *BotService) pricingForSession(session *UserSession) models.CoursePricing {
 	pricing := s.getPricing()
-	if session != nil {
-		if session.PriceExperiment == "lower" {
-			pricing.AcceleratorPrice = lowerAcceleratorPrice
-		}
-		switch session.VIPPriceExperiment {
-		case "low":
-			pricing.VIPPrice = 14990
-		case "mid":
-			pricing.VIPPrice = 17990
-		}
+	if session != nil && session.PriceExperiment == "lower" {
+		pricing.AcceleratorPrice = lowerAcceleratorPrice
 	}
 	return pricing
+}
+
+// promoForSession returns the active promo attached to the session, if any.
+func (s *BotService) promoForSession(session *UserSession) *models.PromoCode {
+	if s.db == nil || session == nil {
+		return nil
+	}
+	code := strings.ToUpper(strings.TrimSpace(session.PromoCode))
+	if code == "" {
+		return nil
+	}
+	var promo models.PromoCode
+	if err := s.db.Where("UPPER(code) = ? AND is_active = true", code).First(&promo).Error; err != nil {
+		return nil
+	}
+	return &promo
+}
+
+// sessionDiscountForTier returns the discount that actually applies to a tier.
+func (s *BotService) sessionDiscountForTier(session *UserSession, tier string) int {
+	promo := s.promoForSession(session)
+	if promo == nil || !promo.AppliesToTier(tier) {
+		return 0
+	}
+	pct := promo.DiscountPercent
+	if pct <= 0 {
+		pct = 5
+	}
+	return pct
+}
+
+func promoAllowedTiersLabel(promo *models.PromoCode) string {
+	if promo == nil || strings.TrimSpace(promo.ApplicableTiers) == "" {
+		return "все тарифы"
+	}
+	names := map[string]string{"basic": "Базовый", "accelerator": "Акселератор", "vip": "VIP"}
+	parts := make([]string, 0, 3)
+	for _, tier := range strings.Split(promo.ApplicableTiers, ",") {
+		if name, ok := names[models.NormalizePromoTier(tier)]; ok {
+			parts = append(parts, name)
+		}
+	}
+	if len(parts) == 0 {
+		return "все тарифы"
+	}
+	return strings.Join(parts, ", ")
 }
 
 func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User, withPromo bool) {
@@ -63,23 +101,42 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 	}
 
 	if withPromo || session.DiscountPct > 0 {
-		pct := session.DiscountPct
-		if pct <= 0 {
-			pct = 5
+		promo := s.promoForSession(session)
+		basePct := session.DiscountPct
+		if basePct <= 0 {
+			basePct = 5
 		}
-		basicDiscount := (basicBase * pct) / 100
-		basicPrice := basicBase - basicDiscount
-		accDiscount := (accBase * pct) / 100
-		accPrice := accBase - accDiscount
-		vipDiscount := (vipBase * pct) / 100
-		vipPrice := vipBase - vipDiscount
+		if promo != nil && promo.DiscountPercent > 0 {
+			basePct = promo.DiscountPercent
+		}
+		priceFor := func(tier string, base int) (int, int) {
+			pct := basePct
+			if promo != nil && !promo.AppliesToTier(tier) {
+				pct = 0
+			}
+			if pct <= 0 {
+				return base, 0
+			}
+			return base - (base*pct)/100, pct
+		}
+		basicPrice, basicPct := priceFor("basic", basicBase)
+		accPrice, accPct := priceFor("accelerator", accBase)
+		vipPrice, vipPct := priceFor("vip", vipBase)
+		discountNote := func(pct, base, price int) string {
+			if pct <= 0 {
+				return " <i>(промокод на этот тариф не действует)</i>"
+			}
+			return fmt.Sprintf(" (скидка %s ₽)", formatPriceRub(base-price))
+		}
 
 		text = fmt.Sprintf(`%s <b>Промокод успешно активирован! Скидка %d%%</b>
 
 <b>Стоимость со скидкой %d%%:</b>
-%s <b>Базовый:</b> <b>%s ₽</b> (скидка %s ₽) <i>[без обратной связи]</i>
-%s <b>Акселератор [Хит]:</b> <b>%s ₽</b> (скидка %s ₽)
-%s <b>VIP:</b> <b>%s ₽</b> (скидка %s ₽)
+%s <b>Базовый:</b> <b>%s ₽</b>%s <i>[без обратной связи]</i>
+%s <b>Акселератор [Хит]:</b> <b>%s ₽</b>%s
+%s <b>VIP:</b> <b>%s ₽</b>%s
+
+<i>Промокод действует на: %s.</i>
 
 🏛 <b>Прямой перевод по СБП (0%% без комиссии):</b>
 • Банк: <b>%s</b>
@@ -90,8 +147,11 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 %s <b>Как получить доступ:</b>
 1. Выберите тариф кнопкой ниже или переведите нужную сумму по СБП.
 2. <b>Отправьте скриншот чека прямо сюда в чат!</b>
-3. Бот проверит чек и сразу выдаст вам одноразовую ссылку в закрытый канал потока.`, sparkle, pct, pct, num1, formatPriceRub(basicPrice), formatPriceRub(basicDiscount), num2, formatPriceRub(accPrice), formatPriceRub(accDiscount), num3, formatPriceRub(vipPrice), formatPriceRub(vipDiscount), bankName, clipGreen)
-		keyboard = PromoAppliedKeyboard(pricing)
+3. Бот проверит чек и сразу выдаст вам одноразовую ссылку в закрытый канал потока.`, sparkle, basePct, basePct, num1, formatPriceRub(basicPrice), discountNote(basicPct, basicBase, basicPrice), num2, formatPriceRub(accPrice), discountNote(accPct, accBase, accPrice), num3, formatPriceRub(vipPrice), discountNote(vipPct, vipBase, vipPrice), promoAllowedTiersLabel(promo), bankName, clipGreen)
+		keyboard = PromoAppliedKeyboard(
+			map[string]int{"basic": basicPrice, "accelerator": accPrice, "vip": vipPrice},
+			map[string]bool{"basic": basicPct > 0, "accelerator": accPct > 0, "vip": vipPct > 0},
+		)
 	} else {
 		basicPromoPrice := basicBase - (basicBase*5)/100
 		accPromoPrice := accBase - (accBase*5)/100
@@ -166,14 +226,17 @@ func (s *BotService) handleSbpPayment(chatID telego.ChatID, from *telego.User, t
 
 	price := basePrice
 	discountText := ""
-	if hasPromo {
-		pct := session.DiscountPct
-		if pct <= 0 {
-			pct = 5
-		}
+	pct := s.sessionDiscountForTier(session, tier)
+	if pct == 0 && session.PromoCode == "" && session.DiscountPct > 0 {
+		// Legacy sessions can carry a discount percentage without the code.
+		pct = session.DiscountPct
+	}
+	if pct > 0 {
 		discount := (basePrice * pct) / 100
 		price = basePrice - discount
 		discountText = fmt.Sprintf(" (скидка %d%% по промокоду <code>%s</code>)", pct, session.PromoCode)
+	} else if hasPromo {
+		discountText = " <i>(промокод на этот тариф не действует)</i>"
 	}
 
 	bankName := pricing.BankName
@@ -300,6 +363,25 @@ func (s *BotService) processPromoInput(chatID telego.ChatID, from *telego.User, 
 	err := s.db.Where("UPPER(code) = ? AND is_active = true", code).First(&promo).Error
 
 	if err == nil && promo.ID != 0 {
+		if session.SelectedTier != "" && !promo.AppliesToTier(session.SelectedTier) {
+			session.State = StateDefault
+			text := fmt.Sprintf(`❌ <b>Промокод <code>%s</code> не действует на тариф «%s».</b>
+
+Он действует на: <b>%s</b>.
+
+Выбери подходящий тариф или введи другой промокод.`, promo.Code, tierDisplay(session.SelectedTier), promoAllowedTiersLabel(&promo))
+			keyboard := tu.InlineKeyboard(
+				tu.InlineKeyboardRow(
+					tu.InlineKeyboardButton("💳 К тарифам").WithCallbackData("action_payment"),
+				),
+				tu.InlineKeyboardRow(
+					tu.InlineKeyboardButton("🎟 Ввести другой промокод").WithCallbackData("promo_enter"),
+				),
+			)
+			m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(keyboard)
+			_, _ = s.bot.SendMessage(m)
+			return
+		}
 		session.PromoCode = promo.Code
 		discount := promo.DiscountPercent
 		if discount <= 0 {

@@ -340,7 +340,7 @@ export const adminApi = {
     }
   },
 
-  async createAdminPromoCode(data: { code: string; owner_username?: string; discount_percent?: number; reward_amount?: number }): Promise<{ success: boolean; promo?: PromoCode; error?: string }> {
+  async createAdminPromoCode(data: { code: string; owner_username?: string; discount_percent?: number; reward_amount?: number; applicable_tiers?: string }): Promise<{ success: boolean; promo?: PromoCode; error?: string }> {
     try {
       const res = await fetchAdmin(`/admin/promos`, {
         method: "POST",
@@ -437,6 +437,7 @@ export const adminApi = {
       owner_username?: string;
       discount_percent?: number;
       reward_amount?: number;
+      applicable_tiers?: string;
       is_active?: boolean;
     }
   ): Promise<{ success: boolean; promo?: PromoCode; error?: string }> {

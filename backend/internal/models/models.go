@@ -1,6 +1,7 @@
 package models
 
 import (
+	"strings"
 	"time"
 )
 
@@ -93,13 +94,16 @@ type PayoutRequest struct {
 
 // PromoCode represents a 5% discount promo code tied to an affiliate/partner.
 type PromoCode struct {
-	ID              uint      `gorm:"primaryKey" json:"id"`
-	Code            string    `gorm:"uniqueIndex;size:32;not null" json:"code"`
-	DiscountPercent int       `gorm:"default:5" json:"discount_percent"`
-	OwnerTelegramID int64     `json:"owner_telegram_id"`
-	OwnerUsername   string    `gorm:"size:64" json:"owner_username"`
-	UsesCount       int       `gorm:"default:0" json:"uses_count"`
-	RewardAmount    float64   `gorm:"type:numeric(10,2);default:1000.00" json:"reward_amount"`
+	ID              uint    `gorm:"primaryKey" json:"id"`
+	Code            string  `gorm:"uniqueIndex;size:32;not null" json:"code"`
+	DiscountPercent int     `gorm:"default:5" json:"discount_percent"`
+	OwnerTelegramID int64   `json:"owner_telegram_id"`
+	OwnerUsername   string  `gorm:"size:64" json:"owner_username"`
+	UsesCount       int     `gorm:"default:0" json:"uses_count"`
+	RewardAmount    float64 `gorm:"type:numeric(10,2);default:1000.00" json:"reward_amount"`
+	// Comma-separated canonical tier keys (basic,accelerator,vip). Empty means
+	// the promo applies to every tier; existing codes stay unchanged.
+	ApplicableTiers string    `gorm:"size:64" json:"applicable_tiers,omitempty"`
 	IsActive        bool      `gorm:"default:true" json:"is_active"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
@@ -367,7 +371,6 @@ type BotSession struct {
 	PromoCode          string    `gorm:"size:32" json:"promo_code"`
 	DiscountPct        int       `json:"discount_pct"`
 	PriceExperiment    string    `gorm:"size:16" json:"price_experiment,omitempty"`
-	VIPPriceExperiment string    `gorm:"column:vip_price_experiment;size:16" json:"vip_price_experiment,omitempty"`
 	IsUpgrade          bool      `json:"is_upgrade"`
 	UpgradeFromTier    string    `gorm:"size:32" json:"upgrade_from_tier"`
 	UpgradeToTier      string    `gorm:"size:32" json:"upgrade_to_tier"`
@@ -432,4 +435,54 @@ type CampaignLinkClick struct {
 	UserAgent        string    `gorm:"size:255" json:"user_agent,omitempty"`
 	Referer          string    `gorm:"size:255" json:"referer,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
+}
+
+// NormalizePromoTier maps Russian and legacy tier names to the canonical key.
+func NormalizePromoTier(tier string) string {
+	switch strings.ToLower(strings.TrimSpace(tier)) {
+	case "basic", "базовый":
+		return "basic"
+	case "accelerator", "акселератор":
+		return "accelerator"
+	case "vip":
+		return "vip"
+	default:
+		return ""
+	}
+}
+
+// NormalizePromoTiers cleans a comma-separated tier list into canonical order.
+// An empty result means "all tiers".
+func NormalizePromoTiers(raw string) string {
+	allowed := make(map[string]bool, 3)
+	for _, part := range strings.Split(raw, ",") {
+		if tier := NormalizePromoTier(part); tier != "" {
+			allowed[tier] = true
+		}
+	}
+	ordered := make([]string, 0, 3)
+	for _, tier := range []string{"basic", "accelerator", "vip"} {
+		if allowed[tier] {
+			ordered = append(ordered, tier)
+		}
+	}
+	return strings.Join(ordered, ",")
+}
+
+// AppliesToTier reports whether the promo may be used for the given tier.
+// An empty ApplicableTiers means the promo works for every tier.
+func (p PromoCode) AppliesToTier(tier string) bool {
+	if strings.TrimSpace(p.ApplicableTiers) == "" {
+		return true
+	}
+	want := NormalizePromoTier(tier)
+	if want == "" {
+		return true
+	}
+	for _, part := range strings.Split(p.ApplicableTiers, ",") {
+		if NormalizePromoTier(part) == want {
+			return true
+		}
+	}
+	return false
 }

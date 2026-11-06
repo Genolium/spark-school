@@ -113,11 +113,12 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) error {
 			chosenTier = "accelerator"
 		}
 
-		if session.DiscountPct > 0 || session.PromoCode == "SPARK5" {
-			pct := session.DiscountPct
-			if pct <= 0 {
-				pct = 5
-			}
+		pct := s.sessionDiscountForTier(session, chosenTier)
+		if pct == 0 && session.PromoCode == "" && session.DiscountPct > 0 {
+			// Legacy session: discount stored without the code.
+			pct = session.DiscountPct
+		}
+		if pct > 0 {
 			amount = amount * (1.0 - float64(pct)/100.0)
 		}
 	}

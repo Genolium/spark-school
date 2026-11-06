@@ -109,6 +109,7 @@ export interface PromoCode {
   owner_username?: string;
   uses_count: number;
   reward_amount: number;
+  applicable_tiers?: string;
   is_active: boolean;
   created_at: string;
   total_revenue?: number;

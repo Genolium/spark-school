@@ -201,9 +201,8 @@ func TestReconcileHistoricalSales_UpgradePreservesInitialPurchase(t *testing.T) 
 	}
 }
 
-// GORM derives "v_ip_price_experiment" from VIPPriceExperiment, while the
-// migration creates "vip_price_experiment". The explicit column tag keeps the
-// model and the real schema aligned.
+// GORM column names must match the migration; an acronym field once derived a
+// different name than the schema and broke every session save.
 func TestBotSessionColumnNamesMatchMigration(t *testing.T) {
 	db := setupTestDB(t)
 	stmt := &gorm.Statement{DB: db}
@@ -211,10 +210,9 @@ func TestBotSessionColumnNamesMatchMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	for field, want := range map[string]string{
-		"TelegramID":         "telegram_id",
-		"State":              "state",
-		"PriceExperiment":    "price_experiment",
-		"VIPPriceExperiment": "vip_price_experiment",
+		"TelegramID":      "telegram_id",
+		"State":           "state",
+		"PriceExperiment": "price_experiment",
 	} {
 		f := stmt.Schema.LookUpField(field)
 		if f == nil {

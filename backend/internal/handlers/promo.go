@@ -40,6 +40,7 @@ type ValidatePromoResponse struct {
 	DiscountAmount  float64 `json:"discount_amount"`
 	FinalPrice      float64 `json:"final_price"`
 	OwnerUsername   string  `json:"owner_username,omitempty"`
+	ApplicableTiers string  `json:"applicable_tiers,omitempty"`
 	Message         string  `json:"message,omitempty"`
 }
 
@@ -96,6 +97,18 @@ func (h *PromoHandler) Validate(c *gin.Context) {
 		return
 	}
 
+	if !promo.AppliesToTier(req.Tier) {
+		c.JSON(http.StatusOK, ValidatePromoResponse{
+			Valid:           false,
+			Code:            promo.Code,
+			OriginalPrice:   targetPrice,
+			FinalPrice:      targetPrice,
+			ApplicableTiers: promo.ApplicableTiers,
+			Message:         "Промокод не действует на этот тариф",
+		})
+		return
+	}
+
 	discountPercent := promo.DiscountPercent
 	if discountPercent <= 0 {
 		discountPercent = 5
@@ -122,6 +135,7 @@ type CreatePromoRequest struct {
 	OwnerUsername   string  `json:"owner_username"`
 	DiscountPercent int     `json:"discount_percent"`
 	RewardAmount    float64 `json:"reward_amount"`
+	ApplicableTiers string  `json:"applicable_tiers"`
 }
 
 // Create generates a new promo code (Admin or Bot partner hook).
@@ -160,6 +174,7 @@ func (h *PromoHandler) Create(c *gin.Context) {
 		OwnerTelegramID: req.OwnerTelegramID,
 		OwnerUsername:   strings.TrimPrefix(req.OwnerUsername, "@"),
 		RewardAmount:    reward,
+		ApplicableTiers: models.NormalizePromoTiers(req.ApplicableTiers),
 		IsActive:        true,
 	}
 
@@ -266,6 +281,7 @@ type UpdatePromoRequest struct {
 	DiscountPercent *int     `json:"discount_percent"`
 	RewardAmount    *float64 `json:"reward_amount"`
 	IsActive        *bool    `json:"is_active"`
+	ApplicableTiers *string  `json:"applicable_tiers"`
 }
 
 // Update modifies an existing promo code.
@@ -307,6 +323,9 @@ func (h *PromoHandler) Update(c *gin.Context) {
 	}
 	if req.IsActive != nil {
 		promo.IsActive = *req.IsActive
+	}
+	if req.ApplicableTiers != nil {
+		promo.ApplicableTiers = models.NormalizePromoTiers(*req.ApplicableTiers)
 	}
 
 	if err := h.db.Save(&promo).Error; err != nil {

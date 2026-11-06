@@ -131,28 +131,26 @@ func PaymentKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboardMark
 	)
 }
 
-// PromoAppliedKeyboard returns keyboard after successful promo code redemption.
-func PromoAppliedKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboardMarkup {
-	basicPrice := 3790
-	accPrice := 10355
-	vipPrice := 14155
-	if len(pricing) > 0 {
-		if pricing[0].BasicPrice > 0 {
-			base := int(pricing[0].BasicPrice)
-			basicPrice = base - (base*5)/100
+// PromoAppliedKeyboard returns the keyboard after a promo code is applied.
+// Prices and discount flags are per tier: a promo may be restricted to some
+// tiers, and the button must show the amount that will actually be charged.
+func PromoAppliedKeyboard(prices map[string]int, discounted map[string]bool) *telego.InlineKeyboardMarkup {
+	price := func(tier string, fallback int) int {
+		if value, ok := prices[tier]; ok && value > 0 {
+			return value
 		}
-		if pricing[0].AcceleratorPrice > 0 {
-			base := int(pricing[0].AcceleratorPrice)
-			accPrice = base - (base*5)/100
-		}
-		if pricing[0].VIPPrice > 0 {
-			base := int(pricing[0].VIPPrice)
-			vipPrice = base - (base*5)/100
-		}
+		return fallback
 	}
-	basicText := fmt.Sprintf("1️⃣ Базовый (%s ₽) — со скидкой 5%%", formatPriceRub(basicPrice))
-	accText := fmt.Sprintf("2️⃣ Акселератор (%s ₽) — СБП", formatPriceRub(accPrice))
-	vipText := fmt.Sprintf("3️⃣ VIP (%s ₽) — СБП", formatPriceRub(vipPrice))
+	suffix := func(tier string) string {
+		if discounted[tier] {
+			return " — со скидкой"
+		}
+		return ""
+	}
+
+	basicText := fmt.Sprintf("1️⃣ Базовый (%s ₽)%s", formatPriceRub(price("basic", 3790)), suffix("basic"))
+	accText := fmt.Sprintf("2️⃣ Акселератор (%s ₽)%s", formatPriceRub(price("accelerator", 10355)), suffix("accelerator"))
+	vipText := fmt.Sprintf("3️⃣ VIP (%s ₽)%s", formatPriceRub(price("vip", 14155)), suffix("vip"))
 
 	return tu.InlineKeyboard(
 		tu.InlineKeyboardRow(
@@ -165,15 +163,11 @@ func PromoAppliedKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboar
 			tu.InlineKeyboardButton(vipText).WithCallbackData("pay_sbp_vip"),
 		),
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("💬 Поддержка куратора в Telegram").WithURL("https://t.me/spark_prep_bot"),
-		),
-		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu"),
+			tu.InlineKeyboardButton("🎟 Ввести промокод").WithCallbackData("promo_enter"),
 		),
 	)
 }
 
-// YooKassaSelectTierKeyboard routes to direct SBP checkout.
 func YooKassaSelectTierKeyboard(hasPromo bool, pricing ...models.CoursePricing) *telego.InlineKeyboardMarkup {
 	basicPrice := 3990
 	accPrice := 10900

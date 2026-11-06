@@ -19,7 +19,7 @@ var DB *gorm.DB
 
 // RequiredSchemaVersion is the migration version a process needs before it is
 // considered ready to serve traffic.
-const RequiredSchemaVersion int64 = 27
+const RequiredSchemaVersion int64 = 28
 
 // MigrationVersion returns the latest applied Goose version.
 func MigrationVersion(db *gorm.DB) (int64, error) {
@@ -74,6 +74,7 @@ func ValidateSchema(db *gorm.DB) error {
 		{"outbox_events", []string{"event_type", "payload", "status", "last_error"}},
 		{"experiment_assignments", []string{"experiment", "variant", "visitor_id"}},
 		{"bot_sessions", []string{"telegram_id", "state", "price_experiment", "vip_price_experiment"}},
+		{"promo_codes", []string{"code", "discount_percent", "is_active", "applicable_tiers"}},
 		{"campaign_links", []string{"slug", "title", "target_type", "target_value", "is_active", "created_by"}},
 		{"campaign_link_clicks", []string{"link_id", "visitor_id", "attribution_token", "ip_hash"}},
 	}

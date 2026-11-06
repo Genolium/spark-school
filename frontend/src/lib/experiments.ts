@@ -5,7 +5,7 @@ import { API_BASE } from "./api-base";
 import type { CoursePricing } from "./api-types";
 import { ACCELERATOR_LIST_PRICE, ACCELERATOR_LOWER_PRICE } from "./pricing-defaults";
 
-export type ExperimentName = "hero_cta_copy" | "pricing_cta_copy" | "pricing_price" | "vip_price";
+export type ExperimentName = "hero_cta_copy" | "pricing_cta_copy" | "pricing_price";
 
 export interface ExperimentDefinition {
   name: ExperimentName;
@@ -16,7 +16,6 @@ export const EXPERIMENTS: ExperimentDefinition[] = [
   { name: "hero_cta_copy", variants: ["control", "benefit", "diagnostic"] },
   { name: "pricing_cta_copy", variants: ["control", "action"] },
   { name: "pricing_price", variants: ["control", "lower"] },
-  { name: "vip_price", variants: ["control", "mid", "low"] },
 ];
 
 const STORAGE_PREFIX = "spark_exp_";
@@ -78,8 +77,6 @@ export async function syncServerExperiments(): Promise<Record<string, string>> {
 
 /** Sale price vs list 10 900 ₽. */
 export const LOWER_ACCELERATOR_PRICE = ACCELERATOR_LOWER_PRICE;
-export const MID_VIP_PRICE = 17990;
-export const LOW_VIP_PRICE = 14990;
 
 /** Keep every price surface (cards, modal, checkout fallback) on one variant. */
 export function applyPriceExperiment(pricing: CoursePricing): CoursePricing {
@@ -87,12 +84,6 @@ export function applyPriceExperiment(pricing: CoursePricing): CoursePricing {
   if (getExperiment("pricing_price") === "lower") {
     const list = Math.max(next.accelerator_price || 0, next.accelerator_old_price || 0, ACCELERATOR_LIST_PRICE);
     next = { ...next, accelerator_old_price: list, accelerator_price: LOWER_ACCELERATOR_PRICE };
-  }
-  const vipVariant = getExperiment("vip_price");
-  if (vipVariant === "mid") {
-    next = { ...next, vip_price: MID_VIP_PRICE };
-  } else if (vipVariant === "low") {
-    next = { ...next, vip_price: LOW_VIP_PRICE };
   }
   return next;
 }

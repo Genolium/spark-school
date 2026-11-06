@@ -76,7 +76,6 @@ var experimentVariants = map[string][]string{
 	"hero_cta_copy":    {"control", "benefit", "diagnostic"},
 	"pricing_cta_copy": {"control", "action"},
 	"pricing_price":    {"control", "lower"},
-	"vip_price":        {"control", "mid", "low"},
 }
 
 func assignVariant(visitorID, experiment string) string {
@@ -88,24 +87,7 @@ func assignVariant(visitorID, experiment string) string {
 	return variants[int(h%uint32(len(variants)))]
 }
 
-const (
-	priceExperimentLower = 9990.0
-	vipPriceMid          = 17990.0
-	vipPriceLow          = 14990.0
-)
-
-// vipPriceForVariant keeps the VIP tier on the assigned price everywhere:
-// landing cards, the payment modal, the bot and the YooKassa checkout.
-func vipPriceForVariant(base float64, variant string) float64 {
-	switch variant {
-	case "mid":
-		return vipPriceMid
-	case "low":
-		return vipPriceLow
-	default:
-		return base
-	}
-}
+const priceExperimentLower = 9990.0
 
 // acceleratorPriceForVariant keeps display and checkout on the same price.
 // Only the accelerator tier is part of the price test.
