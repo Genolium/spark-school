@@ -214,19 +214,12 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) error {
 		session.State = StateWaitingPromo
 		checkCircle := TgEmoji(EmojiCheckCircleGreen, "✅")
 		sparkle := TgEmoji(EmojiSparkleGreen, "✨")
-		pricing := s.getPricing()
 
-		text := fmt.Sprintf(`%s <b>Активация промокода на скидку 5%%</b> %s
+		text := fmt.Sprintf(`%s <b>Активация промокода</b> %s
 
-Напиши промокод прямо в ответном сообщении!
+Напиши промокод прямо в ответном сообщении.
 
-<i>Укажи промокод твоего друга-партнёра или из официального блога.</i>
-
-Скидка 5%% действует на любой тариф:
-• Акселератор: %s ₽ ➔ <b>%s ₽</b>
-• VIP: %s ₽ ➔ <b>%s ₽</b>`, checkCircle, sparkle,
-			formatPriceRub(int(pricing.AcceleratorPrice)), formatPriceRub(int(pricing.AcceleratorPrice*0.95)),
-			formatPriceRub(int(pricing.VIPPrice)), formatPriceRub(int(pricing.VIPPrice*0.95)))
+<i>Скидка и доступные тарифы зависят от кода — бот проверит его и покажет цену.</i>`, checkCircle, sparkle)
 		m := tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(PromoRequestKeyboard())
 		if _, err := s.bot.SendMessage(m); err != nil {
 			log.Printf("[Bot Error] promo_enter SendMessage failed: %v. Retrying stripped...", err)

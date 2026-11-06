@@ -97,66 +97,27 @@ func (s *BotService) handleMessage(msg *telego.Message) error {
 				return nil
 			}
 
-			// 1. Extract tier
-			tier := "accelerator"
-			if strings.HasPrefix(payload, "basic") {
-				tier = "basic"
-				payload = strings.TrimPrefix(payload, "basic")
-				payload = strings.TrimPrefix(payload, "_")
-			} else if strings.HasPrefix(payload, "vip") {
-				tier = "vip"
-				payload = strings.TrimPrefix(payload, "vip")
-				payload = strings.TrimPrefix(payload, "_")
-			} else if strings.HasPrefix(payload, "accelerator") {
-				tier = "accelerator"
-				payload = strings.TrimPrefix(payload, "accelerator")
-				payload = strings.TrimPrefix(payload, "_")
-			}
+			parsed := parsePayStartParam(param)
+			tier := parsed.Tier
 			session.SelectedTier = tier
 			session.PriceExperiment = ""
-			if strings.HasPrefix(payload, "pe_lower") {
+			if parsed.PriceLower {
 				session.PriceExperiment = "lower"
-				payload = strings.TrimPrefix(payload, "pe_lower")
-				payload = strings.TrimPrefix(payload, "_")
 			}
-			s.applyLandingExperiments(session, attrToken)
+			s.applyLandingExperiments(session, parsed.AttrToken)
 
-			// 2. Attribution was already extracted from the start parameter.
-
-			// 3. Extract referral, traffic source, or promo code
-			refCode := ""
-			srcCode := ""
-			username := payload
-			if idx := strings.Index(payload, "_src_"); idx != -1 {
-				srcCode = payload[idx+len("_src_"):]
-				payload = payload[:idx]
-				username = payload
-			} else if strings.HasPrefix(payload, "src_") {
-				srcCode = strings.TrimPrefix(payload, "src_")
-				payload = ""
-				username = ""
+			if parsed.Ref != "" && msg.From != nil {
+				s.associateBotReferral(msg.From, parsed.Promo, parsed.Ref)
 			}
-			if idx := strings.Index(payload, "_ref_"); idx != -1 {
-				username = payload[:idx]
-				refCode = payload[idx+len("_ref_"):]
-			} else if strings.HasPrefix(payload, "ref_") {
-				username = ""
-				refCode = strings.TrimPrefix(payload, "ref_")
-			}
-			username = strings.TrimPrefix(username, "@")
-
-			if refCode != "" && msg.From != nil {
-				s.associateBotReferral(msg.From, username, refCode)
-			}
-			if srcCode != "" && msg.From != nil {
-				s.associateDirectTrafficSource(msg.From, srcCode)
+			if parsed.Source != "" && msg.From != nil {
+				s.associateDirectTrafficSource(msg.From, parsed.Source)
 			}
 
-			// 3. If payload contains a valid active promo code in DB, auto-apply it
+			// Auto-apply a promo code carried by the deep link.
 			withPromo := false
-			if username != "" && s.db != nil {
+			if parsed.Promo != "" && s.db != nil {
 				var promo models.PromoCode
-				if err := s.db.Where("UPPER(code) = ? AND is_active = true", strings.ToUpper(username)).First(&promo).Error; err == nil && promo.ID != 0 {
+				if err := s.db.Where("UPPER(code) = ? AND is_active = true", strings.ToUpper(parsed.Promo)).First(&promo).Error; err == nil && promo.ID != 0 {
 					session.PromoCode = promo.Code
 					discount := promo.DiscountPercent
 					if discount <= 0 {

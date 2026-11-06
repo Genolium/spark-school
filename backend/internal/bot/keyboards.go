@@ -69,7 +69,7 @@ func MainMenuKeyboard(frontendURL string, options ...any) *telego.InlineKeyboard
 	rows = append(rows,
 		[]telego.InlineKeyboardButton{
 			tu.InlineKeyboardButton(buyText).WithCallbackData("action_payment"),
-			tu.InlineKeyboardButton("🎟 Промокод -5%").WithCallbackData("promo_enter"),
+			tu.InlineKeyboardButton("🎟 Промокод").WithCallbackData("promo_enter"),
 		},
 		[]telego.InlineKeyboardButton{
 			tu.InlineKeyboardButton("🇺🇸 Блог про мою поездку в США").WithURL("https://t.me/so_called_spark"),
@@ -120,10 +120,10 @@ func PaymentKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboardMark
 			tu.InlineKeyboardButton(vipText).WithCallbackData("pay_sbp_vip"),
 		),
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("🎟 Применить промокод -5%").WithCallbackData("promo_enter"),
+			tu.InlineKeyboardButton("🎟 Применить промокод").WithCallbackData("promo_enter"),
 		),
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("💬 Поддержка куратора в Telegram").WithURL("https://t.me/spark_prep_bot"),
+			tu.InlineKeyboardButton("💬 Поддержка куратора в Telegram").WithURL("https://t.me/ilyan_vas"),
 		),
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu"),
@@ -163,7 +163,11 @@ func PromoAppliedKeyboard(prices map[string]int, discounted map[string]bool) *te
 			tu.InlineKeyboardButton(vipText).WithCallbackData("pay_sbp_vip"),
 		),
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("🎟 Ввести промокод").WithCallbackData("promo_enter"),
+			tu.InlineKeyboardButton("🎟 Другой промокод").WithCallbackData("promo_enter"),
+		),
+		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("⬅️ Назад к тарифам").WithCallbackData("action_payment"),
+			tu.InlineKeyboardButton("🏠 В главное меню").WithCallbackData("action_menu"),
 		),
 	)
 }
@@ -283,7 +287,7 @@ func CalcResultKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboardM
 			tu.InlineKeyboardButton(buyText).WithCallbackData("action_payment"),
 		),
 		tu.InlineKeyboardRow(
-			tu.InlineKeyboardButton("🎟 Применить промокод -5%").WithCallbackData("promo_enter"),
+			tu.InlineKeyboardButton("🎟 Применить промокод").WithCallbackData("promo_enter"),
 		),
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton("🇺🇸 Блог про мою поездку в США").WithURL("https://t.me/so_called_spark"),

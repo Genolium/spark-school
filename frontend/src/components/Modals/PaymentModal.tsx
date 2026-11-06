@@ -15,26 +15,20 @@ interface PaymentModalProps {
   initialTier?: PricingTier;
 }
 
-const TIERS: Record<PricingTier, { name: string; price: number; discountPrice: number; discountAmount: number; tag: string }> = {
+const TIERS: Record<PricingTier, { name: string; price: number; tag: string }> = {
   basic: {
     name: "Базовый",
     price: 3333,
-    discountPrice: 3790,
-    discountAmount: 200,
     tag: "Без обратной связи",
   },
   accelerator: {
     name: "Акселератор",
     price: 10990,
-    discountPrice: 10355,
-    discountAmount: 545,
     tag: "Хит продаж",
   },
   vip: {
     name: "VIP",
     price: 19990,
-    discountPrice: 14155,
-    discountAmount: 745,
     tag: "Строго 3 места",
   },
 };
@@ -74,22 +68,16 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
           basic: {
             name: "Базовый",
             price: basicPrice,
-            discountPrice: Math.round(basicPrice * 0.95),
-            discountAmount: basicPrice - Math.round(basicPrice * 0.95),
             tag: "Без обратной связи",
           },
           accelerator: {
             name: "Акселератор",
             price: accPrice,
-            discountPrice: Math.round(accPrice * 0.95),
-            discountAmount: accPrice - Math.round(accPrice * 0.95),
             tag: "Хит продаж",
           },
           vip: {
             name: "VIP",
             price: vipPrice,
-            discountPrice: Math.round(vipPrice * 0.95),
-            discountAmount: vipPrice - Math.round(vipPrice * 0.95),
             tag: "Строго 3 места",
           },
         });
@@ -153,7 +141,7 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
 
   const activeTierConfig = tiersConfig[tier];
   const finalPrice = promoResult?.valid
-    ? Math.round(activeTierConfig.price * 0.95)
+    ? Math.round(promoResult.final_price)
     : activeTierConfig.price;
   const currentDiscountAmount = activeTierConfig.price - finalPrice;
 
@@ -164,7 +152,7 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
   const pPart = appliedPromo.slice(0, 16);
   const rPart = refCode.slice(0, 12);
 
-  const startParam = buildCheckoutStartParam(tier, rPart || pPart);
+  const startParam = buildCheckoutStartParam(tier, rPart, pPart);
   const botPayUrl = `${BOT_URL}?start=${startParam}`;
 
   if (!isOpen) return null;
@@ -332,7 +320,7 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
                 {/* Promo Code Input */}
                 <div>
                   <label className="block text-xs font-mono text-slate-700 dark:text-slate-300 mb-1.5 flex items-center justify-between font-medium">
-                    <span>Промокод на скидку 5% (если есть)</span>
+                    <span>Промокод (если есть)</span>
                     {promoResult?.valid && (
                       <span className="text-emerald-600 dark:text-emerald-400 font-bold text-[11px] flex items-center gap-1">
                         <Check className="w-3 h-3" /> Применён (-{currentDiscountAmount} ₽)

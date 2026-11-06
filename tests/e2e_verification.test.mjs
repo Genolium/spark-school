@@ -171,10 +171,12 @@ describe('Tier 1: Feature Coverage', () => {
 
     const paymentModalPath = path.join(ROOT, 'frontend', 'src', 'components', 'Modals', 'PaymentModal.tsx');
     const modalContent = fs.readFileSync(paymentModalPath, 'utf8');
-    assert.match(modalContent, /0\.95/, 'PaymentModal must calculate 5% discount using 0.95 multiplier');
-    assert.match(modalContent, /discountPrice:\s*3790/, 'PaymentModal must have discountPrice 3790 for basic');
-    assert.match(modalContent, /discountPrice:\s*10355/, 'PaymentModal must have discountPrice 10355 for accelerator');
-    assert.match(modalContent, /discountPrice:\s*14155/, 'PaymentModal must have discountPrice 14155 for vip');
+    // The modal must trust the backend's final price: promos can be 14% or be
+    // limited to specific tiers, so no fixed 0.95 multiplier is allowed.
+    assert.match(modalContent, /promoResult\.final_price/, 'PaymentModal must use the backend final price');
+    assert.doesNotMatch(modalContent, /discountPrice:/, 'PaymentModal must not hardcode per-tier discount prices');
+    // The promo must travel in the bot deep link, not as a referral code.
+    assert.match(modalContent, /buildCheckoutStartParam\(tier,\s*rPart,\s*pPart\)/, 'PaymentModal must pass the promo to the bot link');
   });
 
   it('1.3 Chances Calculator Logic: 3 steps, inputs, probability calculation (75%, 88%, 96%)', () => {

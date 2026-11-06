@@ -212,8 +212,15 @@ export function compactStartParam(action: string, attributionToken: string, ref 
   return param.slice(0, 64);
 }
 
-export function buildCheckoutStartParam(tier: "basic" | "accelerator" | "vip", ref = ""): string {
-  return compactStartParam(`pay_${tier}`, getAttributionToken(), ref);
+export function buildCheckoutStartParam(
+  tier: "basic" | "accelerator" | "vip",
+  ref = "",
+  promo = "",
+): string {
+  // Promo comes right after the tier; the bot parses it as the action payload.
+  const cleanPromo = promo.replace(/[^A-Za-z0-9]/g, "").slice(0, 16);
+  const action = cleanPromo ? `pay_${tier}_${cleanPromo}` : `pay_${tier}`;
+  return compactStartParam(action, getAttributionToken(), ref);
 }
 
 /** Build a bot link with an optional start payload and the attribution token. */
