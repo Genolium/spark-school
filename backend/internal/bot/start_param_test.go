@@ -27,3 +27,18 @@ func TestParsePayStartParam(t *testing.T) {
 		}
 	}
 }
+
+func TestDiscountedPriceMatchesBackendRounding(t *testing.T) {
+	cases := []struct{ base, pct, want int }{
+		{10990, 14, 9451},
+		{19990, 14, 17191},
+		{10990, 5, 10441},
+		{3333, 14, 2866},
+		{10990, 0, 10990},
+	}
+	for _, tc := range cases {
+		if got := discountedPrice(tc.base, tc.pct); got != tc.want {
+			t.Errorf("discountedPrice(%d, %d) = %d, want %d", tc.base, tc.pct, got, tc.want)
+		}
+	}
+}

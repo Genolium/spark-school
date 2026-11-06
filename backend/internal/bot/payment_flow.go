@@ -3,6 +3,7 @@ package bot
 import (
 	"fmt"
 	"log"
+	"math"
 	"strings"
 
 	"github.com/mymmrac/telego"
@@ -11,6 +12,15 @@ import (
 )
 
 const lowerAcceleratorPrice = 9990.0
+
+// discountedPrice rounds the discount the same way the backend does, so the
+// amount in Telegram matches the amount on the site to the ruble.
+func discountedPrice(base, pct int) int {
+	if pct <= 0 {
+		return base
+	}
+	return int(math.Round(float64(base) * (1 - float64(pct)/100)))
+}
 
 // pricingForSession applies the landing price experiment to the bot price too,
 // so the amount shown on the site and the amount requested in Telegram match.
@@ -117,7 +127,7 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 			if pct <= 0 {
 				return base, 0
 			}
-			return base - (base*pct)/100, pct
+			return discountedPrice(base, pct), pct
 		}
 		basicPrice, basicPct := priceFor("basic", basicBase)
 		accPrice, accPct := priceFor("accelerator", accBase)
@@ -232,8 +242,7 @@ func (s *BotService) handleSbpPayment(chatID telego.ChatID, from *telego.User, t
 		pct = session.DiscountPct
 	}
 	if pct > 0 {
-		discount := (basePrice * pct) / 100
-		price = basePrice - discount
+		price = discountedPrice(basePrice, pct)
 		discountText = fmt.Sprintf(" (скидка %d%% по промокоду <code>%s</code>)", pct, session.PromoCode)
 	} else if hasPromo {
 		discountText = " <i>(промокод на этот тариф не действует)</i>"
