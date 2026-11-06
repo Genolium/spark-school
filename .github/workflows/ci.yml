@@ -60,7 +60,11 @@ jobs:
           psql -h 127.0.0.1 -U spark -d spark_drill -v ON_ERROR_STOP=1 \
             -c "INSERT INTO payment_transactions (payment_id, amount, status, tier, currency) VALUES ('RESTORE_DRILL', 1, 'SUCCESS', 'accelerator', 'RUB') ON CONFLICT (payment_id) DO NOTHING"
           mkdir -p /tmp/spark-backups
-          pg_dump -h 127.0.0.1 -U spark -d spark_drill | gzip > /tmp/spark-backups/spark_test.sql.gz
+          # The runner may ship a pg_dump newer than the postgres:16 service,
+          # and a v17+ dump contains SET transaction_timeout, which v16 cannot
+          # restore. Use the client from the same image as the server.
+          docker run --rm --network host -e PGPASSWORD="$PGPASSWORD" postgres:16-alpine \
+            pg_dump -h 127.0.0.1 -U spark -d spark_drill | gzip > /tmp/spark-backups/spark_test.sql.gz
           chmod +x scripts/restore-drill.sh
           scripts/restore-drill.sh /tmp/spark-backups/spark_test.sql.gz 2>&1 | tee /tmp/restore-drill.log
           echo "### Restore drill" >> "$GITHUB_STEP_SUMMARY"
