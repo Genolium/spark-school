@@ -14,7 +14,7 @@ import { QualificationSection } from "@/components/QualificationSection";
 import { FaqSection } from "@/components/FaqSection";
 import { Footer } from "@/components/Footer";
 import { RecoveryBanner } from "@/components/RecoveryBanner";
-import { DemoLessonSection } from "@/components/DemoLessonSection";
+// import { DemoLessonSection } from "@/components/DemoLessonSection"; // videos temporarily hidden
 import { StudentReviews } from "@/components/StudentReviews";
 import { trackFunnelStep, buildCheckoutStartParam, BOT_URL } from "@/lib/analytics";
 import { syncServerExperiments } from "@/lib/experiments";
@@ -120,8 +120,8 @@ export default function HomePage() {
       {/* Screen 6: The Author (так называемый Иль Story & J-1 Experience) */}
       <AuthorSection />
 
-      {/* Screen 6.5: Demo Lesson & Curator Feedback Preview */}
-      <DemoLessonSection />
+      {/* Screen 6.5: Demo Lesson & Curator Feedback Preview — videos temporarily hidden */}
+      {/* <DemoLessonSection /> */}
 
       {/* Screen 6.7: Student testimonials */}
       <StudentReviews />
