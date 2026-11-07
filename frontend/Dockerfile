@@ -41,6 +41,8 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3000
 
+# Pick up base-image security updates (e.g. musl) in the runtime layer.
+RUN apk upgrade --no-cache
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
 
