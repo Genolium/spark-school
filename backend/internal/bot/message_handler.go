@@ -100,11 +100,6 @@ func (s *BotService) handleMessage(msg *telego.Message) error {
 			parsed := parsePayStartParam(param)
 			tier := parsed.Tier
 			session.SelectedTier = tier
-			session.PriceExperiment = ""
-			if parsed.PriceLower {
-				session.PriceExperiment = "lower"
-			}
-			s.applyLandingExperiments(session, parsed.AttrToken)
 
 			if parsed.Ref != "" && msg.From != nil {
 				s.associateBotReferral(msg.From, parsed.Promo, parsed.Ref)

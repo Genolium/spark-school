@@ -220,24 +220,6 @@ func splitAttributionToken(param string) (string, string) {
 	return param + refSuffix, ""
 }
 
-func (s *BotService) applyLandingExperiments(session *UserSession, attributionToken string) {
-	if s.db == nil || session == nil || attributionToken == "" {
-		return
-	}
-	var rows []models.ExperimentAssignment
-	if err := s.db.Where("attribution_token = ?", attributionToken).Find(&rows).Error; err != nil {
-		return
-	}
-	for _, row := range rows {
-		switch row.Experiment {
-		case "pricing_price":
-			if session.PriceExperiment == "" {
-				session.PriceExperiment = row.Variant
-			}
-		}
-	}
-}
-
 func sanitizeAttributionToken(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if idx := strings.Index(raw, "_"); idx != -1 {

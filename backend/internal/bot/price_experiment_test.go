@@ -6,19 +6,18 @@ import (
 	"github.com/spark-school/backend/internal/models"
 )
 
-func TestPricingForSessionPriceExperiment(t *testing.T) {
+// The accelerator price experiment was retired. Sessions saved earlier with
+// PriceExperiment "lower" must get the regular admin price.
+func TestPricingForSessionIgnoresLegacyPriceExperiment(t *testing.T) {
 	service := &BotService{}
 
-	lower := service.pricingForSession(&UserSession{PriceExperiment: "lower"})
-	if lower.AcceleratorPrice != 9990 {
-		t.Fatalf("lower variant accelerator price = %v, want 9990", lower.AcceleratorPrice)
-	}
-	if lower.BasicPrice != models.DefaultCoursePricing.BasicPrice || lower.VIPPrice != models.DefaultCoursePricing.VIPPrice {
-		t.Fatal("price experiment must only change the accelerator tier")
+	legacy := service.pricingForSession(&UserSession{PriceExperiment: "lower"})
+	if legacy.AcceleratorPrice != models.DefaultCoursePricing.AcceleratorPrice {
+		t.Fatalf("legacy lower session accelerator price = %v, want %v", legacy.AcceleratorPrice, models.DefaultCoursePricing.AcceleratorPrice)
 	}
 
-	control := service.pricingForSession(&UserSession{})
-	if control.AcceleratorPrice != models.DefaultCoursePricing.AcceleratorPrice {
-		t.Fatalf("control accelerator price = %v, want %v", control.AcceleratorPrice, models.DefaultCoursePricing.AcceleratorPrice)
+	fresh := service.pricingForSession(&UserSession{})
+	if fresh.AcceleratorPrice != legacy.AcceleratorPrice {
+		t.Fatalf("fresh session price %v differs from legacy %v", fresh.AcceleratorPrice, legacy.AcceleratorPrice)
 	}
 }

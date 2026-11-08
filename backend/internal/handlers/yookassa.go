@@ -56,7 +56,7 @@ func NewYooKassaHandler(
 	}
 }
 
-func checkoutBasePrice(tier string, pricing models.CoursePricing, visitorID string) float64 {
+func checkoutBasePrice(tier string, pricing models.CoursePricing) float64 {
 	basePrice := pricing.AcceleratorPrice
 	switch tier {
 	case "basic":
@@ -65,9 +65,6 @@ func checkoutBasePrice(tier string, pricing models.CoursePricing, visitorID stri
 		basePrice = pricing.VIPPrice
 	case "audit_essay":
 		basePrice = 1900
-	}
-	if tier == "accelerator" {
-		basePrice = acceleratorPriceForVariant(basePrice, assignVariant(visitorID, "pricing_price"))
 	}
 	return basePrice
 }
@@ -128,7 +125,7 @@ func (h *YooKassaHandler) CreateCheckout(c *gin.Context) {
 	}
 
 	pricing := models.GetCoursePricing(h.db)
-	basePrice := checkoutBasePrice(tier, pricing, sanitizeToken(req.VisitorID, 64))
+	basePrice := checkoutBasePrice(tier, pricing)
 
 	finalPrice := basePrice
 	discountPct := 0

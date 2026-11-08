@@ -1,8 +1,6 @@
 "use client";
 
 import { API_BASE } from "./api-base";
-import { getVisitorId } from "./analytics";
-import { applyPriceExperiment } from "./experiments";
 import { DEFAULT_PRICING } from "./pricing-defaults";
 import type { PlacesStats, CoursePricing, ValidatePromoResponse, UserProfile, AdminStats, PayoutRequest, PromoCode, AffiliateStats, ExperimentMetric, DeadOutboxEvent, FunnelData } from "./api-types";
 
@@ -21,11 +19,9 @@ export const publicApi = {
 
   async getCoursePricing(): Promise<CoursePricing> {
     try {
-      const visitorId = getVisitorId();
-      const query = visitorId ? `?visitor_id=${encodeURIComponent(visitorId)}` : "";
-      const res = await fetch(`${API_BASE}/pricing${query}`);
+      const res = await fetch(`${API_BASE}/pricing`);
       if (res.ok) {
-        const data = applyPriceExperiment(await res.json());
+        const data: CoursePricing = await res.json();
         if (typeof window !== "undefined") {
           localStorage.setItem("spark_pricing", JSON.stringify(data));
         }
@@ -39,12 +35,12 @@ export const publicApi = {
       const saved = localStorage.getItem("spark_pricing");
       if (saved) {
         try {
-          return applyPriceExperiment(JSON.parse(saved));
+          return JSON.parse(saved) as CoursePricing;
         } catch {}
       }
     }
 
-    return applyPriceExperiment({ ...DEFAULT_PRICING });
+    return { ...DEFAULT_PRICING };
   },
 
   async validatePromoCode(code: string, tier?: string, price?: number): Promise<ValidatePromoResponse> {

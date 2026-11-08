@@ -107,13 +107,14 @@ function getFilesRecursively(dir, filterFn) {
 // ============================================================================
 describe('Tier 1: Feature Coverage', () => {
 
-  it('1.1 Pricing Tiers: 3 tiers: Базовый (3333), Акселератор (10990 / lower 9990), and VIP (19990) exist with proper features', () => {
+  it('1.1 Pricing Tiers: 3 tiers: Базовый (3333), Акселератор (10990), and VIP (19990) exist with proper features', () => {
     const defaultsPath = path.join(ROOT, 'frontend', 'src', 'lib', 'pricing-defaults.ts');
     assert.ok(fs.existsSync(defaultsPath), 'pricing-defaults.ts must exist');
     const defaultsContent = fs.readFileSync(defaultsPath, 'utf8');
     assert.match(defaultsContent, /basic_price:\s*3333/, 'list price for Базовый must be 3333');
     assert.match(defaultsContent, /accelerator_price:\s*10990/, 'list price for Акселератор must be 10990');
-    assert.match(defaultsContent, /ACCELERATOR_LOWER_PRICE = 9990/, 'lower experiment must be 9990');
+    assert.doesNotMatch(defaultsContent, /ACCELERATOR_LOWER_PRICE/, 'accelerator price experiment must stay retired');
+    assert.match(defaultsContent, /accelerator_price:\s*10990/, 'accelerator price must be 10990');
     assert.match(defaultsContent, /vip_price:\s*19990/, 'list price for VIP must be 19990');
 
     const pricingSectionPath = path.join(ROOT, 'frontend', 'src', 'components', 'PricingSection.tsx');
