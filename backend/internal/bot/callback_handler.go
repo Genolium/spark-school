@@ -326,6 +326,25 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) error {
 			return nil
 		}
 
+	case "admin_broadcast_unpaid_prompt":
+		if s.IsAdmin(query.From.ID) {
+			session.State = StateAdminBroadcastUnpaid
+			s.promptUnpaidBroadcast(chatID)
+			return nil
+		}
+
+	case "admin_broadcast_unpaid_send":
+		if s.IsAdmin(query.From.ID) {
+			s.sendStagedUnpaidBroadcast(chatID)
+			return nil
+		}
+
+	case "admin_broadcast_unpaid_cancel":
+		if s.IsAdmin(query.From.ID) {
+			s.cancelStagedBroadcast(chatID)
+			return nil
+		}
+
 	case "admin_broadcast_prompt":
 		if s.IsAdmin(query.From.ID) {
 			session.State = StateAdminBroadcast

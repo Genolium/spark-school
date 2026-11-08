@@ -161,6 +161,15 @@ func (s *BotService) handleMessage(msg *telego.Message) error {
 		return nil
 	}
 
+	// Curator unpaid-only broadcast: show a preview, send only after confirmation
+	if session.State == StateAdminBroadcastUnpaid && !strings.HasPrefix(text, "/") {
+		session.State = StateDefault
+		if msg.From != nil && s.IsAdmin(msg.From.ID) {
+			s.previewUnpaidBroadcast(chatID, text)
+		}
+		return nil
+	}
+
 	// Curator Broadcast input state
 	if session.State == StateAdminBroadcast && !strings.HasPrefix(text, "/") {
 		session.State = StateDefault

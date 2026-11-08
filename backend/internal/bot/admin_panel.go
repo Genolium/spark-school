@@ -230,45 +230,7 @@ func (s *BotService) ExecuteBroadcast(adminChatID telego.ChatID, broadcastText s
 		return
 	}
 
-	startMsg := fmt.Sprintf("🚀 Запуск рассылки на <b>%d</b> получателей...", len(users))
-	m := tu.Message(adminChatID, startMsg).WithParseMode(telego.ModeHTML)
-	_, _ = s.bot.SendMessage(m)
-
-	sentCount := 0
-	failCount := 0
-
-	go func(recipientList []models.User, text string) {
-		for _, u := range recipientList {
-			// Don't send duplicate to admin
-			if u.TelegramID == s.cfg.AdminTelegramID {
-				continue
-			}
-
-			userChatID := tu.ID(u.TelegramID)
-			broadcastMsg := tu.Message(userChatID, text).
-				WithParseMode(telego.ModeHTML).
-				WithReplyMarkup(tu.InlineKeyboard(tu.InlineKeyboardRow(
-					tu.InlineKeyboardButton("Открыть меню").WithCallbackData("action_menu"),
-				)))
-
-			if _, err := s.bot.SendMessage(broadcastMsg); err != nil {
-				failCount++
-				log.Printf("[Broadcast Fail] telegram_id=%d: %v", u.TelegramID, err)
-			} else {
-				sentCount++
-			}
-			// Rate limiting to respect Telegram's 30 msgs/sec
-			time.Sleep(40 * time.Millisecond)
-		}
-
-		reportMsg := fmt.Sprintf(`✅ <b>Рассылка завершена!</b>
-
-📬 Успешно доставлено: <b>%d</b>
-⚠️ Ошибок доставки (блокировка бота): <b>%d</b>`, sentCount, failCount)
-
-		report := tu.Message(adminChatID, reportMsg).WithParseMode(telego.ModeHTML)
-		_, _ = s.bot.SendMessage(report)
-	}(users, broadcastText)
+	s.runBroadcast(adminChatID, users, broadcastText)
 }
 
 // mskZone is the business timezone: the digest schedule and its date window
