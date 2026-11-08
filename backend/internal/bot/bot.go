@@ -6,6 +6,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/mymmrac/telego"
@@ -34,6 +35,9 @@ type BotService struct {
 	mediaCache       *MediaCache
 	notifyQueue      chan queuedNotification
 	quitChan         chan struct{}
+
+	pendingMu         sync.Mutex
+	pendingBroadcasts map[int64]pendingBroadcast
 }
 
 func NewBotService(cfg *config.Config, db *gorm.DB) *BotService {

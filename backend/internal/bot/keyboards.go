@@ -363,6 +363,9 @@ func AdminPanelKeyboard() *telego.InlineKeyboardMarkup {
 			tu.InlineKeyboardButton("📢 Рассылка по базе").WithCallbackData("admin_broadcast_prompt"),
 		),
 		tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton("📢 Рассылка неоплатившим").WithCallbackData("admin_broadcast_unpaid_prompt"),
+		),
+		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton("⬅️ Закрыть панель").WithCallbackData("action_menu"),
 		),
 	)

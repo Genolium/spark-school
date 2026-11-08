@@ -13,13 +13,14 @@ import (
 type BotState string
 
 const (
-	StateDefault        BotState = "default"
-	StateCalcQ1         BotState = "calc_q1"         // Age & Russian citizenship
-	StateCalcQ2         BotState = "calc_q2"         // University study year
-	StateCalcQ3         BotState = "calc_q3"         // English proficiency level
-	StateWaitingPromo   BotState = "waiting_promo"   // User clicked "Enter promo code"
-	StateWaitingReceipt BotState = "waiting_receipt" // User clicked "Pay" and is expected to send screenshot
-	StateAdminBroadcast BotState = "admin_broadcast" // Curator typed broadcast command and is entering message text
+	StateDefault              BotState = "default"
+	StateCalcQ1               BotState = "calc_q1"                // Age & Russian citizenship
+	StateCalcQ2               BotState = "calc_q2"                // University study year
+	StateCalcQ3               BotState = "calc_q3"                // English proficiency level
+	StateWaitingPromo         BotState = "waiting_promo"          // User clicked "Enter promo code"
+	StateWaitingReceipt       BotState = "waiting_receipt"        // User clicked "Pay" and is expected to send screenshot
+	StateAdminBroadcast       BotState = "admin_broadcast"        // Curator typed broadcast command and is entering message text
+	StateAdminBroadcastUnpaid BotState = "admin_broadcast_unpaid" // Curator is entering text for the unpaid-only broadcast
 )
 
 // UserSession holds state machine and temporary calculator or payment data.
