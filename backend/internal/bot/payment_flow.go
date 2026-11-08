@@ -11,8 +11,6 @@ import (
 	"github.com/spark-school/backend/internal/models"
 )
 
-const lowerAcceleratorPrice = 9990.0
-
 // discountedPrice rounds the discount the same way the backend does, so the
 // amount in Telegram matches the amount on the site to the ruble.
 func discountedPrice(base, pct int) int {
@@ -22,14 +20,10 @@ func discountedPrice(base, pct int) int {
 	return int(math.Round(float64(base) * (1 - float64(pct)/100)))
 }
 
-// pricingForSession applies the landing price experiment to the bot price too,
-// so the amount shown on the site and the amount requested in Telegram match.
-func (s *BotService) pricingForSession(session *UserSession) models.CoursePricing {
-	pricing := s.getPricing()
-	if session != nil && session.PriceExperiment == "lower" {
-		pricing.AcceleratorPrice = lowerAcceleratorPrice
-	}
-	return pricing
+// pricingForSession returns the admin prices. The accelerator price experiment
+// is retired, so sessions saved with PriceExperiment "lower" are not discounted.
+func (s *BotService) pricingForSession(_ *UserSession) models.CoursePricing {
+	return s.getPricing()
 }
 
 // promoForSession returns the active promo attached to the session, if any.
