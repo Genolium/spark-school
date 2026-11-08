@@ -1,0 +1,10 @@
+# Local secrets and generated data
+.env
+.claude/settings.local.json
+output/
+media_in/
+media_out/
+drafts/*.tmp
+*.log
+__pycache__/
+.DS_Store

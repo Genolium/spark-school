@@ -1,0 +1,38 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 scripts/*)",
+      "Bash(ffmpeg*)",
+      "Bash(ffprobe*)",
+      "Bash(mkdir*)",
+      "Bash(ls*)",
+      "Bash(cp*)",
+      "Bash(mv*)",
+      "Read(**)",
+      "Write(./drafts/**)",
+      "Write(./memory/**)",
+      "Write(./research/**)",
+      "Write(./output/**)",
+      "Write(./scripts/**)"
+    ],
+    "deny": [
+      "Bash(rm -rf /*)",
+      "Bash(rm -rf ~*)",
+      "Bash(git push*)",
+      "Bash(docker compose down*)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 scripts/validate_output.py --changed"
+          }
+        ]
+      }
+    ]
+  }
+}
