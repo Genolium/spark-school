@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/subtle"
 	"log"
 	"net/http"
 	"os"
@@ -283,7 +284,7 @@ func main() {
 				return
 			}
 			secret := c.GetHeader("X-Telegram-Bot-Api-Secret-Token")
-			if secret != cfg.TelegramWebhookSecret {
+			if subtle.ConstantTimeCompare([]byte(secret), []byte(cfg.TelegramWebhookSecret)) != 1 {
 				c.JSON(http.StatusUnauthorized, gin.H{"error": "unauthorized: invalid secret token"})
 				return
 			}
@@ -325,8 +326,8 @@ func main() {
 		})
 
 		// Payment Webhook endpoints (handles verification pings, callbacks, HMAC validation & access grant)
-		api.Any("/payments/webhook", security.WebhookMetricsMiddleware(metrics), paymentWebhookHandler.HandleAntilopayWebhook)
-		api.Any("/payments/tribute", security.WebhookMetricsMiddleware(metrics), paymentWebhookHandler.HandleTributeWebhook)
+		api.Any("/payments/webhook", security.WebhookMetricsMiddleware(metrics), webhookLimiter, paymentWebhookHandler.HandleAntilopayWebhook)
+		api.Any("/payments/tribute", security.WebhookMetricsMiddleware(metrics), webhookLimiter, paymentWebhookHandler.HandleTributeWebhook)
 
 		// YooKassa Payment Endpoints with strict per-IP rate limiting
 		yooKassaCreateLimiter := limit(20, 1*time.Minute, "yookassa_create", "Слишком много запросов на создание платежа. Пожалуйста, подождите 60 секунд.")
