@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"log"
 	"sort"
 	"strconv"
 	"strings"
@@ -157,7 +158,9 @@ func (s *BotService) TogglePlanStep(chatID telego.ChatID, from *telego.User, ste
 		progress.Step6Done = !progress.Step6Done
 	}
 	progress.UpdatedAt = time.Now()
-	s.db.Save(&progress)
+	if err := s.db.Save(&progress).Error; err != nil {
+		log.Printf("[Plan] Failed saving step %d progress for tg %d: %v", stepNum, from.ID, err)
+	}
 
 	s.SendPreparationPlan(chatID, from)
 }

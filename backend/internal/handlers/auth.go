@@ -134,7 +134,17 @@ func (h *AuthHandler) getOrCreateUser(tgID int64, username, firstName, lastName,
 		user.FirstName = firstName
 		user.LastName = lastName
 		user.PhotoURL = photoURL
-		h.db.Save(&user)
+		// Only the profile columns: a whole-row Save would write back the
+		// has_access/tier/paid_amount read above and could undo a payment
+		// confirmed in the meantime.
+		if err := h.db.Model(&models.User{}).Where("id = ?", user.ID).Updates(map[string]interface{}{
+			"username":   user.Username,
+			"first_name": user.FirstName,
+			"last_name":  user.LastName,
+			"photo_url":  user.PhotoURL,
+		}).Error; err != nil {
+			return nil, fmt.Errorf("update profile of user %d: %w", user.ID, err)
+		}
 
 		// Ensure existing user has an AffiliateProfile if it was missing
 		var affProfile models.AffiliateProfile

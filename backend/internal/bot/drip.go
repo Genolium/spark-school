@@ -61,7 +61,13 @@ func (s *BotService) RegisterOrUpdateDripLead(telegramID int64, username, firstN
 		if firstName != "" {
 			lead.FirstName = firstName
 		}
-		s.db.Save(&lead)
+		s.saveDripLead(&lead)
+	}
+}
+
+func (s *BotService) saveDripLead(lead *models.DripLead) {
+	if err := s.db.Save(lead).Error; err != nil {
+		log.Printf("[Drip Error] Failed saving drip lead %d (tg %d, stage %d): %v", lead.ID, lead.TelegramID, lead.Stage, err)
 	}
 }
 
@@ -131,7 +137,7 @@ func (s *BotService) processDueDripLeads() {
 				lead.IsCompleted = true
 				lead.Stage = -1
 				lead.LockedUntil = nil
-				s.db.Save(&lead)
+				s.saveDripLead(&lead)
 				continue
 			}
 		}
@@ -145,7 +151,7 @@ func (s *BotService) processDueDripLeads() {
 			lead.Stage = 1
 			lead.NextTriggerAt = now.Add(22 * time.Hour) // Total 24 hours from start
 			lead.LockedUntil = nil
-			s.db.Save(&lead)
+			s.saveDripLead(&lead)
 
 		case 1:
 			// Step 2: +24 hours — Разбор кейса эссе
@@ -153,7 +159,7 @@ func (s *BotService) processDueDripLeads() {
 			lead.Stage = 2
 			lead.NextTriggerAt = now.Add(24 * time.Hour) // Total 48 hours from start
 			lead.LockedUntil = nil
-			s.db.Save(&lead)
+			s.saveDripLead(&lead)
 
 		case 2:
 			// Step 3: +48 hours — Дедлайн до закрытия мест (финал)
@@ -161,7 +167,7 @@ func (s *BotService) processDueDripLeads() {
 			lead.Stage = 3
 			lead.IsCompleted = true
 			lead.LockedUntil = nil
-			s.db.Save(&lead)
+			s.saveDripLead(&lead)
 		}
 	}
 }

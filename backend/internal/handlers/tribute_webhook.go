@@ -251,7 +251,13 @@ func (h *PaymentWebhookHandler) HandleTributeWebhook(c *gin.Context) {
 				CreatedAt:      time.Now(),
 				UpdatedAt:      time.Now(),
 			}
-			_ = h.db.Create(&flaggedTx)
+			// A redelivered webhook hits the unique payment_id: that is fine.
+			// Any other failure loses the only audit trace, so ask Tribute to retry.
+			if err := h.db.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "payment_id"}}, DoNothing: true}).Create(&flaggedTx).Error; err != nil {
+				log.Printf("[TRIBUTE-ERROR] Failed recording flagged underpaid payment %s (tg %d, amount %.2f): %v", paymentID, telegramID, amount, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to record flagged payment"})
+				return
+			}
 		}
 
 		// Alert Ilya about suspicious payment
@@ -299,7 +305,11 @@ func (h *PaymentWebhookHandler) HandleTributeWebhook(c *gin.Context) {
 				CreatedAt:      time.Now(),
 				UpdatedAt:      time.Now(),
 			}
-			_ = h.db.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "payment_id"}}, DoNothing: true}).Create(&flaggedTx).Error
+			if err := h.db.Clauses(clause.OnConflict{Columns: []clause.Column{{Name: "payment_id"}}, DoNothing: true}).Create(&flaggedTx).Error; err != nil {
+				log.Printf("[TRIBUTE-ERROR] Failed recording flagged underpaid payment %s (tg %d, tier %s, amount %.2f): %v", paymentID, telegramID, tier, amount, err)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to record flagged payment"})
+				return
+			}
 		}
 		h.alertAdmin(fmt.Sprintf(
 			"⚠️ <b>Tribute: недоплата</b>\n\nСтудент: ID %d (@%s)\nСумма: %.2f %s\nМинимум для %s: %.2f\nТовар: %s\nПлатёж: <code>%s</code>\n\nДоступ НЕ выдан.",
