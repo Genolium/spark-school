@@ -278,7 +278,7 @@ func (h *PaymentWebhookHandler) HandleAntilopayWebhook(c *gin.Context) {
 	}
 
 	// 5. Anti-underpayment protection by product.
-	minAmount := minimumForTier(tier)
+	minAmount := minimumForTier(h.db, tier)
 	if strings.ToUpper(payload.Status) == "SUCCESS" && amount < minAmount {
 		log.Printf("[SECURITY-ALERT] Antilopay payment %s underpayment detected: %.2f %s. Minimum for %s: %.2f.",
 			paymentID, amount, currency, tier, minAmount)

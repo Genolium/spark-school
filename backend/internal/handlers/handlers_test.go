@@ -523,7 +523,7 @@ func TestHandleTributeWebhook(t *testing.T) {
 		"payload": map[string]interface{}{
 			"subscription_id":   "sub_test_123",
 			"subscription_name": "Акселератор",
-			"amount":            6900,
+			"amount":            10990,
 			"currency":          "rub",
 			"telegram_user_id":  777666,
 			"user": map[string]interface{}{
@@ -552,14 +552,14 @@ func TestHandleTributeWebhook(t *testing.T) {
 	if err := db.Where("payment_id = ?", "TRBT_sub_test_123").First(&tx).Error; err != nil {
 		t.Fatalf("expected payment transaction: %v", err)
 	}
-	if tx.Amount != 6900 || tx.Status != "SUCCESS" || tx.Tier != "accelerator" {
+	if tx.Amount != 10990 || tx.Status != "SUCCESS" || tx.Tier != "accelerator" {
 		t.Fatalf("unexpected transaction: %+v", tx)
 	}
 	var user models.User
 	if err := db.Where("telegram_id = ?", 777666).First(&user).Error; err != nil {
 		t.Fatalf("expected user to be created: %v", err)
 	}
-	if !user.HasAccess || user.Tier != "accelerator" || user.PaidAmount != 6900 {
+	if !user.HasAccess || user.Tier != "accelerator" || user.PaidAmount != 10990 {
 		t.Fatalf("unexpected user rights: %+v", user)
 	}
 	var outboxCount int64
@@ -584,7 +584,7 @@ func TestHandleTributeWebhook(t *testing.T) {
 	}
 	var reloaded models.User
 	db.Where("telegram_id = ?", 777666).First(&reloaded)
-	if reloaded.PaidAmount != 6900 {
+	if reloaded.PaidAmount != 10990 {
 		t.Fatalf("replay changed paid amount: %f", reloaded.PaidAmount)
 	}
 	_ = notifiedStudentMsg
@@ -713,7 +713,7 @@ func TestYooKassaHandler_Webhook_Success(t *testing.T) {
 			"status": "succeeded",
 			"paid":   true,
 			"amount": map[string]interface{}{
-				"value":    "6900.00",
+				"value":    "10990.00",
 				"currency": "RUB",
 			},
 			"description": "Оплата участия в проекте «так называемый SPARK» (Тариф Акселератор)",
@@ -742,14 +742,14 @@ func TestYooKassaHandler_Webhook_Success(t *testing.T) {
 	if err := db.Where("payment_id = ?", "22d6d5eb-000f-5000-8000-18db351245c7").First(&tx).Error; err != nil {
 		t.Fatalf("expected transaction: %v", err)
 	}
-	if tx.Amount != 6900 || tx.Status != "SUCCESS" {
+	if tx.Amount != 10990 || tx.Status != "SUCCESS" {
 		t.Fatalf("unexpected transaction: %+v", tx)
 	}
 	var user models.User
 	if err := db.Where("telegram_id = ?", 555444).First(&user).Error; err != nil {
 		t.Fatalf("expected user: %v", err)
 	}
-	if !user.HasAccess || user.PaidAmount != 6900 {
+	if !user.HasAccess || user.PaidAmount != 10990 {
 		t.Fatalf("unexpected rights: %+v", user)
 	}
 	var outboxCount int64

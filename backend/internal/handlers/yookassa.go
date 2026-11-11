@@ -441,7 +441,7 @@ func (h *YooKassaHandler) HandleWebhook(c *gin.Context) {
 	}
 
 	// Anti-underpayment protection by product.
-	minAmount := minimumForTier(tier)
+	minAmount := minimumForTier(h.db, tier)
 	if amount < minAmount {
 		log.Printf("[SECURITY-ALERT] YooKassa payment %s underpayment detected: %.2f %s. Minimum for %s: %.2f.",
 			paymentID, amount, currency, tier, minAmount)

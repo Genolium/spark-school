@@ -5,16 +5,16 @@ import (
 	"strings"
 
 	"github.com/spark-school/backend/internal/config"
+	"github.com/spark-school/backend/internal/models"
+	"gorm.io/gorm"
 )
 
-// Minimum course prices used for fraud checks. Basic with a 5% promo is
-// 3 790.50 ₽, so 3 500 ₽ remains a safe floor for tier purchases.
-const (
-	minBasicPayment       = 3500.00
-	minAcceleratorPayment = 3500.00
-	minVIPPayment         = 13000.00
-	minAuditPayment       = 1500.00
-)
+// The essay audit has a fixed price that is not configured in the admin panel.
+const minAuditPayment = 1500.00
+
+// maxUnderpaymentDiscountPercent caps how much of a tier price a promo code
+// can remove before the fraud floor stops following it.
+const maxUnderpaymentDiscountPercent = 90
 
 func roundAmount(v float64) float64 {
 	return math.Round(v*100) / 100
@@ -35,17 +35,57 @@ func normalizePaidTier(tier string) string {
 	}
 }
 
-func minimumForTier(tier string) float64 {
-	switch normalizePaidTier(tier) {
-	case "vip":
-		return minVIPPayment
-	case "audit_essay":
-		return minAuditPayment
-	case "basic":
-		return minBasicPayment
-	default:
-		return minAcceleratorPayment
+// maxActivePromoDiscount returns the largest discount percent among active
+// promo codes, clamped to [0, maxUnderpaymentDiscountPercent].
+func maxActivePromoDiscount(db *gorm.DB) float64 {
+	if db == nil {
+		return 0
 	}
+	var maxPct int
+	if err := db.Model(&models.PromoCode{}).
+		Where("is_active = ?", true).
+		Select("COALESCE(MAX(discount_percent), 0)").
+		Scan(&maxPct).Error; err != nil {
+		return 0
+	}
+	if maxPct < 0 {
+		maxPct = 0
+	}
+	if maxPct > maxUnderpaymentDiscountPercent {
+		maxPct = maxUnderpaymentDiscountPercent
+	}
+	return float64(maxPct)
+}
+
+// minimumForTier returns the lowest amount accepted as a genuine payment for
+// the tier: the current configured price with the largest active promo
+// discount applied. It follows the admin prices, so a price change cannot
+// leave a full-price payment below the floor.
+func minimumForTier(db *gorm.DB, tier string) float64 {
+	normalized := normalizePaidTier(tier)
+	if normalized == "audit_essay" {
+		return minAuditPayment
+	}
+	pricing := models.DefaultCoursePricing
+	if db != nil {
+		pricing = models.GetCoursePricing(db)
+	}
+	price := pricing.AcceleratorPrice
+	switch normalized {
+	case "vip":
+		price = pricing.VIPPrice
+	case "basic":
+		price = pricing.BasicPrice
+	}
+	floor := price * (100 - maxActivePromoDiscount(db)) / 100
+	// One rouble of slack absorbs rounding differences between providers.
+	return math.Max(roundAmount(floor)-1, 0)
+}
+
+// minimumCoursePayment is the floor for the cheapest course tier. It is used
+// before the tier of an incoming payment is known.
+func minimumCoursePayment(db *gorm.DB) float64 {
+	return math.Min(minimumForTier(db, "basic"), math.Min(minimumForTier(db, "accelerator"), minimumForTier(db, "vip")))
 }
 
 func firstNonEmptyString(values ...string) string {

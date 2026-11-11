@@ -21,9 +21,9 @@ import (
 	"gorm.io/gorm/clause"
 )
 
-// Minimum allowable payment amount to prevent underpayment/tampering attacks.
-// 3 500 ₽ safely covers Basic with 5% promo (3 790.50 ₽).
-const MinCoursePaymentThreshold = 3500.00
+// Amount at or above which a Tribute payment is treated as VIP when the
+// product title does not say so. Underpayment floors come from
+// minimumForTier / minimumCoursePayment, which follow the admin prices.
 const MinVipPaymentThreshold = 13000.00
 
 // TributeWebhookPayload models the incoming notification from Tribute (@tribute / web.tribute.tg).
@@ -229,9 +229,10 @@ func (h *PaymentWebhookHandler) HandleTributeWebhook(c *gin.Context) {
 
 	// Fraud check: if amount is below minimum course price (e.g. attacker sends 1 ₽ or 50 ₽),
 	// DO NOT grant access. Flag transaction for manual investigation.
-	if amount < MinCoursePaymentThreshold {
+	minCoursePayment := minimumCoursePayment(h.db)
+	if amount < minCoursePayment {
 		log.Printf("[SECURITY-ALERT] Tribute payment %s underpayment detected: %.2f %s. Minimum required: %.2f. Flagging without access grant.",
-			paymentID, amount, currency, MinCoursePaymentThreshold)
+			paymentID, amount, currency, minCoursePayment)
 
 		// Record suspicious transaction in DB for audit
 		if h.db != nil {
@@ -283,7 +284,7 @@ func (h *PaymentWebhookHandler) HandleTributeWebhook(c *gin.Context) {
 	}
 
 	// 7. Anti-Underpayment & Amount Tampering Protection
-	minAmount := minimumForTier(tier)
+	minAmount := minimumForTier(h.db, tier)
 	if amount < minAmount {
 		log.Printf("[SECURITY-ALERT] Tribute payment %s underpayment detected: %.2f %s. Minimum for %s: %.2f. Flagging without access grant.",
 			paymentID, amount, currency, tier, minAmount)

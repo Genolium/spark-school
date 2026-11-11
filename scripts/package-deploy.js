@@ -83,7 +83,6 @@ const rootFiles = [
   'Caddyfile',
   '.env.example',
   'README.md',
-  'MAIN.MD',
   'STAGING.md',
   'PITR.md',
   'API.md',

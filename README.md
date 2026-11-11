@@ -11,7 +11,6 @@ spark-school/
 ├── docker-compose.yml         # Оркестрация Caddy 2, Go Backend, Next.js Frontend, PostgreSQL 16
 ├── Caddyfile                  # HTTP Reverse Proxy (TLS — на внешнем Nginx/балансировщике)
 ├── .env.example               # Образец всех необходимых переменных окружения
-├── seed.sql                   # Начальный SQL для инициализации БД; схему ведут Goose-миграции backend
 │
 ├── backend/                   # Серверное приложение на Golang 1.26
 │   ├── cmd/
@@ -70,7 +69,11 @@ spark-school/
 git clone https://github.com/your-org/spark-school.git /opt/spark-school
 cd /opt/spark-school
 
-# Создайте файл переменных окружения
+# Соберите архив деплоя: скрипт создаёт папку deploy/ и в ней deploy.sh
+node scripts/package-deploy.js
+cd deploy
+
+# Создайте файл переменных окружения (deploy.sh ищет .env рядом с собой)
 cp .env.example .env
 nano .env
 

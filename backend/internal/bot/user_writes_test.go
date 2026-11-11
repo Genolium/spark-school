@@ -138,6 +138,16 @@ func TestReceiptUploadDoesNotInferPromoFromAmount(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Pin the VIP price to the historical 14 900 ₽ so a 5% discount gives
+	// exactly 14 155 ₽, one of the amounts the removed inference matched.
+	if err := db.AutoMigrate(&models.CoursePricing{}); err != nil {
+		t.Fatal(err)
+	}
+	pricing := models.GetCoursePricing(db)
+	if err := db.Model(&pricing).Update("VIPPrice", 14900).Error; err != nil {
+		t.Fatal(err)
+	}
+
 	session := service.getSession(tgID)
 	session.SelectedTier = "vip"
 	session.DiscountPct = 5 // legacy session: discount without a code, 14900 -> 14155
