@@ -19,9 +19,14 @@ FROM alpine:3.20
 WORKDIR /app
 RUN apk upgrade --no-cache && apk --no-cache add ca-certificates tzdata
 
-COPY --from=builder /app/spark-server /app/spark-server
-COPY --from=builder /app/spark-bot /app/spark-bot
-COPY media /app/media
+RUN addgroup -S -g 10001 spark && adduser -S -u 10001 -G spark -H -s /sbin/nologin spark
+
+COPY --from=builder --chmod=0555 /app/spark-server /app/spark-server
+COPY --from=builder --chmod=0555 /app/spark-bot /app/spark-bot
+COPY --chmod=0755 media /app/media
+RUN chmod -R a+rX /app/media
+
+USER spark:spark
 
 EXPOSE 8080
 
