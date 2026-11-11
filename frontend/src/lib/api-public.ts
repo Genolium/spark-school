@@ -59,7 +59,7 @@ export const publicApi = {
       } else if (tier) {
         const t = tier.toLowerCase();
         if (t === "vip") basePrice = DEFAULT_PRICING.vip_price;
-        else if (t === "basic" || t === "базовый") basePrice = DEFAULT_PRICING.basic_price || 3990;
+        else if (t === "basic" || t === "базовый") basePrice = DEFAULT_PRICING.basic_price;
         else basePrice = DEFAULT_PRICING.accelerator_price;
       }
 

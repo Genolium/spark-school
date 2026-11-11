@@ -24,6 +24,7 @@ import {
   FileCheck,
 } from "lucide-react";
 import { UserProfile, api } from "@/lib/api";
+import { DEFAULT_PRICING } from "@/lib/pricing-defaults";
 
 interface StudentsTableProps {
   students: UserProfile[];
@@ -54,7 +55,7 @@ const emptyForm: FormState = {
   role: "student",
   has_access: false,
   tier: "accelerator",
-  paid_amount: "10900",
+  paid_amount: String(DEFAULT_PRICING.accelerator_price),
   promo_code: "",
   receipt_issued: false,
   receipt_url: "",
@@ -106,9 +107,13 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
   const [activateTarget, setActivateTarget] = useState<UserProfile | null>(null);
   const [activateTier, setActivateTier] = useState<"basic" | "accelerator" | "vip">("accelerator");
   const [activatePromo, setActivatePromo] = useState("");
-  const [activateAmount, setActivateAmount] = useState("10900");
+  const [activateAmount, setActivateAmount] = useState(String(DEFAULT_PRICING.accelerator_price));
 
-  const [coursePricing, setCoursePricing] = useState({ basic_price: 3990, accelerator_price: 10900, vip_price: 14900 });
+  const [coursePricing, setCoursePricing] = useState({
+    basic_price: DEFAULT_PRICING.basic_price,
+    accelerator_price: DEFAULT_PRICING.accelerator_price,
+    vip_price: DEFAULT_PRICING.vip_price,
+  });
 
   // Issue Receipt modal state
   const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
@@ -129,11 +134,11 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
     api.getCoursePricing().then((p) => {
       if (p) {
         setCoursePricing({
-          basic_price: p.basic_price || 3990,
-          accelerator_price: p.accelerator_price || 10900,
-          vip_price: p.vip_price || 14900,
+          basic_price: p.basic_price || DEFAULT_PRICING.basic_price,
+          accelerator_price: p.accelerator_price || DEFAULT_PRICING.accelerator_price,
+          vip_price: p.vip_price || DEFAULT_PRICING.vip_price,
         });
-        setActivateAmount(String(p.accelerator_price || 10900));
+        setActivateAmount(String(p.accelerator_price || DEFAULT_PRICING.accelerator_price));
       }
     }).catch(() => {});
   }, []);
@@ -741,7 +746,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
               const defaultTierPrice = isVIP
                 ? coursePricing.vip_price
                 : isBasic
-                ? 3990
+                ? coursePricing.basic_price
                 : coursePricing.accelerator_price;
               const displayAmount = s.paid_amount
                 ? s.paid_amount.toLocaleString("ru-RU") + " ₽"
@@ -1427,7 +1432,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
                       type="number"
                       value={receiptAmount}
                       onChange={(e) => setReceiptAmount(e.target.value)}
-                      placeholder="10900"
+                      placeholder={String(DEFAULT_PRICING.accelerator_price)}
                       className={`${inputCls} mt-1 font-bold text-amber-600 dark:text-amber-400`}
                     />
                   </label>

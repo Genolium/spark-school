@@ -47,7 +47,7 @@ func (h *PricingHandler) UpdatePricing(c *gin.Context) {
 	}
 
 	if req.BasicPrice <= 0 {
-		req.BasicPrice = 3333.00
+		req.BasicPrice = models.DefaultBasicPrice
 	}
 
 	if req.AcceleratorPrice <= 0 {

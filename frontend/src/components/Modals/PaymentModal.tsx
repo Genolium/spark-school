@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, ShieldCheck, ArrowUpRight, QrCode, Send, Check, Tag } from "lucide-react";
 import { BotLink } from "@/components/BotLink";
 import { api, PromoValidationResult, PlacesStats } from "@/lib/api";
+import { DEFAULT_PRICING } from "@/lib/pricing-defaults";
 import { trackFunnelStep, buildCheckoutStartParam, BOT_URL } from "@/lib/analytics";
 
 export type PricingTier = "basic" | "accelerator" | "vip";
@@ -61,9 +62,9 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
         if (p.bank_name) {
           setBankName(p.bank_name);
         }
-        const basicPrice = p.basic_price || 3990;
-        const accPrice = p.accelerator_price || 10900;
-        const vipPrice = p.vip_price || 14900;
+        const basicPrice = p.basic_price || DEFAULT_PRICING.basic_price;
+        const accPrice = p.accelerator_price || DEFAULT_PRICING.accelerator_price;
+        const vipPrice = p.vip_price || DEFAULT_PRICING.vip_price;
         setTiersConfig({
           basic: {
             name: "Базовый",

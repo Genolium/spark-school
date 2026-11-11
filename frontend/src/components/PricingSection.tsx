@@ -28,7 +28,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
     return (num || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   };
 
-  const basicPrice = pricing.basic_price || DEFAULT_PRICING.basic_price || 3990;
+  const basicPrice = pricing.basic_price || DEFAULT_PRICING.basic_price;
   const basicOldPrice = (pricing.basic_old_price && pricing.basic_old_price > basicPrice)
     ? pricing.basic_old_price
     : null;

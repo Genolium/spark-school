@@ -169,14 +169,21 @@ func TestBot_SyncTelegramUser_LeadCreation(t *testing.T) {
 }
 
 func TestBot_UpgradeOptionsKeyboard(t *testing.T) {
-	// 1. Accelerator tier student can upgrade to VIP (8 000 ₽)
+	// 1. Accelerator tier student can upgrade to VIP. Without an explicit
+	// amount the button falls back to the default VIP - Accelerator difference.
 	accKb := UpgradeOptionsKeyboard("accelerator")
 	if len(accKb.InlineKeyboard) != 2 {
 		t.Fatalf("expected 2 rows (1 option + menu) for accelerator tier, got %d", len(accKb.InlineKeyboard))
 	}
 	accOpt := accKb.InlineKeyboard[0][0]
-	if !strings.Contains(accOpt.Text, "8 000") || accOpt.CallbackData != "upgrade_to_vip" {
-		t.Errorf("expected upgrade to VIP with 8 000 ₽, got text=%s, data=%s", accOpt.Text, accOpt.CallbackData)
+	wantDiff := formatPriceRub(int(models.DefaultVIPPrice - models.DefaultAcceleratorPrice))
+	if !strings.Contains(accOpt.Text, wantDiff) || accOpt.CallbackData != "upgrade_to_vip" {
+		t.Errorf("expected upgrade to VIP with %s ₽, got text=%s, data=%s", wantDiff, accOpt.Text, accOpt.CallbackData)
+	}
+
+	// An explicit amount from the admin pricing wins over the default.
+	if txt := UpgradeOptionsKeyboard("accelerator", 8000).InlineKeyboard[0][0].Text; !strings.Contains(txt, "8 000") {
+		t.Errorf("expected explicit 8 000 ₽ upgrade amount, got %s", txt)
 	}
 
 	// 2. VIP tier student has no further upgrades (only menu button)
@@ -195,10 +202,9 @@ func TestBot_UpgradeDifferencesAndReceiptCard(t *testing.T) {
 	}, nil)
 	defer service.Stop()
 
-	// 1. Difference math check: Accelerator (10 900) -> VIP (14 900) = 4 000
-	diffAccToVIP := 14900.0 - 10900.0
-	if diffAccToVIP != 4000.0 {
-		t.Errorf("expected 4000 difference, got %v", diffAccToVIP)
+	// 1. Difference math check: default Accelerator (10 990) -> VIP (19 990) = 9 000
+	if diffAccToVIP := models.DefaultUpgradeDiff("accelerator", "vip"); diffAccToVIP != 9000.0 {
+		t.Errorf("expected 9000 difference, got %v", diffAccToVIP)
 	}
 
 	// 2. SendAdminReceiptCard with Upgrade amount

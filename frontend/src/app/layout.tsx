@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import Script from "next/script";
 import localFont from "next/font/local";
 import "./globals.css";
+import { DEFAULT_PRICING } from "@/lib/pricing-defaults";
 
 // 1. Golos Text (ParaType, OFL) — сверхжирный (Black 900 / ExtraBold 800) акцидентный гротеск для мощных заголовков.
 // Самохостинг: сборка не зависит от доступности fonts.googleapis.com.
@@ -200,7 +201,7 @@ const jsonLd = {
         {
           "@type": "Offer",
           "name": "Базовый",
-          "price": "3990",
+          "price": String(DEFAULT_PRICING.basic_price),
           "priceCurrency": "RUB",
           "availability": "https://schema.org/InStock",
           "url": "https://so-called-spark.ru/#pricing",
@@ -209,7 +210,7 @@ const jsonLd = {
         {
           "@type": "Offer",
           "name": "Акселератор",
-          "price": "10900",
+          "price": String(DEFAULT_PRICING.accelerator_price),
           "priceCurrency": "RUB",
           "availability": "https://schema.org/InStock",
           "url": "https://so-called-spark.ru/#pricing",
@@ -218,7 +219,7 @@ const jsonLd = {
         {
           "@type": "Offer",
           "name": "VIP",
-          "price": "14900",
+          "price": String(DEFAULT_PRICING.vip_price),
           "priceCurrency": "RUB",
           "availability": "https://schema.org/InStock",
           "url": "https://so-called-spark.ru/#pricing",

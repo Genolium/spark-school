@@ -351,7 +351,7 @@ func (s *BotService) sendBasicUpsellMessage(chatID telego.ChatID, student models
 	pricing := s.getPricing()
 	diffAcc := pricing.AcceleratorPrice - pricing.BasicPrice
 	if diffAcc <= 0 {
-		diffAcc = 2910.0
+		diffAcc = models.DefaultUpgradeDiff("basic", "accelerator")
 	}
 
 	text := fmt.Sprintf(`👋 Привет, %s!

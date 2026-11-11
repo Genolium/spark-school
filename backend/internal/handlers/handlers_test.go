@@ -285,17 +285,23 @@ func TestReceiptVerify_Validation(t *testing.T) {
 
 func TestPromoValidate_TierPricing(t *testing.T) {
 	// Test helper GetTierPrice (only 2 active tiers: accelerator and vip)
+	if price := GetTierPrice("basic", 0); price != 3333.00 {
+		t.Errorf("expected basic price 3333, got %f", price)
+	}
+	if price := GetTierPrice("базовый", 0); price != 3333.00 {
+		t.Errorf("expected базовый price 3333, got %f", price)
+	}
 	if price := GetTierPrice("accelerator", 0); price != 10990.00 {
-		t.Errorf("expected accelerator price 10900, got %f", price)
+		t.Errorf("expected accelerator price 10990, got %f", price)
 	}
 	if price := GetTierPrice("акселератор", 0); price != 10990.00 {
-		t.Errorf("expected акселератор price 10900, got %f", price)
+		t.Errorf("expected акселератор price 10990, got %f", price)
 	}
 	if price := GetTierPrice("vip", 0); price != 19990.00 {
-		t.Errorf("expected vip price 14900, got %f", price)
+		t.Errorf("expected vip price 19990, got %f", price)
 	}
 	if price := GetTierPrice("unknown", 0); price != 10990.00 {
-		t.Errorf("expected default price 10900, got %f", price)
+		t.Errorf("expected default price 10990, got %f", price)
 	}
 	if price := GetTierPrice("", 5000); price != 5000.00 {
 		t.Errorf("expected custom price 5000, got %f", price)
@@ -949,8 +955,8 @@ func TestPricingHandler_GetAndUpdatePricing(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &p); err != nil {
 		t.Fatalf("failed to decode pricing response: %v", err)
 	}
-	if p.AcceleratorPrice != 10900.0 || p.VIPPrice != 14900.0 {
-		t.Fatalf("expected default prices 10900 and 14900, got %f and %f", p.AcceleratorPrice, p.VIPPrice)
+	if p.AcceleratorPrice != models.DefaultAcceleratorPrice || p.VIPPrice != models.DefaultVIPPrice {
+		t.Fatalf("expected default prices %v and %v, got %f and %f", models.DefaultAcceleratorPrice, models.DefaultVIPPrice, p.AcceleratorPrice, p.VIPPrice)
 	}
 
 	// 2. PUT invalid pricing (VIP < Accelerator)
