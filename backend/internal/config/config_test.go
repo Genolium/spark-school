@@ -142,3 +142,45 @@ func TestConfigTrustedProxiesAndRetention(t *testing.T) {
 		t.Fatalf("invalid retention must fall back to 180, got %d", got)
 	}
 }
+
+func TestConfigLoad_YooKassaShopIDHasNoDefault(t *testing.T) {
+	t.Setenv("YOOKASSA_SHOP_ID", "")
+	if got := Load().YooKassaShopID; got != "" {
+		t.Fatalf("YOOKASSA_SHOP_ID must have no built-in default, got %q", got)
+	}
+}
+
+func TestConfigValidate_ProductionRequiresShopIDWithYooKassaKey(t *testing.T) {
+	cfg := validProductionConfig()
+	cfg.YooKassaShopID = ""
+	err := cfg.Validate()
+	if err == nil || !strings.Contains(err.Error(), "YOOKASSA_SHOP_ID") {
+		t.Fatalf("expected YOOKASSA_SHOP_ID error, got %v", err)
+	}
+}
+
+func hasWarning(ws []string, sub string) bool {
+	for _, w := range ws {
+		if strings.Contains(w, sub) {
+			return true
+		}
+	}
+	return false
+}
+
+func TestConfigWarnings_ProductionAdminHardening(t *testing.T) {
+	cfg := validProductionConfig()
+	ws := cfg.Warnings()
+	if !hasWarning(ws, "ADMIN_TOTP_SECRET") || !hasWarning(ws, "not a bcrypt hash") {
+		t.Fatalf("expected TOTP and bcrypt warnings, got %v", ws)
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("warnings must not become startup failures: %v", err)
+	}
+
+	cfg.AdminTOTPSecret = "JBSWY3DPEHPK3PXP"
+	cfg.AdminPassword = "$2a$10$" + strings.Repeat("x", 53)
+	if ws := cfg.Warnings(); len(ws) != 0 {
+		t.Fatalf("expected no warnings, got %v", ws)
+	}
+}

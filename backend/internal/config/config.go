@@ -94,7 +94,7 @@ func Load() *Config {
 		TributeAPIKey:          getEnv("TRIBUTE_API_KEY", ""),
 		EnotSecretKey:          getEnv("ENOT_SECRET_KEY", ""),
 		EnotShopID:             getEnv("ENOT_SHOP_ID", ""),
-		YooKassaShopID:         getEnv("YOOKASSA_SHOP_ID", "1491540"),
+		YooKassaShopID:         getEnv("YOOKASSA_SHOP_ID", ""),
 		YooKassaSecretKey:      getEnv("YOOKASSA_SECRET_KEY", ""),
 		TelegramWebhookSecret:  strings.TrimSpace(os.Getenv("TELEGRAM_WEBHOOK_SECRET")),
 		DigestHour:             digestHour,
@@ -200,11 +200,20 @@ func (c *Config) Validate() error {
 	return nil
 }
 
-// Warnings returns non-fatal security notices for development environments.
+// Warnings returns non-fatal security notices. Production gets notices for
+// optional-but-recommended hardening that must not block startup.
 func (c *Config) Warnings() []string {
 	var warnings []string
 	if c == nil {
 		return warnings
+	}
+	if c.IsProduction() {
+		if strings.TrimSpace(c.AdminTOTPSecret) == "" {
+			warnings = append(warnings, "ADMIN_TOTP_SECRET is empty; admin 2FA is disabled")
+		}
+		if strings.TrimSpace(c.AdminPassword) != "" && !IsBcryptHash(c.AdminPassword) {
+			warnings = append(warnings, "ADMIN_PASSWORD is not a bcrypt hash; store a bcrypt hash instead of a plaintext password")
+		}
 	}
 	if !c.IsProduction() {
 		if len(c.JWTSecret) > 0 && len(c.JWTSecret) < 32 {
@@ -218,6 +227,12 @@ func (c *Config) Warnings() []string {
 		}
 	}
 	return warnings
+}
+
+// IsBcryptHash reports whether the value looks like a bcrypt hash, using the
+// same prefix check as the admin login.
+func IsBcryptHash(value string) bool {
+	return strings.HasPrefix(value, "$2a$") || strings.HasPrefix(value, "$2b$")
 }
 
 func parseList(raw string) []string {
