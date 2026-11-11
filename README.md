@@ -11,32 +11,47 @@ spark-school/
 ├── docker-compose.yml         # Оркестрация Caddy 2, Go Backend, Next.js Frontend, PostgreSQL 16
 ├── Caddyfile                  # HTTP Reverse Proxy (TLS — на внешнем Nginx/балансировщике)
 ├── .env.example               # Образец всех необходимых переменных окружения
-├── seed.sql                   # SQL-дамп со схемой базы данных и индексами
+├── seed.sql                   # Начальный SQL для инициализации БД; схему ведут Goose-миграции backend
 │
-├── backend/                   # Серверное приложение на Golang 1.22+
-│   ├── cmd/server/main.go     # Точка входа HTTP API и фонового Telegram-бота
+├── backend/                   # Серверное приложение на Golang 1.26
+│   ├── cmd/
+│   │   ├── server/main.go     # Точка входа HTTP API и фонового Telegram-бота
+│   │   └── bot/main.go        # Точка входа отдельного Telegram-бота
 │   ├── internal/
-│   │   ├── auth/telegram.go   # HMAC-SHA256 валидация Telegram Login Widget, JWT-сессии
-│   │   ├── bot/bot.go         # Воркер Telegram-бота (диплинки, выдача гайдов, уведомления)
-│   │   ├── database/db.go     # Пул соединений PostgreSQL и GORM миграции
-│   │   ├── handlers/          # HTTP эндпоинты (Auth, Affiliate, Admin)
-│   │   ├── models/models.go   # Модели сущностей БД (User, Payouts, Referrals)
-│   │   └── services/          # Бизнес-логика (двухуровневая реферальная система 15% / 5%)
+│   │   ├── auth/              # HMAC-SHA256 валидация Telegram Login Widget, JWT-сессии
+│   │   ├── bot/               # Воркер Telegram-бота (диплинки, выдача гайдов, уведомления)
+│   │   ├── config/            # Конфигурация из переменных окружения
+│   │   ├── database/          # Пул соединений PostgreSQL, запуск миграций (migrations.go)
+│   │   │   └── migrations/    # Goose SQL-миграции схемы, применяются backend при старте
+│   │   ├── diagnostics/       # Диагностический план
+│   │   ├── handlers/          # HTTP эндпоинты (Auth, Affiliate, Admin, Payments, Analytics и др.)
+│   │   ├── models/            # Модели сущностей БД (User, Payouts, Referrals)
+│   │   ├── money/             # Денежная арифметика в копейках (int64)
+│   │   ├── monitoring/        # Фоновые проверки и алерты администратору в Telegram
+│   │   ├── outbox/            # Dispatcher outbox-событий (повторы, dead-letter)
+│   │   ├── payments/          # Сервис платежей
+│   │   ├── privacy/           # Retention аналитики и кликов (ANALYTICS_RETENTION_DAYS)
+│   │   ├── readmodels/        # Отчётные выборки (например, выручка)
+│   │   ├── security/          # Rate limiter (в памяти и в БД), security headers, метрики
+│   │   └── services/          # Бизнес-логика (двухуровневая реферальная система 15% / 5%, YooKassa)
 │   └── Dockerfile             # Multi-stage сборка Go-бинарника на Alpine
 │
-└── frontend/                  # Клиентское веб-приложение Next.js 14+ (App Router)
+└── frontend/                  # Клиентское веб-приложение Next.js 16 + React 19 (App Router)
     ├── src/
     │   ├── app/
     │   │   ├── page.tsx       # Продающий лендинг (Spatial Bento-Glass, Dark Obsidian)
     │   │   ├── admin/         # Панель управления администратора (финансы, студенты, выплаты)
     │   │   ├── partner/       # Партнёрский кабинет (15%/5% реферальная сеть)
+    │   │   ├── plan/[token]/  # Страница плана по токену
     │   │   ├── offer/         # Публичная оферта самозанятого (ИНН 780739313219)
-    │   │   └── privacy/       # Политика конфиденциальности по 152-ФЗ
+    │   │   ├── privacy/       # Политика конфиденциальности по 152-ФЗ
+    │   │   ├── principles/    # Страница принципов
+    │   │   └── terms/         # Страница условий
     │   ├── components/
-    │   │   └── Admin/         # Финансовые KPI, таблица студентов, выплаты
-    │   ├── context/           # Провайдер сессии пользователя и демо-свитчер
-    │   └── lib/api.ts         # Клиент к Go API с автономным mock-фоллбэком
-    └── Dockerfile             # Multi-stage сборка Next.js на Node 20 Alpine
+    │   │   └── Admin/         # Финансовые KPI, таблицы, выплаты, отчёты
+    │   ├── context/           # Провайдер темы оформления
+    │   └── lib/               # API-клиенты (api-public, api-affiliate, api-admin) и фасад api.ts
+    └── Dockerfile             # Multi-stage сборка Next.js на Node 22 Alpine
 ```
 
 ---
@@ -91,10 +106,10 @@ backend/frontend/caddy, проверяет `/health/ready` (PostgreSQL + вер�
 ### Фронтенд (Next.js):
 ```bash
 cd frontend
-pnpm install
-pnpm dev # Запуск на http://localhost:3000
+npm ci
+npm run dev # Запуск на http://localhost:3000
 ```
-Фронтенд автоматически поддерживает автономный режим работы с демо-профилями (`Студент с доступом`, `Гость`, `Администратор`).
+Фронтенд работает с Go API. Если API недоступен, клиент показывает пустые или ошибочные состояния, а не демо-данные.
 
 ### Бэкенд (Golang):
 ```bash
