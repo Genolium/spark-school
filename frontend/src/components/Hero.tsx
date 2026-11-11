@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
+import Link from "next/link";
 import { BlurImage } from "./BlurImage";
 import { motion } from "framer-motion";
 import { ArrowUpRight, CheckCircle2, Video, FileText } from "lucide-react";
@@ -136,14 +137,14 @@ export function Hero({ onOpenChances }: HeroProps) {
 
               {/* High-Contrast Action Buttons */}
               <div className="mt-8 flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
-                <a
+                <Link
                   href="/#pricing"
                   onClick={() => trackFunnelStep("pricing_select_tier", { source: "hero_cta" })}
                   className="btn-primary-mono px-8 py-4 text-sm sm:text-base flex items-center justify-center gap-2.5 active:scale-95 group shadow-2xl font-bold"
                 >
                   <span>{ctaLabel}</span>
                   <ArrowUpRight className="w-4 h-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5 stroke-[2.5]" />
-                </a>
+                </Link>
 
                 <button
                   type="button"

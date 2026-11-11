@@ -146,8 +146,8 @@ export default function HomePage() {
 
       <RecoveryBanner onOpenDiagnostic={() => setIsChancesOpen(true)} />
 
-      {/* Canonical checkout: direct Telegram deep link with attribution token.
-          The unused web PaymentModal is intentionally not mounted. */}
+      {/* Canonical checkout: direct Telegram deep link with attribution token
+          (there is no in-page payment modal). */}
     </main>
   );
 }

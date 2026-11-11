@@ -2,7 +2,7 @@
 
 import { API_BASE } from "./api-base";
 import { DEFAULT_PRICING } from "./pricing-defaults";
-import type { PlacesStats, CoursePricing, ValidatePromoResponse, UserProfile, AdminStats, PayoutRequest, PromoCode, AffiliateStats, ExperimentMetric, DeadOutboxEvent, FunnelData } from "./api-types";
+import type { PlacesStats, CoursePricing } from "./api-types";
 
 export const publicApi = {
   async getPlacesStats(): Promise<PlacesStats | null> {
@@ -41,52 +41,6 @@ export const publicApi = {
     }
 
     return { ...DEFAULT_PRICING };
-  },
-
-  async validatePromoCode(code: string, tier?: string, price?: number): Promise<ValidatePromoResponse> {
-    try {
-      const res = await fetch(`${API_BASE}/promo/validate`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ code, tier, price }),
-      });
-      return await res.json();
-    } catch {
-      // Mock fallback: if code ends with 5 or is START5/IL5/SPARK5, grant 5% discount
-      let basePrice = DEFAULT_PRICING.accelerator_price;
-      if (price && price > 0) {
-        basePrice = price;
-      } else if (tier) {
-        const t = tier.toLowerCase();
-        if (t === "vip") basePrice = DEFAULT_PRICING.vip_price;
-        else if (t === "basic" || t === "базовый") basePrice = DEFAULT_PRICING.basic_price;
-        else basePrice = DEFAULT_PRICING.accelerator_price;
-      }
-
-      const clean = code.trim().toUpperCase();
-      if (clean === "START5" || clean === "IL5" || clean === "SPARK5" || clean.endsWith("5")) {
-        const discountAmount = Math.round((basePrice * 5) / 100);
-        return {
-          valid: true,
-          code: clean,
-          discount_percent: 5,
-          original_price: basePrice,
-          discount_amount: discountAmount,
-          final_price: basePrice - discountAmount,
-          owner_username: "partner",
-          message: "Промокод успешно применён!",
-        };
-      }
-      return {
-        valid: false,
-        code: clean,
-        discount_percent: 0,
-        original_price: basePrice,
-        discount_amount: 0,
-        final_price: basePrice,
-        message: "Промокод не найден",
-      };
-    }
   },
 
   async createYooKassaPayment(data: {

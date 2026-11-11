@@ -134,15 +134,6 @@ describe('Tier 1: Feature Coverage', () => {
     assert.doesNotMatch(pricingContent, /<h3[^>]*>[\s\S]*?VIP\s*\/\s*Консьерж[\s\S]*?<\/h3>/, 'PricingSection header must NOT contain "VIP / Консьерж"');
     assert.doesNotMatch(pricingContent, /Выбрать\s+VIP\s+Консьерж/, 'PricingSection button must NOT say "VIP Консьерж"');
 
-    const paymentModalPath = path.join(ROOT, 'frontend', 'src', 'components', 'Modals', 'PaymentModal.tsx');
-    assert.ok(fs.existsSync(paymentModalPath), 'PaymentModal.tsx must exist');
-    const modalContent = fs.readFileSync(paymentModalPath, 'utf8');
-
-    assert.match(modalContent, /basic:\s*\{[\s\S]*?price:\s*3333/, 'PaymentModal must have basic price 3333');
-    assert.match(modalContent, /accelerator:\s*\{[\s\S]*?price:\s*10990/, 'PaymentModal must have accelerator list price 10990');
-    assert.match(modalContent, /vip:\s*\{[\s\S]*?price:\s*19990/, 'PaymentModal must have vip price 19990');
-    assert.match(modalContent, /vip:\s*\{[\s\S]*?name:\s*["']VIP["']/, 'PaymentModal VIP tier name must be strictly "VIP"');
-
     const backendPromoPath = path.join(ROOT, 'backend', 'internal', 'handlers', 'promo.go');
     assert.ok(fs.existsSync(backendPromoPath), 'backend/internal/handlers/promo.go must exist');
     const backendPromoContent = fs.readFileSync(backendPromoPath, 'utf8');
@@ -176,15 +167,6 @@ describe('Tier 1: Feature Coverage', () => {
     const pricingContent = fs.readFileSync(pricingSectionPath, 'utf8');
     assert.match(pricingContent, /DEFAULT_PRICING/, 'PricingSection must read canonical prices');
     assert.match(pricingContent, /line-through/, 'PricingSection must keep strikethrough old prices');
-
-    const paymentModalPath = path.join(ROOT, 'frontend', 'src', 'components', 'Modals', 'PaymentModal.tsx');
-    const modalContent = fs.readFileSync(paymentModalPath, 'utf8');
-    // The modal must trust the backend's final price: promos can be 14% or be
-    // limited to specific tiers, so no fixed 0.95 multiplier is allowed.
-    assert.match(modalContent, /promoResult\.final_price/, 'PaymentModal must use the backend final price');
-    assert.doesNotMatch(modalContent, /discountPrice:/, 'PaymentModal must not hardcode per-tier discount prices');
-    // The promo must travel in the bot deep link, not as a referral code.
-    assert.match(modalContent, /buildCheckoutStartParam\(tier,\s*rPart,\s*pPart\)/, 'PaymentModal must pass the promo to the bot link');
   });
 
   it('1.3 Chances Calculator Logic: 3 steps, inputs, probability calculation (75%, 88%, 96%)', () => {
@@ -378,14 +360,7 @@ describe('Tier 3: Cross-Feature & Deep-Links', () => {
     );
   });
 
-  it('3.2 Payment Modal Deep-Link: Adheres to https://t.me/spark_prep_bot?start=pay_... with tiers and promo', () => {
-    const paymentModalPath = path.join(ROOT, 'frontend', 'src', 'components', 'Modals', 'PaymentModal.tsx');
-    assert.ok(fs.existsSync(paymentModalPath), 'PaymentModal.tsx must exist');
-    const modalContent = fs.readFileSync(paymentModalPath, 'utf8');
-
-    assert.match(modalContent, /buildCheckoutStartParam/, 'PaymentModal must use compact checkout start params');
-    assert.match(modalContent, /BOT_URL\}\?start=\$\{startParam\}/, 'PaymentModal must open the bot with a start payload');
-
+  it('3.2 Checkout Deep-Link: Adheres to https://t.me/spark_prep_bot?start=pay_... with tiers and promo', () => {
     const analyticsPath = path.join(ROOT, 'frontend', 'src', 'lib', 'analytics.ts');
     const analyticsContent = fs.readFileSync(analyticsPath, 'utf8');
     assert.match(analyticsContent, /compactStartParam/, 'analytics.ts must compact Telegram start payloads');
@@ -462,7 +437,6 @@ describe('Tier 4: Repository Hygiene & Acceptance Scan', () => {
   it('4.3 Codebase Scan: 0 occurrences of "Консьерж" in pricing components and tier names', () => {
     const pricingFiles = [
       path.join(ROOT, 'frontend', 'src', 'components', 'PricingSection.tsx'),
-      path.join(ROOT, 'frontend', 'src', 'components', 'Modals', 'PaymentModal.tsx'),
     ];
 
     const matches = [];
@@ -507,15 +481,10 @@ describe('Tier 4: Repository Hygiene & Acceptance Scan', () => {
     }
   });
 
-  it('4.6 Verification & Payments: Enot meta tag and Tribute checkout links are present', () => {
+  it('4.6 Verification & Payments: Enot meta tag and bot Tribute checkout links are present', () => {
     const layoutPath = path.join(ROOT, 'frontend', 'src', 'app', 'layout.tsx');
     const layoutContent = fs.readFileSync(layoutPath, 'utf8');
     assert.match(layoutContent, /4f507993/, 'Enot meta tag 4f507993 must be in layout.tsx');
-
-    const paymentModalPath = path.join(ROOT, 'frontend', 'src', 'components', 'Modals', 'PaymentModal.tsx');
-    const paymentModalContent = fs.readFileSync(paymentModalPath, 'utf8');
-    assert.match(paymentModalContent, /https:\/\/web\.tribute\.tg\/p\/GIB/, 'Tribute Accelerator link GIB must be in PaymentModal');
-    assert.match(paymentModalContent, /https:\/\/web\.tribute\.tg\/p\/GID/, 'Tribute VIP link GID must be in PaymentModal');
 
     const keyboardsPath = path.join(ROOT, 'backend', 'internal', 'bot', 'keyboards.go');
     const keyboardsContent = fs.readFileSync(keyboardsPath, 'utf8');
@@ -524,10 +493,8 @@ describe('Tier 4: Repository Hygiene & Acceptance Scan', () => {
   });
 
   it('4.7 Checkout is SBP-only: landing and bot must not create a YooKassa session', () => {
-    const paymentModalPath = path.join(ROOT, 'frontend', 'src', 'components', 'Modals', 'PaymentModal.tsx');
-    const paymentModalContent = fs.readFileSync(paymentModalPath, 'utf8');
-    assert.match(paymentModalContent, /Оплата через СБП|Оплатить по СБП/, 'PaymentModal must offer SBP checkout');
-    assert.doesNotMatch(paymentModalContent, /createYooKassaPayment/, 'PaymentModal must not create a YooKassa checkout');
+    const landing = fs.readFileSync(path.join(ROOT, 'frontend', 'src', 'app', 'page.tsx'), 'utf8');
+    assert.doesNotMatch(landing, /createYooKassaPayment/, 'landing must not create a YooKassa checkout');
 
     const keyboardsPath = path.join(ROOT, 'backend', 'internal', 'bot', 'keyboards.go');
     const keyboardsContent = fs.readFileSync(keyboardsPath, 'utf8');
