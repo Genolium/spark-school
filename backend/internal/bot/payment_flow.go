@@ -406,8 +406,9 @@ func (s *BotService) processPromoInput(chatID telego.ChatID, from *telego.User, 
 		session.State = StateWaitingReceipt
 
 		if u := s.syncTelegramUser(from); u != nil {
-			u.PromoCode = promo.Code
-			s.db.Save(u)
+			if err := s.setUserPromoCode(u.ID, promo.Code); err != nil {
+				log.Printf("[Promo] Failed saving promo %q for user %d (tg %d): %v", promo.Code, u.ID, from.ID, err)
+			}
 		}
 
 		s.sendPaymentDetails(chatID, from, true)

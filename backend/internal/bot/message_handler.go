@@ -126,13 +126,18 @@ func (s *BotService) handleMessage(msg *telego.Message) error {
 			session.SelectedTier = tier
 			if u := s.syncTelegramUser(msg.From); u != nil {
 				// Do NOT overwrite user's paid tier if they already have access!
-				if !u.HasAccess && tier != "" {
-					u.Tier = tier
+				// The has_access check is in the UPDATE's WHERE clause, so a
+				// payment confirmed after u was read is not overwritten.
+				if tier != "" {
+					if err := s.setIntendedTierIfNoAccess(u.ID, tier); err != nil {
+						log.Printf("[Start] Failed saving tier %q for user %d (tg %d): %v", tier, u.ID, msg.From.ID, err)
+					}
 				}
 				if withPromo && session.PromoCode != "" && u.PromoCode == "" {
-					u.PromoCode = session.PromoCode
+					if err := s.setUserPromoCodeIfEmpty(u.ID, session.PromoCode); err != nil {
+						log.Printf("[Start] Failed saving promo %q for user %d (tg %d): %v", session.PromoCode, u.ID, msg.From.ID, err)
+					}
 				}
-				s.db.Save(u)
 			}
 			s.sendPaymentDetails(chatID, msg.From, withPromo)
 			return nil

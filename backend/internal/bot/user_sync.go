@@ -85,10 +85,42 @@ func (s *BotService) syncTelegramUser(from *telego.User) *models.User {
 		changed = true
 	}
 	if changed {
-		s.db.Save(&user)
+		// Only the profile columns: a whole-row Save would write back the
+		// has_access/tier/paid_amount read above and could undo a payment
+		// confirmed in the meantime.
+		if err := s.db.Model(&models.User{}).Where("id = ?", user.ID).Updates(map[string]interface{}{
+			"username":   user.Username,
+			"first_name": user.FirstName,
+			"last_name":  user.LastName,
+		}).Error; err != nil {
+			log.Printf("[Bot User Sync] Failed updating profile of user %d (tg %d): %v", user.ID, tgID, err)
+		}
 	}
 
 	return &user
+}
+
+// setUserPromoCode writes only the promo_code column of a user.
+func (s *BotService) setUserPromoCode(userID uint, code string) error {
+	return s.db.Model(&models.User{}).Where("id = ?", userID).Update("promo_code", code).Error
+}
+
+// setUserPromoCodeIfEmpty sets promo_code only when the user has none yet.
+// The emptiness check is part of the UPDATE, so a value written concurrently
+// is not overwritten.
+func (s *BotService) setUserPromoCodeIfEmpty(userID uint, code string) error {
+	return s.db.Model(&models.User{}).
+		Where("id = ? AND (promo_code = '' OR promo_code IS NULL)", userID).
+		Update("promo_code", code).Error
+}
+
+// setIntendedTierIfNoAccess records the tier a student is looking at, but only
+// while they have no paid access. The has_access check is part of the UPDATE,
+// so a payment confirmed concurrently cannot be downgraded by this write.
+func (s *BotService) setIntendedTierIfNoAccess(userID uint, tier string) error {
+	return s.db.Model(&models.User{}).
+		Where("id = ? AND has_access = ?", userID, false).
+		Update("tier", tier).Error
 }
 
 func (s *BotService) associateBotReferral(from *telego.User, inputUsername, refCode string) {
@@ -251,7 +283,9 @@ func (s *BotService) associateDirectTrafficSource(from *telego.User, rawSource s
 		return
 	}
 	if user.UTMSource == "" {
-		s.db.Model(&models.User{}).Where("id = ?", user.ID).Update("utm_source", cleanSource)
+		if err := s.db.Model(&models.User{}).Where("id = ?", user.ID).Update("utm_source", cleanSource).Error; err != nil {
+			log.Printf("[Bot User Sync] Failed setting utm_source for user %d (tg %d): %v", user.ID, from.ID, err)
+		}
 	}
 
 	// Record bot_lead event if not already tracked

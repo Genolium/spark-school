@@ -237,19 +237,25 @@ func (h *YooKassaHandler) CreateCheckout(c *gin.Context) {
 	paymentResp, err := h.yooKassaService.CreatePayment(c.Request.Context(), ykReq)
 	if err != nil {
 		log.Printf("[YOOKASSA-ERROR] CreatePayment failed: %v", err)
-		_ = h.db.Model(&models.PaymentOrder{}).Where("order_id = ?", orderID).Updates(map[string]interface{}{
+		if dbErr := h.db.Model(&models.PaymentOrder{}).Where("order_id = ?", orderID).Updates(map[string]interface{}{
 			"status":     "failed",
 			"updated_at": time.Now(),
-		}).Error
+		}).Error; dbErr != nil {
+			log.Printf("[YOOKASSA-ERROR] Failed marking order %s as failed: %v", orderID, dbErr)
+		}
 		c.JSON(http.StatusServiceUnavailable, gin.H{
 			"error": "Платёжный сервис ЮKassa временно недоступен. Пожалуйста, оплатите через Telegram-бота или Tribute.",
 		})
 		return
 	}
-	_ = h.db.Model(&models.PaymentOrder{}).Where("order_id = ?", orderID).Updates(map[string]interface{}{
+	// The webhook confirms by metadata order_id and fills provider_payment_id
+	// itself, so a failure here does not block the payment: log it.
+	if dbErr := h.db.Model(&models.PaymentOrder{}).Where("order_id = ?", orderID).Updates(map[string]interface{}{
 		"provider_payment_id": paymentResp.ID,
 		"updated_at":          time.Now(),
-	}).Error
+	}).Error; dbErr != nil {
+		log.Printf("[YOOKASSA-ERROR] Failed storing payment id %s on order %s: %v", paymentResp.ID, orderID, dbErr)
+	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"payment_id":       paymentResp.ID,

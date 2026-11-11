@@ -102,8 +102,9 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) error {
 		if s.db != nil {
 			var u models.User
 			if err := s.db.Where("telegram_id = ?", query.From.ID).First(&u).Error; err == nil {
-				u.PromoCode = "SPARK5"
-				s.db.Save(&u)
+				if err := s.setUserPromoCode(u.ID, "SPARK5"); err != nil {
+					log.Printf("[Drip] Failed saving promo SPARK5 for user %d (tg %d): %v", u.ID, query.From.ID, err)
+				}
 			}
 		}
 		s.handleSbpPayment(chatID, &query.From, tier)

@@ -932,7 +932,15 @@ func (h *AdminHandler) IssueReceipt(c *gin.Context) {
 	if telegramSent {
 		fiscal.SentAt = &now
 	}
-	_ = h.db.Create(&fiscal)
+	if err := h.db.Create(&fiscal).Error; err != nil {
+		log.Printf("[Admin Receipt] Failed recording fiscal receipt for user %d (tg %d, number %q, amount %.2f): %v", user.ID, user.TelegramID, cleanNum, amount, err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error":         "Чек сохранён у ученика, но запись в журнал фискальных чеков не удалась",
+			"telegram_sent": telegramSent,
+			"user":          user,
+		})
+		return
+	}
 
 	respMsg := "Чек успешно выписан"
 	if telegramSent {
@@ -1145,14 +1153,24 @@ func (h *AdminHandler) ToggleAccess(c *gin.Context) {
 			if errSend != nil {
 				// Resilient fallback: enqueue to Outbox table for background retries
 				if h.db != nil {
-					_ = h.db.Create(&models.OutboxEvent{
+					if err := h.db.Create(&models.OutboxEvent{
 						EventType:  "telegram_notification",
 						Payload:    fmt.Sprintf(`{"telegram_id":%d,"message":%q}`, user.TelegramID, msg),
 						Status:     "pending",
 						CreatedAt:  time.Now(),
 						MaxRetries: 5,
 						LastError:  errSend.Error(),
-					})
+					}).Error; err != nil {
+						// Access is already granted, but the student will not
+						// get the invite: tell the admin instead of reporting success.
+						log.Printf("[Admin Access] Notification to user %d (tg %d) failed (%v) and could not be queued: %v", user.ID, user.TelegramID, errSend, err)
+						c.JSON(http.StatusInternalServerError, gin.H{
+							"error":       "Доступ обновлён, но уведомление ученику не отправлено и не поставлено в очередь. Отправьте ссылку вручную.",
+							"has_access":  user.HasAccess,
+							"invite_link": inviteLink,
+						})
+						return
+					}
 				}
 			}
 		}

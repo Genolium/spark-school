@@ -176,11 +176,10 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) error {
 		// only after the payment is confirmed, so an unpaid receipt cannot
 		// silently change the student's paid tier.
 		if promoCode != "" && u.PromoCode == "" {
-			u.PromoCode = promoCode
-		} else if u.PromoCode == "" && (amount == 6555.0 || amount == 14155.0 || amount == 3790.0) {
-			u.PromoCode = "SPARK5"
+			if err := s.setUserPromoCodeIfEmpty(u.ID, promoCode); err != nil {
+				log.Printf("[Receipt] Failed saving promo %q for user %d (receipt %d): %v", promoCode, u.ID, receipt.ID, err)
+			}
 		}
-		s.db.Save(u)
 	}
 
 	session.State = StateDefault

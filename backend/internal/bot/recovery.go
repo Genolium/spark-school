@@ -32,18 +32,22 @@ func (s *BotService) recordOrderIntent(from *telego.User, tier string, amount fl
 	var existing models.OrderIntent
 	if err := s.db.Where("telegram_id = ? AND tier = ? AND status = 'pending'", from.ID, tier).
 		Order("created_at DESC").First(&existing).Error; err == nil {
-		_ = s.db.Model(&models.OrderIntent{}).Where("id = ?", existing.ID).Updates(map[string]interface{}{
+		if err := s.db.Model(&models.OrderIntent{}).Where("id = ?", existing.ID).Updates(map[string]interface{}{
 			"amount":     amount,
 			"promo_code": promoCode,
 			"source":     source,
 			"updated_at": now,
-		}).Error
+		}).Error; err != nil {
+			log.Printf("[Recovery] Failed updating order intent %d (user %d, tg %d, tier %s): %v", existing.ID, user.ID, from.ID, tier, err)
+		}
 		return
 	}
-	_ = s.db.Model(&models.OrderIntent{}).
+	if err := s.db.Model(&models.OrderIntent{}).
 		Where("telegram_id = ? AND status = 'pending'", from.ID).
-		Update("status", "superseded").Error
-	_ = s.db.Create(&models.OrderIntent{
+		Update("status", "superseded").Error; err != nil {
+		log.Printf("[Recovery] Failed superseding pending order intents (user %d, tg %d): %v", user.ID, from.ID, err)
+	}
+	if err := s.db.Create(&models.OrderIntent{
 		UserID:     user.ID,
 		TelegramID: from.ID,
 		Tier:       tier,
@@ -53,10 +57,12 @@ func (s *BotService) recordOrderIntent(from *telego.User, tier string, amount fl
 		Status:     "pending",
 		CreatedAt:  now,
 		UpdatedAt:  now,
-	}).Error
+	}).Error; err != nil {
+		log.Printf("[Recovery] Failed creating order intent (user %d, tg %d, tier %s, amount %.2f): %v", user.ID, from.ID, tier, amount, err)
+	}
 
 	metadata := fmt.Sprintf(`{"tier":%q,"amount":%f,"source":%q}`, tier, amount, source)
-	_ = s.db.Create(&models.AnalyticsEvent{
+	if err := s.db.Create(&models.AnalyticsEvent{
 		VisitorID:        user.VisitorID,
 		AttributionToken: user.AttributionToken,
 		Step:             "checkout_started",
@@ -65,7 +71,9 @@ func (s *BotService) recordOrderIntent(from *telego.User, tier string, amount fl
 		PromoCode:        promoCode,
 		Metadata:         metadata,
 		CreatedAt:        now,
-	}).Error
+	}).Error; err != nil {
+		log.Printf("[Recovery] Failed recording checkout_started event (user %d, tg %d): %v", user.ID, from.ID, err)
+	}
 }
 
 func (s *BotService) startRecoveryWorker() {
