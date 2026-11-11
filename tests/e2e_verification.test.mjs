@@ -590,7 +590,6 @@ describe('Tier 5: Packaging & Deployment Artifact', () => {
       { pattern: /backend\/.*Dockerfile/, name: 'backend/Dockerfile' },
       { pattern: /backend\/cmd\/server\/main\.go/, name: 'backend/cmd/server/main.go' },
       { pattern: /frontend\/.*package\.json/, name: 'frontend/package.json' },
-      { pattern: /seed\.sql/, name: 'seed.sql' },
       { pattern: /DEPLOY\.md/, name: 'DEPLOY.md' },
     ];
 

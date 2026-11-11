@@ -81,7 +81,6 @@ console.log('📋 Copying root orchestration files...');
 const rootFiles = [
   'docker-compose.yml',
   'Caddyfile',
-  'seed.sql',
   '.env.example',
   'README.md',
   'MAIN.MD',
@@ -379,7 +378,7 @@ psql -h 127.0.0.1 -U spark_user -d spark_restore_test -f /tmp/restore.sql
 * **caddy** (порт 38080/80): Reverse-proxy, маршрутизация \`/api/*\` на Go, фронтенда на Next.js.
 * **frontend** (Next.js 14): Оптимизированный продакшн-бандл.
 * **backend** (Golang 1.22): REST API, JWT-авторизация, админ-панель и встроенный Telegram-бот на чистом Go.
-* **postgres** (PostgreSQL 16 Alpine): База данных с авто-накатом \`seed.sql\`.
+* **postgres** (PostgreSQL 16 Alpine): База данных (схема накатывается миграциями Goose при старте backend).
 `;
 fs.writeFileSync(path.join(OUT_DIR, 'DEPLOY.md'), deployMdContent, 'utf8');
 
