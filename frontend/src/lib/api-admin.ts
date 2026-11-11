@@ -1,7 +1,7 @@
 "use client";
 
 import { API_BASE, getAdminToken, handleAdminAuthFailure } from "./api-base";
-import type { PlacesStats, CoursePricing, ValidatePromoResponse, UserProfile, AdminStats, PayoutRequest, PromoCode, AffiliateStats, ExperimentMetric, ExperimentReport, DeadOutboxEvent, FunnelData, CampaignLink, CampaignLinkWithClicks, CreateCampaignLinkInput, UpdateCampaignLinkInput, LinkReport, LinkReportRow } from "./api-types";
+import type { CoursePricing, UserProfile, AdminStats, PayoutRequest, PromoCode, ExperimentMetric, ExperimentReport, DeadOutboxEvent, FunnelData, CampaignLink, CampaignLinkWithClicks, CreateCampaignLinkInput, UpdateCampaignLinkInput, LinkReport, LinkReportRow } from "./api-types";
 
 async function fetchAdmin(endpoint: string, options: RequestInit = {}): Promise<Response> {
   const token = getAdminToken();

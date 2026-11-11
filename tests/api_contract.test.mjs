@@ -16,7 +16,6 @@ const pairs = [
   ['/pricing', '/pricing'],
   ['/affiliate/stats', '/affiliate/stats'],
   ['/affiliate/payout', '/affiliate/payout'],
-  ['/promo/validate', '/promo/validate'],
   ['/analytics/track', '/analytics/track'],
   ['/diagnostic', '/diagnostic'],
   ['/analytics/experiments', '/analytics/experiments'],

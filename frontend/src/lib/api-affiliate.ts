@@ -1,7 +1,7 @@
 "use client";
 
 import { API_BASE, getAuthToken } from "./api-base";
-import type { PlacesStats, CoursePricing, ValidatePromoResponse, UserProfile, AdminStats, PayoutRequest, PromoCode, AffiliateStats, ExperimentMetric, DeadOutboxEvent, FunnelData } from "./api-types";
+import type { PayoutRequest, AffiliateStats } from "./api-types";
 
 export const affiliateApi = {
   async getAffiliateStats(): Promise<AffiliateStats> {

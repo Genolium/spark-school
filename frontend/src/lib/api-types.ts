@@ -118,19 +118,6 @@ export interface PromoCode {
   students?: string[];
 }
 
-export interface ValidatePromoResponse {
-  valid: boolean;
-  code: string;
-  discount_percent: number;
-  original_price: number;
-  discount_amount: number;
-  final_price: number;
-  owner_username?: string;
-  message?: string;
-}
-
-export type PromoValidationResult = ValidatePromoResponse;
-
 export interface PlacesStats {
   total_capacity: number;
   active_students: number;
