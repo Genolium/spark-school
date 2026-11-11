@@ -191,9 +191,9 @@ func (s *BotService) paymentDetailsContent(session *UserSession, pricing models.
 			map[string]bool{"basic": basicPct > 0, "accelerator": accPct > 0, "vip": vipPct > 0},
 		)
 	} else {
-		basicPromoPrice := basicBase - (basicBase*5)/100
-		accPromoPrice := accBase - (accBase*5)/100
-		vipPromoPrice := vipBase - (vipBase*5)/100
+		basicPromoPrice := basicBase - (basicBase*standardPromoPercent)/100
+		accPromoPrice := accBase - (accBase*standardPromoPercent)/100
+		vipPromoPrice := vipBase - (vipBase*standardPromoPercent)/100
 
 		text = fmt.Sprintf(`%s <b>Бронирование места в проекте «так называемый SPARK»</b>
 
@@ -570,11 +570,11 @@ func (s *BotService) sendUpgradeOptions(chatID telego.ChatID, from *telego.User)
 	if currentTier == "basic" {
 		diffAcc := pricing.AcceleratorPrice - pricing.BasicPrice
 		if diffAcc <= 0 {
-			diffAcc = 2910.0
+			diffAcc = models.DefaultUpgradeDiff("basic", "accelerator")
 		}
 		diffVIP := pricing.VIPPrice - pricing.BasicPrice
 		if diffVIP <= 0 {
-			diffVIP = 10910.0
+			diffVIP = models.DefaultUpgradeDiff("basic", "vip")
 		}
 
 		reply := fmt.Sprintf(`🚀 <b>Апгрейд тарифа «Базовый»</b>
@@ -606,7 +606,7 @@ func (s *BotService) sendUpgradeOptions(chatID telego.ChatID, from *telego.User)
 	// Default: currentTier == accelerator
 	diff := pricing.VIPPrice - pricing.AcceleratorPrice
 	if diff <= 0 {
-		diff = 8000.0
+		diff = models.DefaultUpgradeDiff("accelerator", "vip")
 	}
 
 	reply := fmt.Sprintf(`👑 <b>Апгрейд тарифа «Акселератор» до VIP</b>

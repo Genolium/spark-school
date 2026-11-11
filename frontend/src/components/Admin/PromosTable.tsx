@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { PromoCode, api } from "@/lib/api";
+import { DEFAULT_PRICING } from "@/lib/pricing-defaults";
 import {
   Tag,
   Plus,
@@ -39,7 +40,7 @@ export function PromosTable({ promos, onRefresh }: PromosTableProps) {
   const [newReward, setNewReward] = useState(1000);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [coursePricing, setCoursePricing] = useState({ accelerator_price: 10900 });
+  const [coursePricing, setCoursePricing] = useState({ accelerator_price: DEFAULT_PRICING.accelerator_price });
 
   React.useEffect(() => {
     api.getCoursePricing().then((p) => {

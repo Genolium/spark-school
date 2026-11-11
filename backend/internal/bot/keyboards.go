@@ -89,11 +89,27 @@ func MainMenuKeyboard(frontendURL string, options ...any) *telego.InlineKeyboard
 // https://web.tribute.tg/p/GIB
 // https://web.tribute.tg/p/GID
 
+// standardPromoPercent is the discount of the standard partner promo code; it
+// is only used to build fallback labels when no computed price is supplied.
+const standardPromoPercent = 5
+
+// defaultTierPriceRub returns the default list price of a tier in whole rubles,
+// taken from models.DefaultCoursePricing (the single backend source).
+func defaultTierPriceRub(tier string) int {
+	return int(models.DefaultTierPrice(tier))
+}
+
+// defaultUpgradeDiffRub returns the default upgrade surcharge between tiers in
+// whole rubles, computed from models.DefaultCoursePricing.
+func defaultUpgradeDiffRub(fromTier, toTier string) int {
+	return int(models.DefaultUpgradeDiff(fromTier, toTier))
+}
+
 // PaymentKeyboard returns the checkout keyboard with direct SBP transfer.
 func PaymentKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboardMarkup {
-	basicPrice := 3990
-	accPrice := 10900
-	vipPrice := 14900
+	basicPrice := defaultTierPriceRub("basic")
+	accPrice := defaultTierPriceRub("accelerator")
+	vipPrice := defaultTierPriceRub("vip")
 	if len(pricing) > 0 {
 		if pricing[0].BasicPrice > 0 {
 			basicPrice = int(pricing[0].BasicPrice)
@@ -135,11 +151,11 @@ func PaymentKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboardMark
 // Prices and discount flags are per tier: a promo may be restricted to some
 // tiers, and the button must show the amount that will actually be charged.
 func PromoAppliedKeyboard(prices map[string]int, discounted map[string]bool) *telego.InlineKeyboardMarkup {
-	price := func(tier string, fallback int) int {
+	price := func(tier string) int {
 		if value, ok := prices[tier]; ok && value > 0 {
 			return value
 		}
-		return fallback
+		return discountedPrice(defaultTierPriceRub(tier), standardPromoPercent)
 	}
 	suffix := func(tier string) string {
 		if discounted[tier] {
@@ -148,9 +164,9 @@ func PromoAppliedKeyboard(prices map[string]int, discounted map[string]bool) *te
 		return ""
 	}
 
-	basicText := fmt.Sprintf("1️⃣ Базовый (%s ₽)%s", formatPriceRub(price("basic", 3790)), suffix("basic"))
-	accText := fmt.Sprintf("2️⃣ Акселератор (%s ₽)%s", formatPriceRub(price("accelerator", 10355)), suffix("accelerator"))
-	vipText := fmt.Sprintf("3️⃣ VIP (%s ₽)%s", formatPriceRub(price("vip", 14155)), suffix("vip"))
+	basicText := fmt.Sprintf("1️⃣ Базовый (%s ₽)%s", formatPriceRub(price("basic")), suffix("basic"))
+	accText := fmt.Sprintf("2️⃣ Акселератор (%s ₽)%s", formatPriceRub(price("accelerator")), suffix("accelerator"))
+	vipText := fmt.Sprintf("3️⃣ VIP (%s ₽)%s", formatPriceRub(price("vip")), suffix("vip"))
 
 	return tu.InlineKeyboard(
 		tu.InlineKeyboardRow(
@@ -173,9 +189,9 @@ func PromoAppliedKeyboard(prices map[string]int, discounted map[string]bool) *te
 }
 
 func YooKassaSelectTierKeyboard(hasPromo bool, pricing ...models.CoursePricing) *telego.InlineKeyboardMarkup {
-	basicPrice := 3990
-	accPrice := 10900
-	vipPrice := 14900
+	basicPrice := defaultTierPriceRub("basic")
+	accPrice := defaultTierPriceRub("accelerator")
+	vipPrice := defaultTierPriceRub("vip")
 	if len(pricing) > 0 {
 		if pricing[0].BasicPrice > 0 {
 			basicPrice = int(pricing[0].BasicPrice)
@@ -188,9 +204,9 @@ func YooKassaSelectTierKeyboard(hasPromo bool, pricing ...models.CoursePricing) 
 		}
 	}
 	if hasPromo {
-		basicPrice = basicPrice - (basicPrice*5)/100
-		accPrice = accPrice - (accPrice*5)/100
-		vipPrice = vipPrice - (vipPrice*5)/100
+		basicPrice = basicPrice - (basicPrice*standardPromoPercent)/100
+		accPrice = accPrice - (accPrice*standardPromoPercent)/100
+		vipPrice = vipPrice - (vipPrice*standardPromoPercent)/100
 	}
 	basicText := fmt.Sprintf("1️⃣ Оплатить Базовый (%s ₽) — СБП", formatPriceRub(basicPrice))
 	accText := fmt.Sprintf("2️⃣ Оплатить Акселератор (%s ₽) — СБП", formatPriceRub(accPrice))
@@ -310,8 +326,8 @@ func UpgradeOptionsKeyboard(currentTier string, diffAmount ...float64) *telego.I
 	}
 
 	if currentTier == "basic" {
-		diffAcc := 6910  // 10900 - 3990
-		diffVIP := 10910 // 14900 - 3990
+		diffAcc := defaultUpgradeDiffRub("basic", "accelerator")
+		diffVIP := defaultUpgradeDiffRub("basic", "vip")
 		if len(diffAmount) > 0 && diffAmount[0] > 0 {
 			diffAcc = int(diffAmount[0])
 		}
@@ -331,7 +347,7 @@ func UpgradeOptionsKeyboard(currentTier string, diffAmount ...float64) *telego.I
 		)
 	}
 
-	diff := 8000
+	diff := defaultUpgradeDiffRub("accelerator", "vip")
 	if len(diffAmount) > 0 && diffAmount[0] > 0 {
 		diff = int(diffAmount[0])
 	}
@@ -373,7 +389,7 @@ func AdminPanelKeyboard() *telego.InlineKeyboardMarkup {
 
 // BasicUpsellAuditKeyboard returns buttons for the +3 days upsell message (Upgrade to Accelerator or Text Audit).
 func BasicUpsellAuditKeyboard(diffAcc ...float64) *telego.InlineKeyboardMarkup {
-	accDiff := 6910.0
+	accDiff := models.DefaultUpgradeDiff("basic", "accelerator")
 	if len(diffAcc) > 0 && diffAcc[0] > 0 {
 		accDiff = diffAcc[0]
 	}

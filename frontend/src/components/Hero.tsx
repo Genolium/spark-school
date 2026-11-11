@@ -34,7 +34,7 @@ export function Hero({ onOpenChances }: HeroProps) {
     pricing.accelerator_price,
     pricing.vip_price,
   ].filter((p): p is number => typeof p === "number" && p > 0);
-  const minPrice = validPrices.length > 0 ? Math.min(...validPrices) : 3990;
+  const minPrice = validPrices.length > 0 ? Math.min(...validPrices) : DEFAULT_PRICING.basic_price;
 
   // A/B winner (p = 0.049, 7 payments vs 1 for the control): the "path to
   // the grant" headline is now permanent.

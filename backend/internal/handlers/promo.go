@@ -44,23 +44,16 @@ type ValidatePromoResponse struct {
 	Message         string  `json:"message,omitempty"`
 }
 
-const BaseCoursePrice = 10990.00
+// BaseCoursePrice is the default price for an unknown tier (the accelerator).
+const BaseCoursePrice = models.DefaultAcceleratorPrice
 
-// GetTierPrice returns standard price for the selected tier
+// GetTierPrice returns fallbackPrice when it is positive, otherwise the default
+// list price of the tier from models.DefaultCoursePricing.
 func GetTierPrice(tier string, fallbackPrice float64) float64 {
 	if fallbackPrice > 0 {
 		return fallbackPrice
 	}
-	switch strings.ToLower(strings.TrimSpace(tier)) {
-	case "basic", "базовый":
-		return 3333.00
-	case "vip":
-		return 19990.00
-	case "accelerator", "акселератор":
-		return 10990.00
-	default:
-		return BaseCoursePrice
-	}
+	return models.DefaultTierPrice(tier)
 }
 
 // Validate checks whether a promo code is valid and returns the discounted price.

@@ -32,14 +32,14 @@ func TestDrip_MessageCopy_Sanity(t *testing.T) {
 	service := NewBotService(&config.Config{}, nil)
 	defer service.Stop()
 
-	// Verify price calculations in drip messages
-	accPrice := 10355
-	vipPrice := 14155
+	// Verify 5% promo price calculations on the default prices
+	accPrice := 10441
+	vipPrice := 18991
 
-	if accPrice != 10900-(10900*5)/100 {
+	if base := int(models.DefaultAcceleratorPrice); accPrice != base-(base*5)/100 {
 		t.Fatalf("unexpected accelerator discounted price: %d", accPrice)
 	}
-	if vipPrice != 14900-(14900*5)/100 {
+	if base := int(models.DefaultVIPPrice); vipPrice != base-(base*5)/100 {
 		t.Fatalf("unexpected vip discounted price: %d", vipPrice)
 	}
 

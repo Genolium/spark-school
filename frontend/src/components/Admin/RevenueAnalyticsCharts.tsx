@@ -232,7 +232,7 @@ export function RevenueAnalyticsCharts({ stats }: RevenueAnalyticsChartsProps) {
             <Target className="w-3.5 h-3.5 text-amber-400" />
           </div>
           <div className="text-xl font-black font-mono text-amber-400">
-            {(stats.average_order_value || periodMetrics.aov || 10900).toLocaleString("ru-RU")} ₽
+            {(stats.average_order_value || periodMetrics.aov || 0).toLocaleString("ru-RU")} ₽
           </div>
           <div className="text-[11px] font-mono text-slate-400 mt-1">
             Выше базового тарифа

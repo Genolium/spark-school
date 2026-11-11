@@ -184,7 +184,7 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) error {
 		pricing := s.getPricing()
 		diff := pricing.AcceleratorPrice - pricing.BasicPrice
 		if diff <= 0 {
-			diff = 2910.0
+			diff = models.DefaultUpgradeDiff("basic", "accelerator")
 		}
 		s.handleUpgradePayment(chatID, &query.From, "accelerator", diff)
 		return nil
@@ -201,7 +201,7 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) error {
 			}
 		}
 		if diff <= 0 {
-			diff = 8000.0
+			diff = models.DefaultUpgradeDiff("accelerator", "vip")
 		}
 		s.handleUpgradePayment(chatID, &query.From, "vip", diff)
 		return nil

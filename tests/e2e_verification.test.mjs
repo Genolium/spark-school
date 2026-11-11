@@ -146,9 +146,13 @@ describe('Tier 1: Feature Coverage', () => {
     const backendPromoPath = path.join(ROOT, 'backend', 'internal', 'handlers', 'promo.go');
     assert.ok(fs.existsSync(backendPromoPath), 'backend/internal/handlers/promo.go must exist');
     const backendPromoContent = fs.readFileSync(backendPromoPath, 'utf8');
-    assert.match(backendPromoContent, /case\s+"basic"(?:,\s*"базовый")?:\s*return\s*3333/, 'backend GetTierPrice must return 3333 for basic');
-    assert.match(backendPromoContent, /case\s+"vip":\s*return\s+19990/, 'backend GetTierPrice must return 19990 for vip');
-    assert.match(backendPromoContent, /case\s+"accelerator"[\s\S]*?return\s*10990/, 'backend GetTierPrice must return 10990 for accelerator');
+    assert.match(backendPromoContent, /return\s+models\.DefaultTierPrice\(tier\)/, 'backend GetTierPrice must fall back to models.DefaultTierPrice');
+
+    // Backend default prices are defined once in models/pricing.go.
+    const backendPricingContent = fs.readFileSync(path.join(ROOT, 'backend', 'internal', 'models', 'pricing.go'), 'utf8');
+    assert.match(backendPricingContent, /DefaultBasicPrice\s*=\s*3333(?:\.0+)?\b/, 'backend default basic price must be 3333');
+    assert.match(backendPricingContent, /DefaultAcceleratorPrice\s*=\s*10990(?:\.0+)?\b/, 'backend default accelerator price must be 10990');
+    assert.match(backendPricingContent, /DefaultVIPPrice\s*=\s*19990(?:\.0+)?\b/, 'backend default VIP price must be 19990');
   });
 
   it('1.2 Promo Code Engine: 5% discount calculation (3990 -> 3790, 10900 -> 10355, 14900 -> 14155 for 3 active tiers)', () => {

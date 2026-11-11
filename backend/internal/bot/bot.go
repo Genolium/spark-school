@@ -437,14 +437,14 @@ func (s *BotService) processReceiptTierToggle(query *telego.CallbackQuery, idStr
 			if newTier == "vip" {
 				diff := pricing.VIPPrice - pricing.BasicPrice
 				if diff <= 0 {
-					diff = 10910.0
+					diff = models.DefaultUpgradeDiff("basic", "vip")
 				}
 				receipt.Amount = diff
 				receipt.Tier = "vip"
 			} else {
 				diff := pricing.AcceleratorPrice - pricing.BasicPrice
 				if diff <= 0 {
-					diff = 6910.0
+					diff = models.DefaultUpgradeDiff("basic", "accelerator")
 				}
 				receipt.Amount = diff
 				receipt.Tier = "accelerator"
@@ -452,7 +452,7 @@ func (s *BotService) processReceiptTierToggle(query *telego.CallbackQuery, idStr
 		} else if prevTier == "accelerator" {
 			diff := pricing.VIPPrice - pricing.AcceleratorPrice
 			if diff <= 0 {
-				diff = 4000.0
+				diff = models.DefaultUpgradeDiff("accelerator", "vip")
 			}
 			receipt.Amount = diff
 			receipt.Tier = "vip"
