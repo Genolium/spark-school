@@ -38,6 +38,7 @@ func setupHandlerDB(t *testing.T) *gorm.DB {
 		&models.ExperimentAssignment{},
 		&models.CallBooking{},
 		&models.StudentSubmission{},
+		&models.CoursePricing{},
 	); err != nil {
 		t.Fatalf("failed to migrate: %v", err)
 	}

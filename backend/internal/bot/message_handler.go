@@ -99,6 +99,10 @@ func (s *BotService) handleMessage(msg *telego.Message) error {
 
 			parsed := parsePayStartParam(param)
 			tier := parsed.Tier
+			if pricing := s.getPricing(); !pricing.TierEnabled(tier) {
+				s.sendTierUnavailable(chatID, tier, pricing)
+				return nil
+			}
 			session.SelectedTier = tier
 
 			if parsed.Ref != "" && msg.From != nil {

@@ -125,6 +125,10 @@ func (h *YooKassaHandler) CreateCheckout(c *gin.Context) {
 	}
 
 	pricing := models.GetCoursePricing(h.db)
+	if tier != "audit_essay" && !pricing.TierEnabled(tier) {
+		c.JSON(http.StatusConflict, gin.H{"error": "Покупка этого тарифа временно приостановлена"})
+		return
+	}
 	basePrice := checkoutBasePrice(tier, pricing)
 
 	finalPrice := basePrice

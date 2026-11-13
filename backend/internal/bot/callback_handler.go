@@ -151,11 +151,13 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) error {
 
 	case "action_payment":
 		session.State = StateWaitingReceipt
+		session.SelectedTier = ""
 		s.sendPaymentDetails(chatID, &query.From, false)
 		return nil
 
 	case "pay_yk_menu":
 		session.State = StateWaitingReceipt
+		session.SelectedTier = ""
 		s.sendPaymentDetails(chatID, &query.From, false)
 		return nil
 
@@ -181,6 +183,10 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) error {
 
 	case "upgrade_to_accelerator":
 		pricing := s.getPricing()
+		if !pricing.TierEnabled("accelerator") {
+			s.sendTierUnavailable(chatID, "accelerator", pricing)
+			return nil
+		}
 		diff := pricing.AcceleratorPrice - pricing.BasicPrice
 		if diff <= 0 {
 			diff = 2910.0
@@ -190,6 +196,10 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) error {
 
 	case "upgrade_to_vip":
 		pricing := s.getPricing()
+		if !pricing.TierEnabled("vip") {
+			s.sendTierUnavailable(chatID, "vip", pricing)
+			return nil
+		}
 		diff := pricing.VIPPrice - pricing.AcceleratorPrice
 		if query.From.ID != 0 && s.db != nil {
 			var u models.User
@@ -206,8 +216,14 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) error {
 		return nil
 
 	case "pay_sbp_info":
+		pricing := s.getPricing()
+		tier := pricing.FirstEnabledTier()
+		if tier == "" {
+			s.sendSalesPaused(chatID)
+			return nil
+		}
 		session.State = StateWaitingReceipt
-		s.handleSbpPayment(chatID, &query.From, "accelerator")
+		s.handleSbpPayment(chatID, &query.From, tier)
 		return nil
 
 	case "promo_enter":

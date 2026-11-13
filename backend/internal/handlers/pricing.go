@@ -34,6 +34,9 @@ type UpdatePricingRequest struct {
 	AcceleratorOldPrice float64 `json:"accelerator_old_price"`
 	VIPPrice            float64 `json:"vip_price" binding:"required"`
 	VIPOldPrice         float64 `json:"vip_old_price"`
+	BasicEnabled        *bool   `json:"basic_enabled"`
+	AcceleratorEnabled  *bool   `json:"accelerator_enabled"`
+	VIPEnabled          *bool   `json:"vip_enabled"`
 	BankName            string  `json:"bank_name"`
 }
 
@@ -83,6 +86,20 @@ func (h *PricingHandler) UpdatePricing(c *gin.Context) {
 		bankName = "БСПБ (Банк «Санкт-Петербург»)"
 	}
 
+	existing := models.GetCoursePricing(h.db)
+	basicEnabled := existing.BasicEnabled
+	if req.BasicEnabled != nil {
+		basicEnabled = *req.BasicEnabled
+	}
+	acceleratorEnabled := existing.AcceleratorEnabled
+	if req.AcceleratorEnabled != nil {
+		acceleratorEnabled = *req.AcceleratorEnabled
+	}
+	vipEnabled := existing.VIPEnabled
+	if req.VIPEnabled != nil {
+		vipEnabled = *req.VIPEnabled
+	}
+
 	newPricing := models.CoursePricing{
 		BasicPrice:          req.BasicPrice,
 		BasicOldPrice:       req.BasicOldPrice,
@@ -90,7 +107,11 @@ func (h *PricingHandler) UpdatePricing(c *gin.Context) {
 		AcceleratorOldPrice: req.AcceleratorOldPrice,
 		VIPPrice:            req.VIPPrice,
 		VIPOldPrice:         req.VIPOldPrice,
+		BasicEnabled:        basicEnabled,
+		AcceleratorEnabled:  acceleratorEnabled,
+		VIPEnabled:          vipEnabled,
 		BankName:            bankName,
+		TierFlagsSet:        true,
 	}
 
 	updated, err := models.UpdateCoursePricing(h.db, newPricing)

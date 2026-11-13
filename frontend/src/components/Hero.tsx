@@ -30,9 +30,9 @@ export function Hero({ onOpenChances }: HeroProps) {
 
   // Dynamically determine the lowest price among available active tiers
   const validPrices = [
-    pricing.basic_price,
-    pricing.accelerator_price,
-    pricing.vip_price,
+    pricing.basic_enabled !== false ? pricing.basic_price : null,
+    pricing.accelerator_enabled !== false ? pricing.accelerator_price : null,
+    pricing.vip_enabled !== false ? pricing.vip_price : null,
   ].filter((p): p is number => typeof p === "number" && p > 0);
   const minPrice = validPrices.length > 0 ? Math.min(...validPrices) : 3990;
 
@@ -50,11 +50,13 @@ export function Hero({ onOpenChances }: HeroProps) {
 
   const ctaVariant = getExperiment("hero_cta_copy");
   const ctaLabel =
-    ctaVariant === "benefit"
-      ? `Начать подготовку от ${formatRub(minPrice)} ₽`
-      : ctaVariant === "diagnostic"
-        ? "Пройти диагностику и выбрать тариф"
-        : `Выбрать тариф от ${formatRub(minPrice)} ₽`;
+    validPrices.length === 0
+      ? "Продажи временно приостановлены"
+      : ctaVariant === "benefit"
+        ? `Начать подготовку от ${formatRub(minPrice)} ₽`
+        : ctaVariant === "diagnostic"
+          ? "Пройти диагностику и выбрать тариф"
+          : `Выбрать тариф от ${formatRub(minPrice)} ₽`;
 
   return (
     <section id="hero-canvas" className="relative w-full max-w-[1520px] mx-auto px-3 sm:px-6 pt-24 sm:pt-28 pb-8">

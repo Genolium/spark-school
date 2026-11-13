@@ -18,12 +18,62 @@ import {
   Building2,
 } from "lucide-react";
 
+function TierToggle({
+  enabled,
+  onChange,
+  label,
+}: {
+  enabled: boolean;
+  onChange: () => void;
+  label: string;
+}) {
+  return (
+    <div className={`mt-4 p-3 rounded-2xl border flex items-center justify-between gap-3 ${
+      enabled
+        ? "border-emerald-500/30 bg-emerald-500/5"
+        : "border-rose-500/30 bg-rose-500/5"
+    }`}>
+      <div>
+        <div className="text-[11px] font-mono font-bold uppercase tracking-wide text-slate-600 dark:text-slate-300">
+          Продажи
+        </div>
+        <div className={`text-xs font-mono font-semibold ${
+          enabled ? "text-emerald-700 dark:text-emerald-300" : "text-rose-700 dark:text-rose-300"
+        }`}>
+          {enabled ? "Включены" : "Выключены"}
+        </div>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={enabled}
+        aria-label={label}
+        onClick={onChange}
+        className={`relative w-11 h-6 rounded-full transition-colors ${
+          enabled ? "bg-emerald-500" : "bg-slate-300 dark:bg-white/20"
+        }`}
+      >
+        <span
+          className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
+            enabled ? "translate-x-5" : "translate-x-0"
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
+
 export function PricingSettingsTable() {
   const [pricing, setPricing] = useState<CoursePricing>({ ...DEFAULT_PRICING });
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; type: "success" | "error" } | null>(null);
+
+  const basicEnabled = pricing.basic_enabled !== false;
+  const acceleratorEnabled = pricing.accelerator_enabled !== false;
+  const vipEnabled = pricing.vip_enabled !== false;
+  const anyTierDisabled = !basicEnabled || !acceleratorEnabled || !vipEnabled;
 
   useEffect(() => {
     loadPricing();
@@ -36,6 +86,9 @@ export function PricingSettingsTable() {
       ...data,
       basic_price: data.basic_price || 3990,
       basic_old_price: data.basic_old_price || 5900,
+      basic_enabled: data.basic_enabled !== false,
+      accelerator_enabled: data.accelerator_enabled !== false,
+      vip_enabled: data.vip_enabled !== false,
     });
     setLoading(false);
   };
@@ -88,6 +141,9 @@ export function PricingSettingsTable() {
       basic_old_price: bOld,
       accelerator_old_price: accOld,
       vip_old_price: vipOld,
+      basic_enabled: basicEnabled,
+      accelerator_enabled: acceleratorEnabled,
+      vip_enabled: vipEnabled,
       bank_name: (pricing.bank_name || "").trim() || "БСПБ (Банк «Санкт-Петербург»)",
     };
 
@@ -111,7 +167,7 @@ export function PricingSettingsTable() {
 
   const handleResetDefaults = () => {
     setPricing({ ...DEFAULT_PRICING });
-    setMsg({ text: "Установлены стандартные значения (3 990 / 10 900 / 14 900 ₽). Нажмите «Сохранить», чтобы применить.", type: "success" });
+    setMsg({ text: "Установлены стандартные значения (3 333 / 10 990 / 19 990 ₽) и все продажи включены. Нажмите «Сохранить», чтобы применить.", type: "success" });
   };
 
   const formatRub = (num: number) => {
@@ -125,6 +181,13 @@ export function PricingSettingsTable() {
     setPricing((prev) => ({
       ...prev,
       [field]: isNaN(num) ? 0 : num,
+    }));
+  };
+
+  const handleToggle = (field: "basic_enabled" | "accelerator_enabled" | "vip_enabled") => {
+    setPricing((prev) => ({
+      ...prev,
+      [field]: prev[field] === false,
     }));
   };
 
@@ -195,6 +258,12 @@ export function PricingSettingsTable() {
         </div>
       )}
 
+      {anyTierDisabled && (
+        <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-xs font-mono text-amber-900 dark:text-amber-200">
+          Отключённые тарифы не показываются в оплате на сайте и в боте. Доступ у уже оплативших сохраняется.
+        </div>
+      )}
+
       {/* Main Pricing Cards Grid */}
       <form onSubmit={handleSave} noValidate className="space-y-8">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8">
@@ -221,6 +290,12 @@ export function PricingSettingsTable() {
               <p className="text-xs text-slate-500 dark:text-slate-400 mb-6">
                 Видеоуроки, уроки текстом и их аудиоверсия без проверки заданий и мок-интервью.
               </p>
+
+              <TierToggle
+                enabled={basicEnabled}
+                onChange={() => handleToggle("basic_enabled")}
+                label="Продажи тарифа Базовый"
+              />
 
               {/* Input Fields */}
               <div className="space-y-4 mb-6">
@@ -309,6 +384,12 @@ export function PricingSettingsTable() {
                 Полный цикл подготовки: закрытый канал, аудит документов, мок-интервью 1-на-1 и визовый гайд.
               </p>
 
+              <TierToggle
+                enabled={acceleratorEnabled}
+                onChange={() => handleToggle("accelerator_enabled")}
+                label="Продажи тарифа Акселератор"
+              />
+
               {/* Input Fields */}
               <div className="space-y-4 mb-6">
                 <div>
@@ -395,6 +476,12 @@ export function PricingSettingsTable() {
               <p className="text-xs text-slate-500 dark:text-slate-400 mb-6">
                 Максимальный персональный фокус: 3 мок-интервью и приоритетный личный чат до самого вылета в США.
               </p>
+
+              <TierToggle
+                enabled={vipEnabled}
+                onChange={() => handleToggle("vip_enabled")}
+                label="Продажи тарифа VIP"
+              />
 
               {/* Input Fields */}
               <div className="space-y-4 mb-6">

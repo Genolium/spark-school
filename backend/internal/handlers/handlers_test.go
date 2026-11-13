@@ -881,6 +881,43 @@ func TestYooKassaHandler_CreateCheckout_InputSanitization(t *testing.T) {
 	}
 }
 
+func TestYooKassaHandler_CreateCheckout_RejectsDisabledTier(t *testing.T) {
+	db := setupHandlerDB(t)
+	if _, err := models.UpdateCoursePricing(db, models.CoursePricing{
+		BasicPrice:          3333,
+		AcceleratorPrice:    10990,
+		VIPPrice:            19990,
+		BasicEnabled:        true,
+		AcceleratorEnabled:  false,
+		VIPEnabled:          true,
+		TierFlagsSet:        true,
+	}); err != nil {
+		t.Fatalf("failed to seed pricing: %v", err)
+	}
+
+	cfg := &config.Config{
+		YooKassaShopID:    "1491540",
+		YooKassaSecretKey: "test_secret_key",
+		Domain:            "so-called-spark.ru",
+	}
+	handler := NewYooKassaHandler(db, cfg, nil, nil, nil)
+	r := gin.New()
+	r.POST("/api/payments/yookassa/create", handler.CreateCheckout)
+
+	body, _ := json.Marshal(map[string]interface{}{
+		"tier":        "accelerator",
+		"telegram_id": 123456789,
+	})
+	req := httptest.NewRequest("POST", "/api/payments/yookassa/create", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusConflict {
+		t.Fatalf("expected 409 Conflict for a disabled tier, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestAdminHandler_ListUsers_FiltersAndPagination(t *testing.T) {
 	handler := NewAdminHandler(nil, &config.Config{}, nil, nil)
 	r := gin.New()
@@ -952,6 +989,9 @@ func TestPricingHandler_GetAndUpdatePricing(t *testing.T) {
 	if p.AcceleratorPrice != 10900.0 || p.VIPPrice != 14900.0 {
 		t.Fatalf("expected default prices 10900 and 14900, got %f and %f", p.AcceleratorPrice, p.VIPPrice)
 	}
+	if !p.BasicEnabled || !p.AcceleratorEnabled || !p.VIPEnabled {
+		t.Fatal("default pricing must have all tiers enabled")
+	}
 
 	// 2. PUT invalid pricing (VIP < Accelerator)
 	invalidBody := []byte(`{"accelerator_price": 10000, "vip_price": 8000}`)
@@ -964,8 +1004,8 @@ func TestPricingHandler_GetAndUpdatePricing(t *testing.T) {
 		t.Fatalf("expected 400 Bad Request when VIP < Accelerator, got %d", wPut.Code)
 	}
 
-	// 3. PUT valid pricing
-	validBody := []byte(`{"accelerator_price": 7900, "accelerator_old_price": 10900, "vip_price": 16900, "vip_old_price": 21900}`)
+	// 3. PUT valid pricing with the accelerator disabled
+	validBody := []byte(`{"accelerator_price": 7900, "accelerator_old_price": 10900, "vip_price": 16900, "vip_old_price": 21900, "accelerator_enabled": false}`)
 	putReq2 := httptest.NewRequest("PUT", "/api/v1/admin/pricing", bytes.NewReader(validBody))
 	putReq2.Header.Set("Content-Type", "application/json")
 	wPut2 := httptest.NewRecorder()
@@ -973,6 +1013,17 @@ func TestPricingHandler_GetAndUpdatePricing(t *testing.T) {
 
 	if wPut2.Code != http.StatusOK {
 		t.Fatalf("expected 200 OK on valid update, got %d: %s", wPut2.Code, wPut2.Body.String())
+	}
+
+	var updated models.CoursePricing
+	if err := json.Unmarshal(wPut2.Body.Bytes(), &updated); err != nil {
+		t.Fatalf("failed to decode update response: %v", err)
+	}
+	if updated.AcceleratorEnabled {
+		t.Fatal("accelerator must be disabled in the response")
+	}
+	if !updated.BasicEnabled || !updated.VIPEnabled {
+		t.Fatal("basic and vip must stay enabled")
 	}
 }
 

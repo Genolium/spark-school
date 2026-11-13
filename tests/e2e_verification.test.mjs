@@ -405,7 +405,7 @@ describe('Tier 3: Cross-Feature & Deep-Links', () => {
     const pagePath = path.join(ROOT, 'frontend', 'src', 'app', 'page.tsx');
     const pageContent = fs.readFileSync(pagePath, 'utf8');
     assert.match(pageContent, /get\("promo"\)/, 'landing must read the promo query parameter');
-    assert.match(pageContent, /buildCheckoutStartParam\(tier,\s*refCode,\s*promoCode\)/, 'landing must pass the promo to the bot link');
+    assert.match(pageContent, /buildCheckoutStartParam\((?:tier|selectedTier),\s*refCode,\s*promoCode\)/, 'landing must pass the promo to the bot link');
     assert.match(analyticsContent, /pay_\$\{tier\}_\$\{cleanPromo\}/, 'checkout params must put the promo after the tier');
 
     const compact = compactStartParam('pay_accelerator', 'apy1xadvhvmo1', 'partneril');
