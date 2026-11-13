@@ -20,7 +20,7 @@ func TestPricing_IgnoresVisitorAndMatchesCheckout(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := db.Create(&models.CoursePricing{
-		BasicPrice: 3333, AcceleratorPrice: 10990, VIPPrice: 19990,
+		BasicPrice: 3333, AcceleratorPrice: 9990, VIPPrice: 15990,
 	}).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -40,14 +40,14 @@ func TestPricing_IgnoresVisitorAndMatchesCheckout(t *testing.T) {
 		if err := json.Unmarshal(w.Body.Bytes(), &pricing); err != nil {
 			t.Fatal(err)
 		}
-		if pricing.AcceleratorPrice != 10990 {
-			t.Fatalf("visitor-%d accelerator price = %v, want 10990", i, pricing.AcceleratorPrice)
+		if pricing.AcceleratorPrice != 9990 {
+			t.Fatalf("visitor-%d accelerator price = %v, want 9990", i, pricing.AcceleratorPrice)
 		}
 	}
 
-	pricing := models.CoursePricing{BasicPrice: 3333, AcceleratorPrice: 10990, VIPPrice: 19990}
-	if got := checkoutBasePrice("accelerator", pricing); got != 10990 {
-		t.Fatalf("checkout accelerator price = %v, want 10990", got)
+	pricing := models.CoursePricing{BasicPrice: 3333, AcceleratorPrice: 9990, VIPPrice: 15990}
+	if got := checkoutBasePrice("accelerator", pricing); got != 9990 {
+		t.Fatalf("checkout accelerator price = %v, want 9990", got)
 	}
 }
 

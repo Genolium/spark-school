@@ -108,7 +108,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
   const [activatePromo, setActivatePromo] = useState("");
   const [activateAmount, setActivateAmount] = useState("10900");
 
-  const [coursePricing, setCoursePricing] = useState({ basic_price: 3990, accelerator_price: 10900, vip_price: 14900 });
+  const [coursePricing, setCoursePricing] = useState({ basic_price: 3333, accelerator_price: 9990, vip_price: 15990 });
 
   // Issue Receipt modal state
   const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);

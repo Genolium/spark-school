@@ -84,7 +84,7 @@ export function PricingSettingsTable() {
     const data = await api.getCoursePricing();
     setPricing({
       ...data,
-      basic_price: data.basic_price || 3990,
+      basic_price: data.basic_price || 3333,
       basic_old_price: data.basic_old_price || 5900,
       basic_enabled: data.basic_enabled !== false,
       accelerator_enabled: data.accelerator_enabled !== false,
@@ -98,7 +98,7 @@ export function PricingSettingsTable() {
     setSaving(true);
     setMsg(null);
 
-    const bPrice = pricing.basic_price || 3990;
+    const bPrice = pricing.basic_price || 3333;
 
     // Frontend validation
     if (bPrice <= 0) {
@@ -155,7 +155,7 @@ export function PricingSettingsTable() {
       if (res.pricing) {
         setPricing({
           ...res.pricing,
-          basic_price: res.pricing.basic_price || 3990,
+          basic_price: res.pricing.basic_price || 3333,
           basic_old_price: res.pricing.basic_old_price || 5900,
         });
       }
@@ -167,7 +167,7 @@ export function PricingSettingsTable() {
 
   const handleResetDefaults = () => {
     setPricing({ ...DEFAULT_PRICING });
-    setMsg({ text: "Установлены стандартные значения (3 333 / 10 990 / 19 990 ₽) и все продажи включены. Нажмите «Сохранить», чтобы применить.", type: "success" });
+    setMsg({ text: "Установлены стандартные значения (3 333 / 9 990 / 15 990 ₽) и все продажи включены. Нажмите «Сохранить», чтобы применить.", type: "success" });
   };
 
   const formatRub = (num: number) => {
@@ -192,8 +192,8 @@ export function PricingSettingsTable() {
   };
 
   // Calculations for promo discount preview
-  const basicPromo = Math.round((pricing.basic_price || 3990) * 0.95);
-  const basicPromoDiff = (pricing.basic_price || 3990) - basicPromo;
+  const basicPromo = Math.round((pricing.basic_price || 3333) * 0.95);
+  const basicPromoDiff = (pricing.basic_price || 3333) - basicPromo;
 
   const accPromo = Math.round(pricing.accelerator_price * 0.95);
   const accPromoDiff = pricing.accelerator_price - accPromo;
@@ -201,9 +201,9 @@ export function PricingSettingsTable() {
   const vipPromo = Math.round(pricing.vip_price * 0.95);
   const vipPromoDiff = pricing.vip_price - vipPromo;
 
-  const basicToAccDiff = Math.max(0, pricing.accelerator_price - (pricing.basic_price || 3990));
+  const basicToAccDiff = Math.max(0, pricing.accelerator_price - (pricing.basic_price || 3333));
   const accToVipDiff = Math.max(0, pricing.vip_price - pricing.accelerator_price);
-  const basicToVipDiff = Math.max(0, pricing.vip_price - (pricing.basic_price || 3990));
+  const basicToVipDiff = Math.max(0, pricing.vip_price - (pricing.basic_price || 3333));
 
   return (
     <div className="space-y-8">
@@ -307,8 +307,8 @@ export function PricingSettingsTable() {
                     <input
                       type="text"
                       inputMode="numeric"
-                      value={pricing.basic_price === 0 ? "" : (pricing.basic_price || 3990)}
-                      placeholder="3990"
+                      value={pricing.basic_price === 0 ? "" : (pricing.basic_price || 3333)}
+                      placeholder="3333"
                       onChange={(e) => handlePriceChange("basic_price", e.target.value)}
                       className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-black/30 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white font-mono text-base font-bold focus:outline-none focus:border-slate-500 transition-colors"
                     />
@@ -345,7 +345,7 @@ export function PricingSettingsTable() {
                   <div className="flex items-center gap-2">
                     <span className="line-through">{formatRub(pricing.basic_old_price || 5900)} ₽</span>
                     <span className="font-bold text-slate-900 dark:text-white text-sm">
-                      {formatRub(pricing.basic_price || 3990)} ₽
+                      {formatRub(pricing.basic_price || 3333)} ₽
                     </span>
                   </div>
                 </div>
@@ -401,7 +401,7 @@ export function PricingSettingsTable() {
                       type="text"
                       inputMode="numeric"
                       value={pricing.accelerator_price === 0 ? "" : pricing.accelerator_price}
-                      placeholder="10900"
+                      placeholder="9990"
                       onChange={(e) => handlePriceChange("accelerator_price", e.target.value)}
                       className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-black/30 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white font-mono text-base font-bold focus:outline-none focus:border-emerald-500 transition-colors"
                     />
@@ -494,7 +494,7 @@ export function PricingSettingsTable() {
                       type="text"
                       inputMode="numeric"
                       value={pricing.vip_price === 0 ? "" : pricing.vip_price}
-                      placeholder="14900"
+                      placeholder="15990"
                       onChange={(e) => handlePriceChange("vip_price", e.target.value)}
                       className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-black/30 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white font-mono text-base font-bold focus:outline-none focus:border-amber-500 transition-colors"
                     />
@@ -640,7 +640,7 @@ export function PricingSettingsTable() {
                   +{formatRub(basicToAccDiff)} ₽
                 </div>
                 <div className="text-[10px] text-slate-500">
-                  ({formatRub(pricing.accelerator_price)} − {formatRub(pricing.basic_price || 3990)})
+                  ({formatRub(pricing.accelerator_price)} − {formatRub(pricing.basic_price || 3333)})
                 </div>
               </div>
 

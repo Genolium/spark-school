@@ -10,12 +10,12 @@ import (
 // CoursePricing stores the dynamic tier pricing configured via the admin panel.
 type CoursePricing struct {
 	ID                  uint      `gorm:"primaryKey" json:"id"`
-	BasicPrice          float64   `gorm:"type:numeric(10,2);default:3990.00" json:"basic_price"`
+	BasicPrice          float64   `gorm:"type:numeric(10,2);default:3333.00" json:"basic_price"`
 	BasicOldPrice       float64   `gorm:"type:numeric(10,2);default:5900.00" json:"basic_old_price"`
-	AcceleratorPrice    float64   `gorm:"type:numeric(10,2);default:10900.00" json:"accelerator_price"`
-	AcceleratorOldPrice float64   `gorm:"type:numeric(10,2);default:10900.00" json:"accelerator_old_price"`
-	VIPPrice            float64   `gorm:"type:numeric(10,2);default:14900.00" json:"vip_price"`
-	VIPOldPrice         float64   `gorm:"type:numeric(10,2);default:19900.00" json:"vip_old_price"`
+	AcceleratorPrice    float64   `gorm:"type:numeric(10,2);default:9990.00" json:"accelerator_price"`
+	AcceleratorOldPrice float64   `gorm:"type:numeric(10,2);default:15400.00" json:"accelerator_old_price"`
+	VIPPrice            float64   `gorm:"column:vip_price;type:numeric(10,2);default:15990.00" json:"vip_price"`
+	VIPOldPrice         float64   `gorm:"column:vip_old_price;type:numeric(10,2);default:20000.00" json:"vip_old_price"`
 	BasicEnabled        bool      `gorm:"not null;default:true" json:"basic_enabled"`
 	AcceleratorEnabled  bool      `gorm:"not null;default:true" json:"accelerator_enabled"`
 	VIPEnabled          bool      `gorm:"column:vip_enabled;not null;default:true" json:"vip_enabled"`
@@ -29,12 +29,12 @@ type CoursePricing struct {
 
 // DefaultCoursePricing provides fallback prices when database record is not yet present.
 var DefaultCoursePricing = CoursePricing{
-	BasicPrice:          3990.00,
+	BasicPrice:          3333.00,
 	BasicOldPrice:       5900.00,
-	AcceleratorPrice:    10900.00,
-	AcceleratorOldPrice: 10900.00,
-	VIPPrice:            14900.00,
-	VIPOldPrice:         19900.00,
+	AcceleratorPrice:    9990.00,
+	AcceleratorOldPrice: 15400.00,
+	VIPPrice:            15990.00,
+	VIPOldPrice:         20000.00,
 	BasicEnabled:        true,
 	AcceleratorEnabled:  true,
 	VIPEnabled:          true,
@@ -84,19 +84,19 @@ func GetCoursePricing(db *gorm.DB) CoursePricing {
 	}
 	pricing.TierFlagsSet = true
 	if pricing.BasicPrice <= 0 {
-		pricing.BasicPrice = 3990.00
+		pricing.BasicPrice = 3333.00
 	}
 	if pricing.BasicOldPrice <= 0 {
 		pricing.BasicOldPrice = pricing.BasicPrice
 	}
 	if pricing.AcceleratorPrice <= 0 {
-		pricing.AcceleratorPrice = 10900.00
+		pricing.AcceleratorPrice = 9990.00
 	}
 	if pricing.AcceleratorOldPrice <= 0 {
-		pricing.AcceleratorOldPrice = 10900.00
+		pricing.AcceleratorOldPrice = 15400.00
 	}
 	if pricing.VIPPrice <= 0 {
-		pricing.VIPPrice = 14900.00
+		pricing.VIPPrice = 15990.00
 	}
 	if pricing.VIPOldPrice <= 0 {
 		pricing.VIPOldPrice = pricing.VIPPrice
@@ -118,16 +118,16 @@ func UpdateCoursePricing(db *gorm.DB, p CoursePricing) (CoursePricing, error) {
 	err := db.Order("id ASC").First(&existing).Error
 	if err != nil {
 		if p.BasicPrice <= 0 {
-			p.BasicPrice = 3990.00
+			p.BasicPrice = 3333.00
 		}
 		if p.BasicOldPrice <= 0 {
 			p.BasicOldPrice = p.BasicPrice
 		}
 		if p.AcceleratorPrice <= 0 {
-			p.AcceleratorPrice = 10900.00
+			p.AcceleratorPrice = 9990.00
 		}
 		if p.AcceleratorOldPrice <= 0 {
-			p.AcceleratorOldPrice = 10900.00
+			p.AcceleratorOldPrice = 15400.00
 		}
 		if strings.TrimSpace(p.BankName) == "" {
 			p.BankName = "БСПБ (Банк «Санкт-Петербург»)"
@@ -156,19 +156,19 @@ func UpdateCoursePricing(db *gorm.DB, p CoursePricing) (CoursePricing, error) {
 		return p, nil
 	}
 	if p.BasicPrice <= 0 {
-		p.BasicPrice = 3990.00
+		p.BasicPrice = 3333.00
 	}
 	if p.BasicOldPrice <= 0 {
 		p.BasicOldPrice = p.BasicPrice
 	}
 	if p.AcceleratorPrice <= 0 {
-		p.AcceleratorPrice = 10900.00
+		p.AcceleratorPrice = 9990.00
 	}
 	if p.AcceleratorOldPrice <= 0 {
-		p.AcceleratorOldPrice = 10900.00
+		p.AcceleratorOldPrice = 15400.00
 	}
 	if p.VIPPrice <= 0 {
-		p.VIPPrice = 14900.00
+		p.VIPPrice = 15990.00
 	}
 	if p.VIPOldPrice <= 0 {
 		p.VIPOldPrice = p.VIPPrice
