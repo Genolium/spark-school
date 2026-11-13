@@ -44,7 +44,7 @@ type ValidatePromoResponse struct {
 	Message         string  `json:"message,omitempty"`
 }
 
-const BaseCoursePrice = 10990.00
+const BaseCoursePrice = 9990.00
 
 // GetTierPrice returns standard price for the selected tier
 func GetTierPrice(tier string, fallbackPrice float64) float64 {
@@ -55,9 +55,9 @@ func GetTierPrice(tier string, fallbackPrice float64) float64 {
 	case "basic", "базовый":
 		return 3333.00
 	case "vip":
-		return 19990.00
+		return 15990.00
 	case "accelerator", "акселератор":
-		return 10990.00
+		return 9990.00
 	default:
 		return BaseCoursePrice
 	}

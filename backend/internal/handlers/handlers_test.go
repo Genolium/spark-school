@@ -285,16 +285,16 @@ func TestReceiptVerify_Validation(t *testing.T) {
 
 func TestPromoValidate_TierPricing(t *testing.T) {
 	// Test helper GetTierPrice (only 2 active tiers: accelerator and vip)
-	if price := GetTierPrice("accelerator", 0); price != 10990.00 {
+	if price := GetTierPrice("accelerator", 0); price != 9990.00 {
 		t.Errorf("expected accelerator price 10900, got %f", price)
 	}
-	if price := GetTierPrice("акселератор", 0); price != 10990.00 {
+	if price := GetTierPrice("акселератор", 0); price != 9990.00 {
 		t.Errorf("expected акселератор price 10900, got %f", price)
 	}
-	if price := GetTierPrice("vip", 0); price != 19990.00 {
+	if price := GetTierPrice("vip", 0); price != 15990.00 {
 		t.Errorf("expected vip price 14900, got %f", price)
 	}
-	if price := GetTierPrice("unknown", 0); price != 10990.00 {
+	if price := GetTierPrice("unknown", 0); price != 9990.00 {
 		t.Errorf("expected default price 10900, got %f", price)
 	}
 	if price := GetTierPrice("", 5000); price != 5000.00 {
@@ -885,8 +885,8 @@ func TestYooKassaHandler_CreateCheckout_RejectsDisabledTier(t *testing.T) {
 	db := setupHandlerDB(t)
 	if _, err := models.UpdateCoursePricing(db, models.CoursePricing{
 		BasicPrice:          3333,
-		AcceleratorPrice:    10990,
-		VIPPrice:            19990,
+		AcceleratorPrice:    9990,
+		VIPPrice:            15990,
 		BasicEnabled:        true,
 		AcceleratorEnabled:  false,
 		VIPEnabled:          true,
@@ -986,8 +986,8 @@ func TestPricingHandler_GetAndUpdatePricing(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &p); err != nil {
 		t.Fatalf("failed to decode pricing response: %v", err)
 	}
-	if p.AcceleratorPrice != 10900.0 || p.VIPPrice != 14900.0 {
-		t.Fatalf("expected default prices 10900 and 14900, got %f and %f", p.AcceleratorPrice, p.VIPPrice)
+	if p.AcceleratorPrice != 9990.0 || p.VIPPrice != 15990.0 {
+		t.Fatalf("expected default prices 9990 and 15990, got %f and %f", p.AcceleratorPrice, p.VIPPrice)
 	}
 	if !p.BasicEnabled || !p.AcceleratorEnabled || !p.VIPEnabled {
 		t.Fatal("default pricing must have all tiers enabled")

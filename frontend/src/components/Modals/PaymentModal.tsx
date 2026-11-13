@@ -23,12 +23,12 @@ const TIERS: Record<PricingTier, { name: string; price: number; tag: string }> =
   },
   accelerator: {
     name: "Акселератор",
-    price: 10990,
+    price: 9990,
     tag: "Хит продаж",
   },
   vip: {
     name: "VIP",
-    price: 19990,
+    price: 15990,
     tag: "Строго 3 места",
   },
 };
@@ -62,8 +62,8 @@ export function PaymentModal({ isOpen, onClose, initialTier = "accelerator" }: P
           setBankName(p.bank_name);
         }
         const basicPrice = p.basic_price || 3990;
-        const accPrice = p.accelerator_price || 10900;
-        const vipPrice = p.vip_price || 14900;
+        const accPrice = p.accelerator_price || 9990;
+        const vipPrice = p.vip_price || 15990;
         setTiersConfig({
           basic: {
             name: "Базовый",

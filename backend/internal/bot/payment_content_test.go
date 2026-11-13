@@ -18,14 +18,14 @@ func TestPaymentDetailsContent_UsesPromoPercentAndTierScope(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	pricing := models.CoursePricing{BasicPrice: 3333, AcceleratorPrice: 10990, VIPPrice: 19990}
+	pricing := models.CoursePricing{BasicPrice: 3333, AcceleratorPrice: 9990, VIPPrice: 15990}
 	session := &UserSession{PromoCode: "DEADLINE", DiscountPct: 14, SelectedTier: "accelerator"}
 
 	text, keyboard := service.paymentDetailsContent(session, pricing, true)
 	for _, want := range []string{
 		"Скидка 14%",
-		"9 451",  // 10 990 − 14%
-		"17 191", // 19 990 − 14%
+		"8 591",  // 9 990 − 14%
+		"13 751", // 15 990 − 14%
 		"промокод на этот тариф не действует", // Basic is excluded
 		"Акселератор, VIP",
 	} {
@@ -45,7 +45,7 @@ func TestPaymentDetailsContent_UsesPromoPercentAndTierScope(t *testing.T) {
 		t.Errorf("basic button must show the full price without a discount, got %q", firstButton)
 	}
 	accButton := keyboard.InlineKeyboard[1][0].Text
-	if !strings.Contains(accButton, "9 451") {
+	if !strings.Contains(accButton, "8 591") {
 		t.Errorf("accelerator button must show the discounted price, got %q", accButton)
 	}
 }
@@ -59,7 +59,7 @@ func TestPaymentDetailsContent_UnrestrictedPromoAppliesEverywhere(t *testing.T) 
 	}).Error; err != nil {
 		t.Fatal(err)
 	}
-	pricing := models.CoursePricing{BasicPrice: 3333, AcceleratorPrice: 10990, VIPPrice: 19990}
+	pricing := models.CoursePricing{BasicPrice: 3333, AcceleratorPrice: 9990, VIPPrice: 15990}
 	session := &UserSession{PromoCode: "SPARK5", DiscountPct: 5}
 
 	text, _ := service.paymentDetailsContent(session, pricing, true)
@@ -75,8 +75,8 @@ func TestPaymentDetailsContent_OmitsDisabledTier(t *testing.T) {
 	service, _ := setupTestBot(t)
 	pricing := models.CoursePricing{
 		BasicPrice:          3333,
-		AcceleratorPrice:    10990,
-		VIPPrice:            19990,
+		AcceleratorPrice:    9990,
+		VIPPrice:            15990,
 		BasicEnabled:        true,
 		AcceleratorEnabled:  false,
 		VIPEnabled:          true,

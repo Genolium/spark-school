@@ -33,7 +33,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
   const vipEnabled = pricing.vip_enabled !== false;
   const anyTierDisabled = !basicEnabled || !acceleratorEnabled || !vipEnabled;
 
-  const basicPrice = pricing.basic_price || DEFAULT_PRICING.basic_price || 3990;
+  const basicPrice = pricing.basic_price || DEFAULT_PRICING.basic_price || 3333;
   const basicOldPrice = (pricing.basic_old_price && pricing.basic_old_price > basicPrice)
     ? pricing.basic_old_price
     : null;
