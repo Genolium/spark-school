@@ -70,3 +70,36 @@ func TestPaymentDetailsContent_UnrestrictedPromoAppliesEverywhere(t *testing.T) 
 		t.Errorf("unrestricted promo must not exclude tiers:\n%s", text)
 	}
 }
+
+func TestPaymentDetailsContent_OmitsDisabledTier(t *testing.T) {
+	service, _ := setupTestBot(t)
+	pricing := models.CoursePricing{
+		BasicPrice:          3333,
+		AcceleratorPrice:    10990,
+		VIPPrice:            19990,
+		BasicEnabled:        true,
+		AcceleratorEnabled:  false,
+		VIPEnabled:          true,
+		TierFlagsSet:        true,
+	}
+
+	text, keyboard := service.paymentDetailsContent(&UserSession{}, pricing, false)
+	if strings.Contains(text, "Акселератор") {
+		t.Errorf("disabled accelerator must not be advertised in the text:\n%s", text)
+	}
+	if keyboard == nil {
+		t.Fatal("expected a keyboard")
+	}
+	callbacks := map[string]bool{}
+	for _, row := range keyboard.InlineKeyboard {
+		for _, button := range row {
+			callbacks[button.CallbackData] = true
+		}
+	}
+	if callbacks["pay_sbp_accelerator"] {
+		t.Error("disabled accelerator must not have a payment button")
+	}
+	if !callbacks["pay_sbp_basic"] || !callbacks["pay_sbp_vip"] {
+		t.Errorf("enabled tiers must keep their payment buttons: %v", callbacks)
+	}
+}

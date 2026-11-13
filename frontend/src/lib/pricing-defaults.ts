@@ -10,5 +10,8 @@ export const DEFAULT_PRICING: CoursePricing = {
   accelerator_old_price: 15400,
   vip_price: 19990,
   vip_old_price: 28000,
+  basic_enabled: true,
+  accelerator_enabled: true,
+  vip_enabled: true,
   bank_name: "БСПБ (Банк «Санкт-Петербург»)",
 };

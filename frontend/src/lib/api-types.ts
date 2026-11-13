@@ -144,6 +144,9 @@ export interface CoursePricing {
   accelerator_old_price: number;
   vip_price: number;
   vip_old_price: number;
+  basic_enabled?: boolean;
+  accelerator_enabled?: boolean;
+  vip_enabled?: boolean;
   bank_name?: string;
   updated_at?: string;
 }

@@ -70,7 +70,7 @@ func ValidateSchema(db *gorm.DB) error {
 		{"payment_transactions", []string{"payment_id", "amount", "status", "promo_code", "visitor_id", "source"}},
 		{"payment_receipts", []string{"amount", "status", "promo_code"}},
 		{"payment_orders", []string{"order_id", "amount", "status", "promo_code", "visitor_id"}},
-		{"course_pricings", []string{"basic_price", "basic_old_price", "accelerator_price", "accelerator_old_price", "vip_price", "vip_old_price", "bank_name"}},
+		{"course_pricings", []string{"basic_price", "basic_old_price", "accelerator_price", "accelerator_old_price", "vip_price", "vip_old_price", "basic_enabled", "accelerator_enabled", "vip_enabled", "bank_name"}},
 		{"outbox_events", []string{"event_type", "payload", "status", "last_error"}},
 		{"experiment_assignments", []string{"experiment", "variant", "visitor_id"}},
 		{"bot_sessions", []string{"telegram_id", "state", "price_experiment", "vip_price_experiment"}},

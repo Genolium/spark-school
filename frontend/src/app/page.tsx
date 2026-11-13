@@ -17,6 +17,7 @@ import { RecoveryBanner } from "@/components/RecoveryBanner";
 // import { DemoLessonSection } from "@/components/DemoLessonSection"; // videos temporarily hidden
 import { StudentReviews } from "@/components/StudentReviews";
 import { trackFunnelStep, buildCheckoutStartParam, BOT_URL } from "@/lib/analytics";
+import { api } from "@/lib/api";
 import { syncServerExperiments } from "@/lib/experiments";
 
 const PlacementMap = dynamic(
@@ -30,8 +31,30 @@ const ChancesModal = dynamic(
 export default function HomePage() {
   const [isChancesOpen, setIsChancesOpen] = useState(false);
 
-  const handleOpenPayment = (tier: "basic" | "accelerator" | "vip" = "accelerator") => {
-    trackFunnelStep("bot_handoff", { tier });
+  const handleOpenPayment = async (tier: "basic" | "accelerator" | "vip" = "accelerator") => {
+    let selectedTier = tier;
+    try {
+      const pricing = await api.getCoursePricing();
+      const enabled = {
+        basic: pricing.basic_enabled !== false,
+        accelerator: pricing.accelerator_enabled !== false,
+        vip: pricing.vip_enabled !== false,
+      };
+      if (!enabled[selectedTier]) {
+        const fallback = (["basic", "accelerator", "vip"] as const).find(
+          (candidate) => enabled[candidate]
+        );
+        if (!fallback) {
+          window.alert("Продажи временно приостановлены. Напишите Илю: @ilyan_vas");
+          return;
+        }
+        selectedTier = fallback;
+      }
+    } catch {
+      // If pricing is unavailable, keep the requested tier; the bot re-checks.
+    }
+
+    trackFunnelStep("bot_handoff", { tier: selectedTier });
     let refCode = "";
     if (typeof window !== "undefined") {
       try {
@@ -62,7 +85,7 @@ export default function HomePage() {
         // Safe fallback
       }
     }
-    const startParam = buildCheckoutStartParam(tier, refCode, promoCode);
+    const startParam = buildCheckoutStartParam(selectedTier, refCode, promoCode);
     window.location.href = `${BOT_URL}?start=${startParam}`;
   };
 

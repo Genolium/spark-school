@@ -28,6 +28,11 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
     return (num || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   };
 
+  const basicEnabled = pricing.basic_enabled !== false;
+  const acceleratorEnabled = pricing.accelerator_enabled !== false;
+  const vipEnabled = pricing.vip_enabled !== false;
+  const anyTierDisabled = !basicEnabled || !acceleratorEnabled || !vipEnabled;
+
   const basicPrice = pricing.basic_price || DEFAULT_PRICING.basic_price || 3990;
   const basicOldPrice = (pricing.basic_old_price && pricing.basic_old_price > basicPrice)
     ? pricing.basic_old_price
@@ -193,6 +198,12 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
         </div>
       </motion.div>
 
+      {anyTierDisabled && (
+        <div className="max-w-4xl mx-auto mb-8 p-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 text-xs sm:text-sm font-mono text-amber-900 dark:text-amber-200">
+          Часть тарифов временно недоступна для покупки. Доступ у уже оплативших сохраняется.
+        </div>
+      )}
+
       {/* 3-Tier Pricing Grid: Базовый, Акселератор & VIP */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 lg:gap-8 items-stretch max-w-7xl mx-auto">
         
@@ -265,13 +276,15 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
 
           <button
             type="button"
+            disabled={!basicEnabled}
             onClick={() => {
+              if (!basicEnabled) return;
               trackFunnelStep("pricing_select_tier", { tier: "basic", price: basicPrice });
               onOpenPayment?.("basic");
             }}
-            className="w-full py-3.5 px-4 rounded-2xl bento-pill hover:bg-emerald-500/15 border border-emerald-500/25 text-xs sm:text-sm font-mono font-bold text-slate-900 dark:text-white flex items-center justify-center gap-2 transition-all active:scale-95"
+            className="w-full py-3.5 px-4 rounded-2xl bento-pill hover:bg-emerald-500/15 border border-emerald-500/25 text-xs sm:text-sm font-mono font-bold text-slate-900 dark:text-white flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
           >
-            <span>Выбрать Базовый ({formatRub(basicPrice)} ₽)</span>
+            <span>{basicEnabled ? `Выбрать Базовый (${formatRub(basicPrice)} ₽)` : "Покупка временно недоступна"}</span>
             <ArrowUpRight className="w-4 h-4" />
           </button>
         </motion.div>
@@ -291,9 +304,13 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
           
           <div>
             <div className="flex items-center justify-between mb-4">
-              <span className="px-3 py-1 rounded-full text-xs font-mono font-bold uppercase bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 fill-current" />
-                Хит продаж
+              <span className={`px-3 py-1 rounded-full text-xs font-mono font-bold uppercase border flex items-center gap-1.5 ${
+                acceleratorEnabled
+                  ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30"
+                  : "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/30"
+              }`}>
+                {acceleratorEnabled ? <Sparkles className="w-3.5 h-3.5 fill-current" /> : null}
+                {acceleratorEnabled ? "Хит продаж" : "Набор приостановлен"}
               </span>
               <span className="text-[11px] font-mono text-emerald-600 dark:text-emerald-400 font-semibold">
                 Полное менторство
@@ -349,13 +366,19 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
 
           <button
             type="button"
+            disabled={!acceleratorEnabled}
             onClick={() => {
+              if (!acceleratorEnabled) return;
               trackFunnelStep("pricing_select_tier", { tier: "accelerator", price: pricing.accelerator_price });
               onOpenPayment?.("accelerator");
             }}
-            className="btn-primary-mono w-full py-4 text-sm font-bold flex items-center justify-center gap-2 group shadow-xl active:scale-95"
+            className="btn-primary-mono w-full py-4 text-sm font-bold flex items-center justify-center gap-2 group shadow-xl active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            <span>{pricingCtaVariant === "action" ? "Оплатить и начать" : `Занять место за ${formatRub(pricing.accelerator_price)} ₽`}</span>
+            <span>
+              {acceleratorEnabled
+                ? (pricingCtaVariant === "action" ? "Оплатить и начать" : `Занять место за ${formatRub(pricing.accelerator_price)} ₽`)
+                : "Покупка временно недоступна"}
+            </span>
             <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
           </button>
         </motion.div>
@@ -372,9 +395,13 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
         >
           <div>
             <div className="flex items-center justify-between mb-4">
-              <span className="px-3 py-1 rounded-full text-xs font-mono font-bold uppercase bg-amber-500/15 text-amber-700 dark:text-amber-300 border border-amber-500/30 flex items-center gap-1.5">
-                <Crown className="w-3.5 h-3.5" />
-                Строго 3 места
+              <span className={`px-3 py-1 rounded-full text-xs font-mono font-bold uppercase border flex items-center gap-1.5 ${
+                vipEnabled
+                  ? "bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30"
+                  : "bg-rose-500/10 text-rose-700 dark:text-rose-300 border-rose-500/30"
+              }`}>
+                {vipEnabled ? <Crown className="w-3.5 h-3.5" /> : null}
+                {vipEnabled ? "Строго 3 места" : "Набор приостановлен"}
               </span>
             </div>
 
@@ -423,13 +450,15 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
 
           <button
             type="button"
+            disabled={!vipEnabled}
             onClick={() => {
+              if (!vipEnabled) return;
               trackFunnelStep("pricing_select_tier", { tier: "vip", price: pricing.vip_price });
               onOpenPayment?.("vip");
             }}
-            className="w-full py-3.5 px-4 rounded-2xl bento-pill hover:bg-amber-500/15 border border-amber-500/30 text-xs sm:text-sm font-mono font-bold text-amber-700 dark:text-amber-300 flex items-center justify-center gap-2 transition-all active:scale-95"
+            className="w-full py-3.5 px-4 rounded-2xl bento-pill hover:bg-amber-500/15 border border-amber-500/30 text-xs sm:text-sm font-mono font-bold text-amber-700 dark:text-amber-300 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
           >
-            <span>Выбрать VIP ({formatRub(pricing.vip_price)} ₽)</span>
+            <span>{vipEnabled ? `Выбрать VIP (${formatRub(pricing.vip_price)} ₽)` : "Покупка временно недоступна"}</span>
             <ArrowUpRight className="w-4 h-4" />
           </button>
         </motion.div>

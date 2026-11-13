@@ -89,6 +89,10 @@ func MainMenuKeyboard(frontendURL string, options ...any) *telego.InlineKeyboard
 // https://web.tribute.tg/p/GIB
 // https://web.tribute.tg/p/GID
 
+func tierEnabledForKeyboard(pricing []models.CoursePricing, tier string) bool {
+	return len(pricing) == 0 || pricing[0].TierEnabled(tier)
+}
+
 // PaymentKeyboard returns the checkout keyboard with direct SBP transfer.
 func PaymentKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboardMarkup {
 	basicPrice := 3990
@@ -109,16 +113,23 @@ func PaymentKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboardMark
 	accText := fmt.Sprintf("2️⃣ Акселератор (%s ₽) — СБП", formatPriceRub(accPrice))
 	vipText := fmt.Sprintf("3️⃣ VIP (%s ₽) — СБП", formatPriceRub(vipPrice))
 
-	return tu.InlineKeyboard(
-		tu.InlineKeyboardRow(
+	rows := make([][]telego.InlineKeyboardButton, 0, 6)
+	if tierEnabledForKeyboard(pricing, "basic") {
+		rows = append(rows, tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton(basicText).WithCallbackData("pay_sbp_basic"),
-		),
-		tu.InlineKeyboardRow(
+		))
+	}
+	if tierEnabledForKeyboard(pricing, "accelerator") {
+		rows = append(rows, tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton(accText).WithCallbackData("pay_sbp_accelerator"),
-		),
-		tu.InlineKeyboardRow(
+		))
+	}
+	if tierEnabledForKeyboard(pricing, "vip") {
+		rows = append(rows, tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton(vipText).WithCallbackData("pay_sbp_vip"),
-		),
+		))
+	}
+	rows = append(rows,
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton("🎟 Применить промокод").WithCallbackData("promo_enter"),
 		),
@@ -129,12 +140,13 @@ func PaymentKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboardMark
 			tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu"),
 		),
 	)
+	return tu.InlineKeyboard(rows...)
 }
 
 // PromoAppliedKeyboard returns the keyboard after a promo code is applied.
 // Prices and discount flags are per tier: a promo may be restricted to some
 // tiers, and the button must show the amount that will actually be charged.
-func PromoAppliedKeyboard(prices map[string]int, discounted map[string]bool) *telego.InlineKeyboardMarkup {
+func PromoAppliedKeyboard(prices map[string]int, discounted map[string]bool, pricing ...models.CoursePricing) *telego.InlineKeyboardMarkup {
 	price := func(tier string, fallback int) int {
 		if value, ok := prices[tier]; ok && value > 0 {
 			return value
@@ -152,16 +164,23 @@ func PromoAppliedKeyboard(prices map[string]int, discounted map[string]bool) *te
 	accText := fmt.Sprintf("2️⃣ Акселератор (%s ₽)%s", formatPriceRub(price("accelerator", 10355)), suffix("accelerator"))
 	vipText := fmt.Sprintf("3️⃣ VIP (%s ₽)%s", formatPriceRub(price("vip", 14155)), suffix("vip"))
 
-	return tu.InlineKeyboard(
-		tu.InlineKeyboardRow(
+	rows := make([][]telego.InlineKeyboardButton, 0, 6)
+	if tierEnabledForKeyboard(pricing, "basic") {
+		rows = append(rows, tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton(basicText).WithCallbackData("pay_sbp_basic"),
-		),
-		tu.InlineKeyboardRow(
+		))
+	}
+	if tierEnabledForKeyboard(pricing, "accelerator") {
+		rows = append(rows, tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton(accText).WithCallbackData("pay_sbp_accelerator"),
-		),
-		tu.InlineKeyboardRow(
+		))
+	}
+	if tierEnabledForKeyboard(pricing, "vip") {
+		rows = append(rows, tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton(vipText).WithCallbackData("pay_sbp_vip"),
-		),
+		))
+	}
+	rows = append(rows,
 		tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton("🎟 Другой промокод").WithCallbackData("promo_enter"),
 		),
@@ -170,6 +189,7 @@ func PromoAppliedKeyboard(prices map[string]int, discounted map[string]bool) *te
 			tu.InlineKeyboardButton("🏠 В главное меню").WithCallbackData("action_menu"),
 		),
 	)
+	return tu.InlineKeyboard(rows...)
 }
 
 func YooKassaSelectTierKeyboard(hasPromo bool, pricing ...models.CoursePricing) *telego.InlineKeyboardMarkup {

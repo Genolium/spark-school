@@ -26,6 +26,51 @@ func (s *BotService) pricingForSession(_ *UserSession) models.CoursePricing {
 	return s.getPricing()
 }
 
+func enabledTierTitles(pricing models.CoursePricing) []string {
+	titles := make([]string, 0, 3)
+	for _, tier := range []string{"basic", "accelerator", "vip"} {
+		if pricing.TierEnabled(tier) {
+			titles = append(titles, tierDisplay(tier))
+		}
+	}
+	return titles
+}
+
+func (s *BotService) sendTierUnavailable(chatID telego.ChatID, tier string, pricing models.CoursePricing) {
+	if s.bot == nil {
+		return
+	}
+	session := s.getSession(chatID.ID)
+	session.SelectedTier = ""
+	titles := enabledTierTitles(pricing)
+	if len(titles) == 0 {
+		s.sendSalesPaused(chatID)
+		return
+	}
+	text := fmt.Sprintf("❌ <b>Покупка тарифа «%s» временно приостановлена.</b>\n\nДоступны: <b>%s</b>.",
+		tierDisplay(tier), strings.Join(titles, ", "))
+	rows := [][]telego.InlineKeyboardButton{
+		{tu.InlineKeyboardButton("💳 К доступным тарифам").WithCallbackData("action_payment")},
+		{tu.InlineKeyboardButton("💬 Написать Илю").WithURL("https://t.me/ilyan_vas")},
+		{tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu")},
+	}
+	_, _ = s.bot.SendMessage(tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(tu.InlineKeyboard(rows...)))
+}
+
+func (s *BotService) sendSalesPaused(chatID telego.ChatID) {
+	if s.bot == nil {
+		return
+	}
+	text := `❌ <b>Покупки временно приостановлены.</b>
+
+Напишите Илю — он подскажет, когда откроется следующий набор: @ilyan_vas`
+	rows := [][]telego.InlineKeyboardButton{
+		{tu.InlineKeyboardButton("💬 Написать Илю").WithURL("https://t.me/ilyan_vas")},
+		{tu.InlineKeyboardButton("⬅️ В главное меню").WithCallbackData("action_menu")},
+	}
+	_, _ = s.bot.SendMessage(tu.Message(chatID, text).WithParseMode(telego.ModeHTML).WithReplyMarkup(tu.InlineKeyboard(rows...)))
+}
+
 // promoForSession returns the active promo attached to the session, if any.
 func (s *BotService) promoForSession(session *UserSession) *models.PromoCode {
 	if s.db == nil || session == nil {
@@ -55,19 +100,22 @@ func (s *BotService) sessionDiscountForTier(session *UserSession, tier string) i
 	return pct
 }
 
-func promoAllowedTiersLabel(promo *models.PromoCode) string {
+func promoAllowedTiersLabel(promo *models.PromoCode, pricing ...models.CoursePricing) string {
 	if promo == nil || strings.TrimSpace(promo.ApplicableTiers) == "" {
 		return "все тарифы"
 	}
 	names := map[string]string{"basic": "Базовый", "accelerator": "Акселератор", "vip": "VIP"}
 	parts := make([]string, 0, 3)
 	for _, tier := range strings.Split(promo.ApplicableTiers, ",") {
+		if len(pricing) > 0 && !pricing[0].TierEnabled(tier) {
+			continue
+		}
 		if name, ok := names[models.NormalizePromoTier(tier)]; ok {
 			parts = append(parts, name)
 		}
 	}
 	if len(parts) == 0 {
-		return "все тарифы"
+		return "нет доступных тарифов"
 	}
 	return strings.Join(parts, ", ")
 }
@@ -88,6 +136,14 @@ func (s *BotService) sendPaymentDetails(chatID telego.ChatID, from *telego.User,
 	var keyboard *telego.InlineKeyboardMarkup
 
 	pricing := s.pricingForSession(session)
+	if session.SelectedTier != "" && !pricing.TierEnabled(session.SelectedTier) {
+		s.sendTierUnavailable(chatID, session.SelectedTier, pricing)
+		return
+	}
+	if pricing.FirstEnabledTier() == "" {
+		s.sendSalesPaused(chatID)
+		return
+	}
 	text, keyboard = s.paymentDetailsContent(session, pricing, withPromo)
 
 	targetMedia := MediaBuyCourse
@@ -138,41 +194,75 @@ func (s *BotService) paymentDetailsContent(session *UserSession, pricing models.
 		bankName = "БСПБ (Банк «Санкт-Петербург»)"
 	}
 
-	if withPromo || session.DiscountPct > 0 {
-		promo := s.promoForSession(session)
-		basePct := session.DiscountPct
-		if basePct <= 0 {
-			basePct = 5
+	promo := s.promoForSession(session)
+	basePct := session.DiscountPct
+	if basePct <= 0 {
+		basePct = 5
+	}
+	if promo != nil && promo.DiscountPercent > 0 {
+		basePct = promo.DiscountPercent
+	}
+	priceFor := func(tier string, base int) (int, int) {
+		pct := basePct
+		if promo != nil && !promo.AppliesToTier(tier) {
+			pct = 0
 		}
-		if promo != nil && promo.DiscountPercent > 0 {
-			basePct = promo.DiscountPercent
+		if pct <= 0 {
+			return base, 0
 		}
-		priceFor := func(tier string, base int) (int, int) {
-			pct := basePct
-			if promo != nil && !promo.AppliesToTier(tier) {
-				pct = 0
-			}
-			if pct <= 0 {
-				return base, 0
-			}
-			return discountedPrice(base, pct), pct
+		return discountedPrice(base, pct), pct
+	}
+	discountNote := func(pct, base, price int) string {
+		if pct <= 0 {
+			return " <i>(промокод на этот тариф не действует)</i>"
 		}
-		basicPrice, basicPct := priceFor("basic", basicBase)
-		accPrice, accPct := priceFor("accelerator", accBase)
-		vipPrice, vipPct := priceFor("vip", vipBase)
-		discountNote := func(pct, base, price int) string {
-			if pct <= 0 {
-				return " <i>(промокод на этот тариф не действует)</i>"
-			}
-			return fmt.Sprintf(" (скидка %s ₽)", formatPriceRub(base-price))
-		}
+		return fmt.Sprintf(" (скидка %s ₽)", formatPriceRub(base-price))
+	}
 
+	basicPrice, basicPct := priceFor("basic", basicBase)
+	accPrice, accPct := priceFor("accelerator", accBase)
+	vipPrice, vipPct := priceFor("vip", vipBase)
+
+	tariffLines := func(discounted bool) []string {
+		lines := make([]string, 0, 3)
+		if pricing.TierEnabled("basic") {
+			if discounted {
+				lines = append(lines, fmt.Sprintf("%s <b>Базовый:</b> <b>%s ₽</b>%s <i>[без обратной связи]</i>",
+					num1, formatPriceRub(basicPrice), discountNote(basicPct, basicBase, basicPrice)))
+			} else {
+				basicPromoPrice := basicBase - (basicBase*5)/100
+				lines = append(lines, fmt.Sprintf("%s <b>Базовый:</b> %s ₽ (по промокоду: <b>%s ₽</b>) <i>[без обратной связи]</i>",
+					num1, formatPriceRub(basicBase), formatPriceRub(basicPromoPrice)))
+			}
+		}
+		if pricing.TierEnabled("accelerator") {
+			if discounted {
+				lines = append(lines, fmt.Sprintf("%s <b>Акселератор [Хит]:</b> <b>%s ₽</b>%s",
+					num2, formatPriceRub(accPrice), discountNote(accPct, accBase, accPrice)))
+			} else {
+				accPromoPrice := accBase - (accBase*5)/100
+				lines = append(lines, fmt.Sprintf("%s <b>Акселератор [Хит]:</b> %s ₽ (по промокоду: <b>%s ₽</b>)",
+					num2, formatPriceRub(accBase), formatPriceRub(accPromoPrice)))
+			}
+		}
+		if pricing.TierEnabled("vip") {
+			if discounted {
+				lines = append(lines, fmt.Sprintf("%s <b>VIP:</b> <b>%s ₽</b>%s",
+					num3, formatPriceRub(vipPrice), discountNote(vipPct, vipBase, vipPrice)))
+			} else {
+				vipPromoPrice := vipBase - (vipBase*5)/100
+				lines = append(lines, fmt.Sprintf("%s <b>VIP:</b> %s ₽ (по промокоду: <b>%s ₽</b>) <i>[Строго ограниченное количество мест]</i>",
+					num3, formatPriceRub(vipBase), formatPriceRub(vipPromoPrice)))
+			}
+		}
+		return lines
+	}
+
+	if withPromo || session.DiscountPct > 0 {
 		text = fmt.Sprintf(`%s <b>Промокод успешно активирован! Скидка %d%%</b>
 
 <b>Стоимость со скидкой %d%%:</b>
-%s <b>Базовый:</b> <b>%s ₽</b>%s <i>[без обратной связи]</i>
-%s <b>Акселератор [Хит]:</b> <b>%s ₽</b>%s
-%s <b>VIP:</b> <b>%s ₽</b>%s
+%s
 
 <i>Промокод действует на: %s.</i>
 
@@ -185,22 +275,19 @@ func (s *BotService) paymentDetailsContent(session *UserSession, pricing models.
 %s <b>Как получить доступ:</b>
 1. Выберите тариф кнопкой ниже или переведите нужную сумму по СБП.
 2. <b>Отправьте скриншот чека прямо сюда в чат!</b>
-3. Бот проверит чек и сразу выдаст вам одноразовую ссылку в закрытый канал потока.`, sparkle, basePct, basePct, num1, formatPriceRub(basicPrice), discountNote(basicPct, basicBase, basicPrice), num2, formatPriceRub(accPrice), discountNote(accPct, accBase, accPrice), num3, formatPriceRub(vipPrice), discountNote(vipPct, vipBase, vipPrice), promoAllowedTiersLabel(promo), bankName, clipGreen)
+3. Бот проверит чек и сразу выдаст вам одноразовую ссылку в закрытый канал потока.`,
+			sparkle, basePct, basePct, strings.Join(tariffLines(true), "\n"),
+			promoAllowedTiersLabel(promo, pricing), bankName, clipGreen)
 		keyboard = PromoAppliedKeyboard(
 			map[string]int{"basic": basicPrice, "accelerator": accPrice, "vip": vipPrice},
 			map[string]bool{"basic": basicPct > 0, "accelerator": accPct > 0, "vip": vipPct > 0},
+			pricing,
 		)
 	} else {
-		basicPromoPrice := basicBase - (basicBase*5)/100
-		accPromoPrice := accBase - (accBase*5)/100
-		vipPromoPrice := vipBase - (vipBase*5)/100
-
 		text = fmt.Sprintf(`%s <b>Бронирование места в проекте «так называемый SPARK»</b>
 
 <b>Тарифы участия:</b>
-%s <b>Базовый:</b> %s ₽ (по промокоду: <b>%s ₽</b>) <i>[без обратной связи]</i>
-%s <b>Акселератор [Хит]:</b> %s ₽ (по промокоду: <b>%s ₽</b>)
-%s <b>VIP:</b> %s ₽ (по промокоду: <b>%s ₽</b>) <i>[Строго ограниченное количество мест]</i>
+%s
 
 🏛 <b>Оплата через СБП (0%% без комиссии):</b>
 • Банк: <b>%s</b>
@@ -211,7 +298,8 @@ func (s *BotService) paymentDetailsContent(session *UserSession, pricing models.
 %s <b>Как получить доступ:</b>
 1. Выберите тариф кнопкой ниже или сделайте перевод по номеру телефона через СБП.
 2. <b>Отправьте скриншот чека прямо сюда в чат бота!</b>
-3. Бот зафиксирует платёж и сразу выдаст вам персональную ссылку в закрытый канал потока.`, sparkle, num1, formatPriceRub(basicBase), formatPriceRub(basicPromoPrice), num2, formatPriceRub(accBase), formatPriceRub(accPromoPrice), num3, formatPriceRub(vipBase), formatPriceRub(vipPromoPrice), bankName, paperclip)
+3. Бот зафиксирует платёж и сразу выдаст вам персональную ссылку в закрытый канал потока.`,
+			sparkle, strings.Join(tariffLines(false), "\n"), bankName, paperclip)
 		keyboard = PaymentKeyboard(pricing)
 	}
 
@@ -220,6 +308,11 @@ func (s *BotService) paymentDetailsContent(session *UserSession, pricing models.
 
 func (s *BotService) handleSbpPayment(chatID telego.ChatID, from *telego.User, tier string) {
 	session := s.getSession(chatID.ID)
+	pricing := s.pricingForSession(session)
+	if !pricing.TierEnabled(tier) {
+		s.sendTierUnavailable(chatID, tier, pricing)
+		return
+	}
 	session.State = StateWaitingReceipt
 	session.SelectedTier = tier
 
@@ -229,7 +322,6 @@ func (s *BotService) handleSbpPayment(chatID telego.ChatID, from *telego.User, t
 
 	hasPromo := session.DiscountPct > 0 || session.PromoCode != ""
 
-	pricing := s.pricingForSession(session)
 	tierTitle := "Акселератор"
 	basePrice := int(pricing.AcceleratorPrice)
 	if tier == "basic" {
@@ -533,6 +625,7 @@ func (s *BotService) sendUpgradeOptions(chatID telego.ChatID, from *telego.User)
 	if s.bot == nil {
 		return
 	}
+	pricing := s.getPricing()
 
 	var user models.User
 	userFound := false
@@ -546,7 +639,7 @@ func (s *BotService) sendUpgradeOptions(chatID telego.ChatID, from *telego.User)
 		reply := `ℹ️ <b>Апгрейд тарифа</b>
 
 У вас пока нет активного тарифа. Выберите подходящий тариф для старта подготовки:`
-		m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML).WithReplyMarkup(PaymentKeyboard())
+		m := tu.Message(chatID, reply).WithParseMode(telego.ModeHTML).WithReplyMarkup(PaymentKeyboard(pricing))
 		_, _ = s.bot.SendMessage(m)
 		return
 	}
@@ -563,8 +656,6 @@ func (s *BotService) sendUpgradeOptions(chatID telego.ChatID, from *telego.User)
 		_, _ = s.bot.SendMessage(m)
 		return
 	}
-
-	pricing := s.getPricing()
 
 	if currentTier == "basic" {
 		diffAcc := pricing.AcceleratorPrice - pricing.BasicPrice
