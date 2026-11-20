@@ -10,6 +10,9 @@ func TestParsePayStartParam(t *testing.T) {
 		lower                 bool
 	}{
 		{in: "pay_accelerator", tier: "accelerator"},
+		{in: "pay_basic_feedback", tier: "basic_feedback"},
+		{in: "pay_basic_feedback_a_apy123abc", tier: "basic_feedback", attr: "apy123abc"},
+		{in: "pay_basic_feedback_SPARK5_a_apy123abc_ref_alex", tier: "basic_feedback", promo: "SPARK5", attr: "apy123abc", ref: "alex"},
 		{in: "pay_vip_DEADLINE", tier: "vip", promo: "DEADLINE"},
 		{in: "pay_accelerator_DEADLINE_a_apy123abc", tier: "accelerator", promo: "DEADLINE", attr: "apy123abc"},
 		{in: "pay_accelerator_a_apy123abc", tier: "accelerator", attr: "apy123abc"},

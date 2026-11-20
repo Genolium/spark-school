@@ -347,8 +347,19 @@ func (s *Service) applyConfirmation(tx *gorm.DB, in ConfirmInput, result *Result
 		user.HasAuditUpsell = true
 		user.AuditCredits += credits
 		result.AuditCredits = credits
-	} else if wasNew || rank(in.Tier) >= rank(user.Tier) {
-		user.Tier = in.Tier
+	} else {
+		if wasNew || rank(in.Tier) >= rank(user.Tier) {
+			user.Tier = in.Tier
+		}
+		if in.Tier == "basic_feedback" {
+			credits := in.AuditCredits
+			if credits <= 0 {
+				credits = 1
+			}
+			user.HasAuditUpsell = true
+			user.AuditCredits += credits
+			result.AuditCredits = credits
+		}
 	}
 	paidKopecks := money.Kopecks(user.PaidAmountKopecks)
 	if paidKopecks == 0 {
@@ -503,6 +514,8 @@ func normalizeTier(tier string) string {
 	switch t {
 	case "basic", "accelerator", "vip":
 		return t
+	case "basic_feedback", "basic_plus":
+		return "basic_feedback"
 	case "audit", "audit_essay", "essay_audit":
 		return "audit_essay"
 	default:
@@ -518,10 +531,12 @@ func rank(tier string) int {
 	switch strings.ToLower(strings.TrimSpace(tier)) {
 	case "basic":
 		return 1
-	case "accelerator":
+	case "basic_feedback":
 		return 2
-	case "vip":
+	case "accelerator":
 		return 3
+	case "vip":
+		return 4
 	default:
 		return 0
 	}

@@ -105,6 +105,12 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) error {
 		case "basic":
 			amount = pricing.BasicPrice
 			chosenTier = "basic"
+		case "basic_feedback":
+			amount = pricing.BasicFeedbackPrice
+			if amount <= 0 {
+				amount = 5000.0
+			}
+			chosenTier = "basic_feedback"
 		case "vip":
 			amount = pricing.VIPPrice
 			chosenTier = "vip"
@@ -114,7 +120,7 @@ func (s *BotService) HandleReceiptUpload(msg *telego.Message) error {
 		}
 
 		pct := s.sessionDiscountForTier(session, chosenTier)
-		if pct == 0 && session.PromoCode == "" && session.DiscountPct > 0 {
+		if chosenTier != "basic_feedback" && pct == 0 && session.PromoCode == "" && session.DiscountPct > 0 {
 			// Legacy session: discount stored without the code.
 			pct = session.DiscountPct
 		}

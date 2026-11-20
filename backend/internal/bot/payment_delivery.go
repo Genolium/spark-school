@@ -123,6 +123,8 @@ func tierDisplay(tier string) string {
 	switch strings.ToLower(strings.TrimSpace(tier)) {
 	case "basic":
 		return "Базовый"
+	case "basic_feedback":
+		return "Базовый + 1 раунд ОС"
 	case "vip":
 		return "VIP-сопровождение"
 	case "audit_essay", "audit":

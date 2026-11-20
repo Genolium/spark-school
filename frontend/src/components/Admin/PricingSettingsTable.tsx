@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { api, CoursePricing } from "@/lib/api";
-import { DEFAULT_PRICING } from "@/lib/pricing-defaults";
+import { DEFAULT_PRICING, DEFAULT_SALES_CLOSE_AT, isPricingSalesClosed } from "@/lib/pricing-defaults";
 import {
   DollarSign,
   Save,
@@ -16,7 +16,27 @@ import {
   Bot,
   Globe,
   Building2,
+  Clock,
+  Lock,
+  Unlock,
+  MessageSquareText,
 } from "lucide-react";
+
+/** Converts an RFC3339 timestamp to a MSK (UTC+3) datetime-local input value (YYYY-MM-DDTHH:mm). */
+function isoToMskInput(iso?: string | null): string {
+  if (!iso) return "";
+  const ms = new Date(iso).getTime();
+  if (Number.isNaN(ms)) return "";
+  const msk = new Date(ms + 3 * 60 * 60 * 1000);
+  return msk.toISOString().slice(0, 16);
+}
+
+/** Converts a MSK datetime-local input value (YYYY-MM-DDTHH:mm) to RFC3339 with +03:00 offset. */
+function mskInputToIso(val: string): string {
+  const trimmed = val.trim();
+  if (!trimmed) return "";
+  return `${trimmed}:00+03:00`;
+}
 
 function TierToggle({
   enabled,
@@ -71,9 +91,11 @@ export function PricingSettingsTable() {
   const [msg, setMsg] = useState<{ text: string; type: "success" | "error" } | null>(null);
 
   const basicEnabled = pricing.basic_enabled !== false;
+  const basicFeedbackEnabled = pricing.basic_feedback_enabled !== false;
   const acceleratorEnabled = pricing.accelerator_enabled !== false;
   const vipEnabled = pricing.vip_enabled !== false;
-  const anyTierDisabled = !basicEnabled || !acceleratorEnabled || !vipEnabled;
+  const salesClosed = isPricingSalesClosed(pricing);
+  const anyTierDisabled = !basicEnabled || !basicFeedbackEnabled || !acceleratorEnabled || !vipEnabled || salesClosed;
 
   useEffect(() => {
     loadPricing();
@@ -86,9 +108,13 @@ export function PricingSettingsTable() {
       ...data,
       basic_price: data.basic_price || 3333,
       basic_old_price: data.basic_old_price || 5900,
+      basic_feedback_price: data.basic_feedback_price || 5000,
+      basic_feedback_old_price: data.basic_feedback_old_price || 6900,
       basic_enabled: data.basic_enabled !== false,
+      basic_feedback_enabled: data.basic_feedback_enabled !== false,
       accelerator_enabled: data.accelerator_enabled !== false,
       vip_enabled: data.vip_enabled !== false,
+      sales_close_at: data.sales_close_at === undefined ? DEFAULT_SALES_CLOSE_AT : data.sales_close_at,
     });
     setLoading(false);
   };
@@ -99,10 +125,17 @@ export function PricingSettingsTable() {
     setMsg(null);
 
     const bPrice = pricing.basic_price || 3333;
+    const bfPrice = pricing.basic_feedback_price || 5000;
 
     // Frontend validation
     if (bPrice <= 0) {
       setMsg({ text: "Цена тарифа «Базовый» должна быть положительным числом", type: "error" });
+      setSaving(false);
+      return;
+    }
+
+    if (bfPrice <= 0) {
+      setMsg({ text: "Цена услуги «Базовый + 1 раунд ОС» должна быть положительным числом", type: "error" });
       setSaving(false);
       return;
     }
@@ -132,6 +165,7 @@ export function PricingSettingsTable() {
     }
 
     const bOld = pricing.basic_old_price || 0;
+    const bfOld = pricing.basic_feedback_old_price || 0;
     const accOld = pricing.accelerator_old_price || 0;
     const vipOld = pricing.vip_old_price || 0;
 
@@ -139,11 +173,15 @@ export function PricingSettingsTable() {
       ...pricing,
       basic_price: bPrice,
       basic_old_price: bOld,
+      basic_feedback_price: bfPrice,
+      basic_feedback_old_price: bfOld,
       accelerator_old_price: accOld,
       vip_old_price: vipOld,
       basic_enabled: basicEnabled,
+      basic_feedback_enabled: basicFeedbackEnabled,
       accelerator_enabled: acceleratorEnabled,
       vip_enabled: vipEnabled,
+      sales_close_at: pricing.sales_close_at ? pricing.sales_close_at : "",
       bank_name: (pricing.bank_name || "").trim() || "БСПБ (Банк «Санкт-Петербург»)",
     };
 
@@ -151,12 +189,14 @@ export function PricingSettingsTable() {
     setSaving(false);
 
     if (res.success) {
-      setMsg({ text: "Цены и реквизиты успешно обновлены и синхронизированы на сайте и в боте!", type: "success" });
+      setMsg({ text: "Цены, доступность тарифов и окно продаж успешно обновлены на сайте и в боте!", type: "success" });
       if (res.pricing) {
         setPricing({
           ...res.pricing,
           basic_price: res.pricing.basic_price || 3333,
           basic_old_price: res.pricing.basic_old_price || 5900,
+          basic_feedback_price: res.pricing.basic_feedback_price || 5000,
+          basic_feedback_old_price: res.pricing.basic_feedback_old_price || 6900,
         });
       }
       setTimeout(() => setMsg(null), 5000);
@@ -165,9 +205,39 @@ export function PricingSettingsTable() {
     }
   };
 
+  const handleCloseAllSales = () => {
+    setPricing((prev) => ({
+      ...prev,
+      basic_enabled: false,
+      basic_feedback_enabled: false,
+      accelerator_enabled: false,
+      vip_enabled: false,
+      sales_closed: true,
+    }));
+    setMsg({ text: "Все тарифы и отдельная услуга выключены. Нажмите «Сохранить изменения», чтобы закрыть продажи на сайте и в боте.", type: "success" });
+  };
+
+  const handleOpenAllSales = () => {
+    setPricing((prev) => {
+      const nextClose = prev.sales_close_at && new Date(prev.sales_close_at).getTime() <= Date.now()
+        ? null
+        : prev.sales_close_at;
+      return {
+        ...prev,
+        basic_enabled: true,
+        basic_feedback_enabled: true,
+        accelerator_enabled: true,
+        vip_enabled: true,
+        sales_close_at: nextClose,
+        sales_closed: false,
+      };
+    });
+    setMsg({ text: "Все тарифы включены (истёкший таймер закрытия сброшен). Нажмите «Сохранить изменения», чтобы открыть продажи.", type: "success" });
+  };
+
   const handleResetDefaults = () => {
     setPricing({ ...DEFAULT_PRICING });
-    setMsg({ text: "Установлены стандартные значения (3 333 / 9 990 / 15 990 ₽) и все продажи включены. Нажмите «Сохранить», чтобы применить.", type: "success" });
+    setMsg({ text: "Установлены стандартные значения (3 333 / 5 000 / 9 990 / 15 990 ₽) и все продажи включены. Нажмите «Сохранить», чтобы применить.", type: "success" });
   };
 
   const formatRub = (num: number) => {
@@ -184,10 +254,11 @@ export function PricingSettingsTable() {
     }));
   };
 
-  const handleToggle = (field: "basic_enabled" | "accelerator_enabled" | "vip_enabled") => {
+  const handleToggle = (field: "basic_enabled" | "basic_feedback_enabled" | "accelerator_enabled" | "vip_enabled") => {
     setPricing((prev) => ({
       ...prev,
       [field]: prev[field] === false,
+      sales_closed: false,
     }));
   };
 
@@ -546,6 +617,183 @@ export function PricingSettingsTable() {
             </div>
           </div>
 
+        </div>
+
+        {/* ========================================================================= */}
+        {/* STANDALONE SERVICE CARD: БАЗОВЫЙ + 1 РАУНД ОС (5 000 ₽)                   */}
+        {/* ========================================================================= */}
+        <div className="p-6 sm:p-8 rounded-[32px] bg-white dark:bg-[#12161f] border-2 border-sky-500/30 shadow-sm">
+          <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-6">
+            <div className="flex-1">
+              <div className="flex flex-wrap items-center gap-2 mb-2">
+                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold uppercase bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30">
+                  <MessageSquareText className="w-3.5 h-3.5" />
+                  Отдельная услуга
+                </span>
+                <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
+                  Фиксированная цена • промокоды отключены
+                </span>
+              </div>
+              <h3 className="font-editorial text-2xl font-bold text-slate-900 dark:text-white mb-1">
+                Базовый курс + 1 раунд обратной связи
+              </h3>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mb-4 max-w-2xl">
+                Показывается отдельным блоком под тарифной сеткой. При оплате выдаёт доступ к Базовому курсу и начисляет 1 кредит на личную обратную связь.
+              </p>
+
+              <div className="max-w-xs">
+                <TierToggle
+                  enabled={basicFeedbackEnabled}
+                  onChange={() => handleToggle("basic_feedback_enabled")}
+                  label="Продажи услуги Базовый + 1 раунд ОС"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 lg:w-[420px] shrink-0">
+              <div>
+                <label className="block text-xs font-mono font-bold text-slate-700 dark:text-slate-300 mb-1.5">
+                  Текущая цена (₽) *
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={pricing.basic_feedback_price === 0 ? "" : (pricing.basic_feedback_price ?? 5000)}
+                    placeholder="5000"
+                    onChange={(e) => handlePriceChange("basic_feedback_price", e.target.value)}
+                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-black/30 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white font-mono text-base font-bold focus:outline-none focus:border-sky-500 transition-colors"
+                  />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-400">
+                    RUB
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-mono text-slate-600 dark:text-slate-400 mb-1.5">
+                  Зачёркнутая цена (₽)
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    value={pricing.basic_feedback_old_price === 0 ? "" : (pricing.basic_feedback_old_price ?? 6900)}
+                    placeholder="6900"
+                    onChange={(e) => handlePriceChange("basic_feedback_old_price", e.target.value)}
+                    className="w-full px-4 py-3 rounded-2xl bg-slate-50 dark:bg-black/30 border border-slate-300 dark:border-white/10 text-slate-700 dark:text-slate-300 font-mono text-sm focus:outline-none focus:border-sky-500 transition-colors"
+                  />
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-mono text-slate-400">
+                    RUB
+                  </span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ========================================================================= */}
+        {/* SALES WINDOW & SCHEDULED CLOSE (Закрытие продаж до 2-го этапа)            */}
+        {/* ========================================================================= */}
+        <div className={`p-6 sm:p-8 rounded-[32px] bg-white dark:bg-[#12161f] border-2 shadow-sm ${
+          salesClosed
+            ? "border-rose-500/40"
+            : "border-amber-500/30"
+        }`}>
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 pb-5 border-b border-slate-100 dark:border-white/5">
+            <div className="flex items-center gap-3">
+              <div className={`w-10 h-10 rounded-2xl flex items-center justify-center shrink-0 ${
+                salesClosed
+                  ? "bg-rose-500/15 text-rose-600 dark:text-rose-400"
+                  : "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+              }`}>
+                <Clock className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="font-editorial text-xl font-bold text-slate-900 dark:text-white">
+                  Закрытие продаж до второго этапа
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400 font-mono mt-0.5">
+                  В указанное время (по МСК) все новые продажи автоматически закроются на сайте и в боте. Доступ и апгрейды текущих студентов сохраняются.
+                </p>
+              </div>
+            </div>
+
+            <span className={`px-3.5 py-1.5 rounded-full text-xs font-mono font-bold w-fit ${
+              salesClosed
+                ? "bg-rose-500/15 text-rose-700 dark:text-rose-300 border border-rose-500/30"
+                : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30"
+            }`}>
+              {salesClosed ? "Продажи закрыты" : "Продажи открыты"}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-end">
+            <div>
+              <label className="block text-xs font-mono font-bold text-slate-700 dark:text-slate-300 mb-2">
+                Автозакрытие продаж (время по МСК, UTC+3)
+              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <input
+                  type="datetime-local"
+                  value={isoToMskInput(pricing.sales_close_at)}
+                  onChange={(e) =>
+                    setPricing((prev) => ({
+                      ...prev,
+                      sales_close_at: e.target.value ? mskInputToIso(e.target.value) : null,
+                      sales_closed: false,
+                    }))
+                  }
+                  className="px-4 py-2.5 rounded-2xl bg-slate-50 dark:bg-black/30 border border-slate-300 dark:border-white/10 text-slate-900 dark:text-white font-mono text-sm font-semibold focus:outline-none focus:border-amber-500"
+                />
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPricing((prev) => ({
+                      ...prev,
+                      sales_close_at: DEFAULT_SALES_CLOSE_AT,
+                      sales_closed: false,
+                    }))
+                  }
+                  className="px-3 py-2.5 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-500/30 text-xs font-mono font-semibold transition-colors"
+                >
+                  21 ноя 00:00 МСК
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    setPricing((prev) => ({
+                      ...prev,
+                      sales_close_at: null,
+                      sales_closed: false,
+                    }))
+                  }
+                  className="px-3 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-white/5 dark:hover:bg-white/10 text-slate-700 dark:text-slate-300 text-xs font-mono transition-colors"
+                >
+                  Убрать таймер
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 lg:justify-end">
+              <button
+                type="button"
+                onClick={handleCloseAllSales}
+                className="px-4 py-2.5 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-mono font-bold inline-flex items-center gap-2 transition-all active:scale-95 shadow-sm"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                <span>Закрыть все продажи сейчас</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleOpenAllSales}
+                className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-mono font-bold inline-flex items-center gap-2 transition-all active:scale-95 shadow-sm"
+              >
+                <Unlock className="w-3.5 h-3.5" />
+                <span>Открыть продажи (2-й этап)</span>
+              </button>
+            </div>
+          </div>
         </div>
 
         {/* ========================================================================= */}

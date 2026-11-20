@@ -7,7 +7,7 @@ import { ArrowUpRight, CheckCircle2, Video, FileText } from "lucide-react";
 import { api, PlacesStats, CoursePricing } from "@/lib/api";
 import { trackFunnelStep } from "@/lib/analytics";
 import { getExperiment } from "@/lib/experiments";
-import { DEFAULT_PRICING } from "@/lib/pricing-defaults";
+import { DEFAULT_PRICING, isPricingSalesClosed } from "@/lib/pricing-defaults";
 
 interface HeroProps {
   onOpenPayment?: () => void;
@@ -28,12 +28,17 @@ export function Hero({ onOpenChances }: HeroProps) {
     return (num || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   };
 
+  const salesClosed = isPricingSalesClosed(pricing);
+
   // Dynamically determine the lowest price among available active tiers
-  const validPrices = [
-    pricing.basic_enabled !== false ? pricing.basic_price : null,
-    pricing.accelerator_enabled !== false ? pricing.accelerator_price : null,
-    pricing.vip_enabled !== false ? pricing.vip_price : null,
-  ].filter((p): p is number => typeof p === "number" && p > 0);
+  const validPrices = salesClosed
+    ? []
+    : [
+        pricing.basic_enabled !== false ? pricing.basic_price : null,
+        pricing.basic_feedback_enabled !== false ? pricing.basic_feedback_price : null,
+        pricing.accelerator_enabled !== false ? pricing.accelerator_price : null,
+        pricing.vip_enabled !== false ? pricing.vip_price : null,
+      ].filter((p): p is number => typeof p === "number" && p > 0);
   const minPrice = validPrices.length > 0 ? Math.min(...validPrices) : 3333;
 
   // A/B winner (p = 0.049, 7 payments vs 1 for the control): the "path to
@@ -51,7 +56,7 @@ export function Hero({ onOpenChances }: HeroProps) {
   const ctaVariant = getExperiment("hero_cta_copy");
   const ctaLabel =
     validPrices.length === 0
-      ? "Продажи временно приостановлены"
+      ? "Продажи закрыты до 2-го этапа"
       : ctaVariant === "benefit"
         ? `Начать подготовку от ${formatRub(minPrice)} ₽`
         : ctaVariant === "diagnostic"
@@ -108,8 +113,8 @@ export function Hero({ onOpenChances }: HeroProps) {
             animate={{ opacity: 1, y: 0 }}
             className="inline-flex items-center gap-2.5 px-4 py-2 rounded-full bg-black/50 hover:bg-black/60 backdrop-blur-xl border border-white/25 text-xs font-mono text-white shadow-lg transition-all"
           >
-            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="font-semibold text-white">Набор открыт</span>
+            <span className={`w-2 h-2 rounded-full ${salesClosed ? "bg-rose-400" : "bg-emerald-400 animate-pulse"}`} />
+            <span className="font-semibold text-white">{salesClosed ? "Продажи закрыты до 2-го этапа" : "Набор открыт"}</span>
             <span className="text-white/40">•</span>
             <span className="text-slate-200">Поток SPARK 2027</span>
           </motion.div>

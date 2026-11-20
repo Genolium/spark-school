@@ -61,6 +61,8 @@ func checkoutBasePrice(tier string, pricing models.CoursePricing) float64 {
 	switch tier {
 	case "basic":
 		basePrice = pricing.BasicPrice
+	case "basic_feedback":
+		basePrice = pricing.BasicFeedbackPrice
 	case "vip":
 		basePrice = pricing.VIPPrice
 	case "audit_essay":
@@ -134,10 +136,10 @@ func (h *YooKassaHandler) CreateCheckout(c *gin.Context) {
 	finalPrice := basePrice
 	discountPct := 0
 
-	// Check promo code if supplied
-	if cleanPromo != "" && h.db != nil {
+	// Check promo code if supplied (not applicable to standalone basic_feedback offer)
+	if cleanPromo != "" && h.db != nil && tier != "basic_feedback" {
 		var promo models.PromoCode
-		if err := h.db.Where("UPPER(code) = ? AND is_active = true", cleanPromo).First(&promo).Error; err == nil {
+		if err := h.db.Where("UPPER(code) = ? AND is_active = true", cleanPromo).First(&promo).Error; err == nil && promo.AppliesToTier(tier) {
 			discountPct = promo.DiscountPercent
 			if discountPct <= 0 {
 				discountPct = 5
@@ -145,8 +147,10 @@ func (h *YooKassaHandler) CreateCheckout(c *gin.Context) {
 			discountAmount := (basePrice * float64(discountPct)) / 100.0
 			finalPrice = basePrice - discountAmount
 		} else {
-			cleanPromo = "" // Reset invalid promo
+			cleanPromo = "" // Reset invalid or inapplicable promo
 		}
+	} else {
+		cleanPromo = ""
 	}
 
 	tierNameRU := "Акселератор"
@@ -155,6 +159,8 @@ func (h *YooKassaHandler) CreateCheckout(c *gin.Context) {
 		tierNameRU = "VIP"
 	case "basic":
 		tierNameRU = "Базовый"
+	case "basic_feedback":
+		tierNameRU = "Базовый + 1 раунд ОС"
 	case "audit_essay":
 		tierNameRU = "Аудит эссе"
 	}

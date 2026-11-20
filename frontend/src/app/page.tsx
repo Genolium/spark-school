@@ -18,6 +18,7 @@ import { RecoveryBanner } from "@/components/RecoveryBanner";
 import { StudentReviews } from "@/components/StudentReviews";
 import { trackFunnelStep, buildCheckoutStartParam, BOT_URL } from "@/lib/analytics";
 import { api } from "@/lib/api";
+import { isPricingSalesClosed } from "@/lib/pricing-defaults";
 import { syncServerExperiments } from "@/lib/experiments";
 
 const PlacementMap = dynamic(
@@ -31,21 +32,26 @@ const ChancesModal = dynamic(
 export default function HomePage() {
   const [isChancesOpen, setIsChancesOpen] = useState(false);
 
-  const handleOpenPayment = async (tier: "basic" | "accelerator" | "vip" = "accelerator") => {
+  const handleOpenPayment = async (tier: "basic" | "basic_feedback" | "accelerator" | "vip" = "accelerator") => {
     let selectedTier = tier;
     try {
       const pricing = await api.getCoursePricing();
+      if (isPricingSalesClosed(pricing)) {
+        window.alert("Продажи закрыты до старта второго этапа. Доступ у оплативших сохраняется. Лист ожидания: @ilyan_vas");
+        return;
+      }
       const enabled = {
         basic: pricing.basic_enabled !== false,
+        basic_feedback: pricing.basic_feedback_enabled !== false,
         accelerator: pricing.accelerator_enabled !== false,
         vip: pricing.vip_enabled !== false,
       };
       if (!enabled[selectedTier]) {
-        const fallback = (["basic", "accelerator", "vip"] as const).find(
+        const fallback = (["basic", "basic_feedback", "accelerator", "vip"] as const).find(
           (candidate) => enabled[candidate]
         );
         if (!fallback) {
-          window.alert("Продажи временно приостановлены. Напишите Илю: @ilyan_vas");
+          window.alert("Продажи закрыты до старта второго этапа. Напишите Илю: @ilyan_vas");
           return;
         }
         selectedTier = fallback;

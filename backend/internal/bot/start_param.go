@@ -72,6 +72,9 @@ func parsePayStartParam(param string) payStartParam {
 	}
 
 	switch {
+	case strings.HasPrefix(payload, "basic_feedback"):
+		result.Tier = "basic_feedback"
+		payload = strings.TrimPrefix(strings.TrimPrefix(payload, "basic_feedback"), "_")
 	case strings.HasPrefix(payload, "basic"):
 		result.Tier = "basic"
 		payload = strings.TrimPrefix(strings.TrimPrefix(payload, "basic"), "_")

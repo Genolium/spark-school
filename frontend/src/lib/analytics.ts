@@ -213,12 +213,12 @@ export function compactStartParam(action: string, attributionToken: string, ref 
 }
 
 export function buildCheckoutStartParam(
-  tier: "basic" | "accelerator" | "vip",
+  tier: "basic" | "basic_feedback" | "accelerator" | "vip",
   ref = "",
   promo = "",
 ): string {
-  // Promo comes right after the tier; the bot parses it as the action payload.
-  const cleanPromo = promo.replace(/[^A-Za-z0-9]/g, "").slice(0, 16);
+  // Promo comes right after the tier; standalone basic_feedback has a fixed price without promo codes.
+  const cleanPromo = tier === "basic_feedback" ? "" : promo.replace(/[^A-Za-z0-9]/g, "").slice(0, 16);
   const action = cleanPromo ? `pay_${tier}_${cleanPromo}` : `pay_${tier}`;
   return compactStartParam(action, getAttributionToken(), ref);
 }

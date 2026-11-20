@@ -1,23 +1,28 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { Check, ArrowUpRight, ShieldCheck, CreditCard, Sparkles, Crown, TrendingUp } from "lucide-react";
+import { Check, ArrowUpRight, ShieldCheck, CreditCard, Sparkles, Crown, TrendingUp, MessageSquareText } from "lucide-react";
 import { api, PlacesStats, CoursePricing } from "@/lib/api";
 import { DeadlineCountdown } from "./DeadlineCountdown";
 import { trackFunnelStep } from "@/lib/analytics";
 import { getExperiment } from "@/lib/experiments";
-import { DEFAULT_PRICING } from "@/lib/pricing-defaults";
+import { DEFAULT_PRICING, isPricingSalesClosed } from "@/lib/pricing-defaults";
 
 interface PricingSectionProps {
-  onOpenPayment?: (tier?: "basic" | "accelerator" | "vip") => void;
+  onOpenPayment?: (tier?: "basic" | "basic_feedback" | "accelerator" | "vip") => void;
 }
 
 export function PricingSection({ onOpenPayment }: PricingSectionProps) {
   const pricingCtaVariant = getExperiment("pricing_cta_copy");
   const [places, setPlaces] = useState<PlacesStats | null>(null);
   const [pricing, setPricing] = useState<CoursePricing>(DEFAULT_PRICING);
+  const [timerExpired, setTimerExpired] = useState(false);
+
+  const handleTimerExpire = useCallback(() => {
+    setTimerExpired(true);
+  }, []);
 
   useEffect(() => {
     api.getPlacesStats().then(setPlaces).catch(() => {});
@@ -28,14 +33,20 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
     return (num || 0).toString().replace(/\B(?=(\d{3})+(?!\d))/g, " ");
   };
 
-  const basicEnabled = pricing.basic_enabled !== false;
-  const acceleratorEnabled = pricing.accelerator_enabled !== false;
-  const vipEnabled = pricing.vip_enabled !== false;
-  const anyTierDisabled = !basicEnabled || !acceleratorEnabled || !vipEnabled;
+  const salesClosed = timerExpired || isPricingSalesClosed(pricing);
+  const basicEnabled = !salesClosed && pricing.basic_enabled !== false;
+  const basicFeedbackEnabled = !salesClosed && pricing.basic_feedback_enabled !== false;
+  const acceleratorEnabled = !salesClosed && pricing.accelerator_enabled !== false;
+  const vipEnabled = !salesClosed && pricing.vip_enabled !== false;
+  const anyTierDisabled = !basicEnabled || !basicFeedbackEnabled || !acceleratorEnabled || !vipEnabled;
 
   const basicPrice = pricing.basic_price || DEFAULT_PRICING.basic_price || 3333;
   const basicOldPrice = (pricing.basic_old_price && pricing.basic_old_price > basicPrice)
     ? pricing.basic_old_price
+    : null;
+  const basicFeedbackPrice = pricing.basic_feedback_price || DEFAULT_PRICING.basic_feedback_price || 5000;
+  const basicFeedbackOldPrice = (pricing.basic_feedback_old_price && pricing.basic_feedback_old_price > basicFeedbackPrice)
+    ? pricing.basic_feedback_old_price
     : null;
   const accOldPrice = pricing.accelerator_old_price > pricing.accelerator_price
     ? pricing.accelerator_old_price
@@ -88,9 +99,14 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
         </div>
       </div>
 
-      {/* Deadline Countdown Widget (20 ноября 23:59) */}
+      {/* Deadline Countdown Widget (21 ноября 00:00 МСК) */}
       <div className="max-w-5xl mx-auto mb-10 sm:mb-12">
-        <DeadlineCountdown onOpenPayment={() => onOpenPayment?.("accelerator")} />
+        <DeadlineCountdown
+          salesCloseAt={pricing.sales_close_at}
+          salesClosed={salesClosed}
+          onExpire={handleTimerExpire}
+          onOpenPayment={!salesClosed ? () => onOpenPayment?.("accelerator") : undefined}
+        />
       </div>
 
       {/* Value contrast: preparation cost vs cost of a missed grant cycle */}
@@ -200,7 +216,9 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
 
       {anyTierDisabled && (
         <div className="max-w-4xl mx-auto mb-8 p-4 rounded-2xl border border-amber-500/30 bg-amber-500/10 text-xs sm:text-sm font-mono text-amber-900 dark:text-amber-200">
-          Часть тарифов временно недоступна для покупки. Доступ у уже оплативших сохраняется.
+          {salesClosed
+            ? "Продажи на текущий этап закрыты до старта второго этапа. Доступ у уже оплативших сохраняется полностью, апгрейды доступны в Telegram-боте."
+            : "Часть тарифов временно недоступна для покупки. Доступ у уже оплативших сохраняется."}
         </div>
       )}
 
@@ -284,7 +302,7 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
             }}
             className="w-full py-3.5 px-4 rounded-2xl bento-pill hover:bg-emerald-500/15 border border-emerald-500/25 text-xs sm:text-sm font-mono font-bold text-slate-900 dark:text-white flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
           >
-            <span>{basicEnabled ? `Выбрать Базовый (${formatRub(basicPrice)} ₽)` : "Покупка временно недоступна"}</span>
+            <span>{basicEnabled ? `Выбрать Базовый (${formatRub(basicPrice)} ₽)` : salesClosed ? "Продажи закрыты до 2-го этапа" : "Покупка временно недоступна"}</span>
             <ArrowUpRight className="w-4 h-4" />
           </button>
         </motion.div>
@@ -377,7 +395,9 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
             <span>
               {acceleratorEnabled
                 ? (pricingCtaVariant === "action" ? "Оплатить и начать" : `Занять место за ${formatRub(pricing.accelerator_price)} ₽`)
-                : "Покупка временно недоступна"}
+                : salesClosed
+                  ? "Продажи закрыты до 2-го этапа"
+                  : "Покупка временно недоступна"}
             </span>
             <ArrowUpRight className="w-4 h-4 stroke-[2.5]" />
           </button>
@@ -458,12 +478,88 @@ export function PricingSection({ onOpenPayment }: PricingSectionProps) {
             }}
             className="w-full py-3.5 px-4 rounded-2xl bento-pill hover:bg-amber-500/15 border border-amber-500/30 text-xs sm:text-sm font-mono font-bold text-amber-700 dark:text-amber-300 flex items-center justify-center gap-2 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent"
           >
-            <span>{vipEnabled ? `Выбрать VIP (${formatRub(pricing.vip_price)} ₽)` : "Покупка временно недоступна"}</span>
+            <span>{vipEnabled ? `Выбрать VIP (${formatRub(pricing.vip_price)} ₽)` : salesClosed ? "Продажи закрыты до 2-го этапа" : "Покупка временно недоступна"}</span>
             <ArrowUpRight className="w-4 h-4" />
           </button>
         </motion.div>
 
       </div>
+
+      {/* ========================================================================= */}
+      {/* STANDALONE SERVICE: БАЗОВЫЙ КУРС + 1 РАУНД ОБРАТНОЙ СВЯЗИ (5 000 ₽)        */}
+      {/* ========================================================================= */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        transition={{ duration: 0.5, delay: 0.15 }}
+        className="mt-8 sm:mt-10 max-w-7xl mx-auto p-6 sm:p-8 rounded-3xl bento-card-dark border border-sky-500/30 dark:border-sky-400/25 bg-gradient-to-br from-sky-500/[0.06] via-white/85 to-emerald-500/[0.05] dark:from-sky-500/[0.08] dark:via-[#12161f]/90 dark:to-emerald-500/[0.05] shadow-[0_16px_50px_rgba(14,165,233,0.08)] relative overflow-hidden"
+      >
+        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+          <div className="max-w-3xl">
+            <div className="flex flex-wrap items-center gap-2.5 mb-3">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-bold uppercase bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30">
+                <MessageSquareText className="w-3.5 h-3.5" />
+                Отдельная услуга
+              </span>
+              <span className="text-[11px] font-mono text-slate-600 dark:text-slate-400">
+                Фиксированная цена • промокоды не действуют
+              </span>
+            </div>
+
+            <h3 className="font-editorial text-2xl sm:text-3xl font-bold text-slate-900 dark:text-white mb-2">
+              Базовый курс + 1 раунд обратной связи
+            </h3>
+            <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-doc leading-relaxed mb-4">
+              Оптимальный формат, если хочется идти по материалам самостоятельно, но перед отправкой заявки получить один полноценный раунд личной обратной связи от финалиста SPARK 2026.
+            </p>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 font-doc text-xs sm:text-sm text-slate-700 dark:text-slate-200">
+              <div className="flex items-start gap-2">
+                <Check className="w-4 h-4 text-sky-500 shrink-0 mt-0.5" />
+                <span><b>Полный Базовый курс:</b> все видео-, текстовые и аудиоуроки + закрытый Telegram-канал</span>
+              </div>
+              <div className="flex items-start gap-2">
+                <Check className="w-4 h-4 text-sky-500 shrink-0 mt-0.5" />
+                <span><b>1 раунд личной обратной связи:</b> детальный разбор материалов вашей заявки с конкретными правками</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex flex-col sm:flex-row lg:flex-col items-start sm:items-center lg:items-end justify-between gap-4 pt-4 lg:pt-0 border-t lg:border-t-0 border-sky-500/15 shrink-0 lg:min-w-[260px]">
+            <div className="lg:text-right">
+              {basicFeedbackOldPrice ? (
+                <div className="text-slate-400 line-through text-sm font-mono">
+                  {formatRub(basicFeedbackOldPrice)} ₽
+                </div>
+              ) : null}
+              <div className="text-3xl sm:text-4xl font-black font-mono text-sky-600 dark:text-sky-400 tracking-tight">
+                {formatRub(basicFeedbackPrice)} ₽
+              </div>
+            </div>
+
+            <button
+              type="button"
+              disabled={!basicFeedbackEnabled}
+              onClick={() => {
+                if (!basicFeedbackEnabled) return;
+                trackFunnelStep("pricing_select_tier", { tier: "basic_feedback", price: basicFeedbackPrice });
+                onOpenPayment?.("basic_feedback");
+              }}
+              className="w-full sm:w-auto lg:w-full py-3.5 px-6 rounded-2xl bg-sky-600 hover:bg-sky-700 text-white text-xs sm:text-sm font-mono font-bold flex items-center justify-center gap-2 transition-all active:scale-95 shadow-lg disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-sky-600 whitespace-nowrap"
+            >
+              <span>
+                {basicFeedbackEnabled
+                  ? `Взять за ${formatRub(basicFeedbackPrice)} ₽`
+                  : salesClosed
+                    ? "Продажи закрыты до 2-го этапа"
+                    : "Услуга временно недоступна"}
+              </span>
+              <ArrowUpRight className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </motion.div>
 
       {/* Security & Guarantees Footer Bar */}
       <div className="mt-12 max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 p-5 rounded-2xl bento-card-dark border border-emerald-500/15 dark:border-white/10 text-xs font-mono text-slate-600 dark:text-slate-400">

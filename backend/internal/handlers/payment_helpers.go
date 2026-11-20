@@ -10,10 +10,11 @@ import (
 // Minimum course prices used for fraud checks. Basic with a 5% promo is
 // 3 790.50 ₽, so 3 500 ₽ remains a safe floor for tier purchases.
 const (
-	minBasicPayment       = 3500.00
-	minAcceleratorPayment = 3500.00
-	minVIPPayment         = 13000.00
-	minAuditPayment       = 1500.00
+	minBasicPayment         = 3500.00
+	minBasicFeedbackPayment = 4500.00
+	minAcceleratorPayment   = 3500.00
+	minVIPPayment           = 13000.00
+	minAuditPayment         = 1500.00
 )
 
 func roundAmount(v float64) float64 {
@@ -24,6 +25,8 @@ func normalizePaidTier(tier string) string {
 	switch strings.ToLower(strings.TrimSpace(tier)) {
 	case "basic":
 		return "basic"
+	case "basic_feedback", "basic_plus":
+		return "basic_feedback"
 	case "vip":
 		return "vip"
 	case "accelerator":
@@ -41,6 +44,8 @@ func minimumForTier(tier string) float64 {
 		return minVIPPayment
 	case "audit_essay":
 		return minAuditPayment
+	case "basic_feedback":
+		return minBasicFeedbackPayment
 	case "basic":
 		return minBasicPayment
 	default:

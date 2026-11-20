@@ -352,11 +352,11 @@ func (s *BotService) SubmitWork(chatID telego.ChatID, from *telego.User, rawText
 	}
 
 	userTier := strings.ToLower(strings.TrimSpace(user.Tier))
-	if userTier == "basic" && (!user.HasAuditUpsell || user.AuditCredits <= 0) {
+	if (userTier == "basic" || userTier == "basic_feedback") && (!user.HasAuditUpsell || user.AuditCredits <= 0) {
 		tx.Rollback()
 		text := `ℹ️ <b>В тариф «Базовый» не входит личная проверка куратором</b>
 
-Вы обучаетесь на тарифе «Базовый» с самостоятельным изучением материалов.
+Вы обучаетесь на тарифе «Базовый» с самостоятельным изучением материалов (или уже использовали включённый раунд обратной связи).
 Чтобы получить подробный построчный аудит вашего эссе с комментариями прямо в Google Docs, добавьте разовый аудит или сделайте апгрейд:`
 		kb := tu.InlineKeyboard(
 			tu.InlineKeyboardRow(tu.InlineKeyboardButton("🔍 Добавить аудит эссе (1 900 ₽)").WithCallbackData("pay_upsell_audit")),
@@ -408,7 +408,7 @@ func (s *BotService) SubmitWork(chatID telego.ChatID, from *telego.User, rawText
 	// 4. Conditional credit deduction for Basic. RowsAffected is the guard:
 	// two parallel submissions cannot spend the same last credit twice.
 	creditsNote := ""
-	if userTier == "basic" {
+	if userTier == "basic" || userTier == "basic_feedback" {
 		res := tx.Model(&models.User{}).
 			Where("id = ? AND audit_credits > 0", user.ID).
 			UpdateColumn("audit_credits", gorm.Expr("audit_credits - 1"))

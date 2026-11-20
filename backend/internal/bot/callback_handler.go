@@ -165,6 +165,10 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) error {
 		s.handleSbpPayment(chatID, &query.From, "basic")
 		return nil
 
+	case "pay_yk_basic_feedback", "pay_sbp_basic_feedback":
+		s.handleSbpPayment(chatID, &query.From, "basic_feedback")
+		return nil
+
 	case "pay_yk_accelerator", "pay_sbp_accelerator":
 		s.handleSbpPayment(chatID, &query.From, "accelerator")
 		return nil
@@ -182,12 +186,21 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) error {
 		return nil
 
 	case "upgrade_to_accelerator":
+		// Upgrades stay available for existing students even when Stage 1 sales are closed.
 		pricing := s.getPricing()
-		if !pricing.TierEnabled("accelerator") {
-			s.sendTierUnavailable(chatID, "accelerator", pricing)
-			return nil
+		baseCost := pricing.BasicPrice
+		if query.From.ID != 0 && s.db != nil {
+			var u models.User
+			if err := s.db.Where("telegram_id = ?", query.From.ID).First(&u).Error; err == nil {
+				if strings.ToLower(strings.TrimSpace(u.Tier)) == "basic_feedback" {
+					baseCost = pricing.BasicFeedbackPrice
+					if baseCost <= 0 {
+						baseCost = 5000.0
+					}
+				}
+			}
 		}
-		diff := pricing.AcceleratorPrice - pricing.BasicPrice
+		diff := pricing.AcceleratorPrice - baseCost
 		if diff <= 0 {
 			diff = 2910.0
 		}
@@ -195,17 +208,21 @@ func (s *BotService) HandleCallbackQuery(query *telego.CallbackQuery) error {
 		return nil
 
 	case "upgrade_to_vip":
+		// Upgrades stay available for existing students even when Stage 1 sales are closed.
 		pricing := s.getPricing()
-		if !pricing.TierEnabled("vip") {
-			s.sendTierUnavailable(chatID, "vip", pricing)
-			return nil
-		}
 		diff := pricing.VIPPrice - pricing.AcceleratorPrice
 		if query.From.ID != 0 && s.db != nil {
 			var u models.User
 			if err := s.db.Where("telegram_id = ?", query.From.ID).First(&u).Error; err == nil {
-				if strings.ToLower(strings.TrimSpace(u.Tier)) == "basic" {
+				tier := strings.ToLower(strings.TrimSpace(u.Tier))
+				if tier == "basic" {
 					diff = pricing.VIPPrice - pricing.BasicPrice
+				} else if tier == "basic_feedback" {
+					baseCost := pricing.BasicFeedbackPrice
+					if baseCost <= 0 {
+						baseCost = 5000.0
+					}
+					diff = pricing.VIPPrice - baseCost
 				}
 			}
 		}

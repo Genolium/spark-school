@@ -96,11 +96,15 @@ func tierEnabledForKeyboard(pricing []models.CoursePricing, tier string) bool {
 // PaymentKeyboard returns the checkout keyboard with direct SBP transfer.
 func PaymentKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboardMarkup {
 	basicPrice := 3990
+	basicFeedbackPrice := 5000
 	accPrice := 10900
 	vipPrice := 14900
 	if len(pricing) > 0 {
 		if pricing[0].BasicPrice > 0 {
 			basicPrice = int(pricing[0].BasicPrice)
+		}
+		if pricing[0].BasicFeedbackPrice > 0 {
+			basicFeedbackPrice = int(pricing[0].BasicFeedbackPrice)
 		}
 		if pricing[0].AcceleratorPrice > 0 {
 			accPrice = int(pricing[0].AcceleratorPrice)
@@ -110,10 +114,11 @@ func PaymentKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboardMark
 		}
 	}
 	basicText := fmt.Sprintf("1️⃣ Базовый (%s ₽) — без куратора", formatPriceRub(basicPrice))
+	basicFeedbackText := fmt.Sprintf("✨ Базовый + 1 раунд ОС (%s ₽) — СБП", formatPriceRub(basicFeedbackPrice))
 	accText := fmt.Sprintf("2️⃣ Акселератор (%s ₽) — СБП", formatPriceRub(accPrice))
 	vipText := fmt.Sprintf("3️⃣ VIP (%s ₽) — СБП", formatPriceRub(vipPrice))
 
-	rows := make([][]telego.InlineKeyboardButton, 0, 6)
+	rows := make([][]telego.InlineKeyboardButton, 0, 7)
 	if tierEnabledForKeyboard(pricing, "basic") {
 		rows = append(rows, tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton(basicText).WithCallbackData("pay_sbp_basic"),
@@ -127,6 +132,11 @@ func PaymentKeyboard(pricing ...models.CoursePricing) *telego.InlineKeyboardMark
 	if tierEnabledForKeyboard(pricing, "vip") {
 		rows = append(rows, tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton(vipText).WithCallbackData("pay_sbp_vip"),
+		))
+	}
+	if tierEnabledForKeyboard(pricing, "basic_feedback") {
+		rows = append(rows, tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton(basicFeedbackText).WithCallbackData("pay_sbp_basic_feedback"),
 		))
 	}
 	rows = append(rows,
@@ -161,10 +171,11 @@ func PromoAppliedKeyboard(prices map[string]int, discounted map[string]bool, pri
 	}
 
 	basicText := fmt.Sprintf("1️⃣ Базовый (%s ₽)%s", formatPriceRub(price("basic", 3790)), suffix("basic"))
+	basicFeedbackText := fmt.Sprintf("✨ Базовый + 1 раунд ОС (%s ₽)", formatPriceRub(price("basic_feedback", 5000)))
 	accText := fmt.Sprintf("2️⃣ Акселератор (%s ₽)%s", formatPriceRub(price("accelerator", 10355)), suffix("accelerator"))
 	vipText := fmt.Sprintf("3️⃣ VIP (%s ₽)%s", formatPriceRub(price("vip", 14155)), suffix("vip"))
 
-	rows := make([][]telego.InlineKeyboardButton, 0, 6)
+	rows := make([][]telego.InlineKeyboardButton, 0, 7)
 	if tierEnabledForKeyboard(pricing, "basic") {
 		rows = append(rows, tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton(basicText).WithCallbackData("pay_sbp_basic"),
@@ -178,6 +189,11 @@ func PromoAppliedKeyboard(prices map[string]int, discounted map[string]bool, pri
 	if tierEnabledForKeyboard(pricing, "vip") {
 		rows = append(rows, tu.InlineKeyboardRow(
 			tu.InlineKeyboardButton(vipText).WithCallbackData("pay_sbp_vip"),
+		))
+	}
+	if tierEnabledForKeyboard(pricing, "basic_feedback") {
+		rows = append(rows, tu.InlineKeyboardRow(
+			tu.InlineKeyboardButton(basicFeedbackText).WithCallbackData("pay_sbp_basic_feedback"),
 		))
 	}
 	rows = append(rows,

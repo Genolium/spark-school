@@ -19,7 +19,7 @@ var DB *gorm.DB
 
 // RequiredSchemaVersion is the migration version a process needs before it is
 // considered ready to serve traffic.
-const RequiredSchemaVersion int64 = 28
+const RequiredSchemaVersion int64 = 30
 
 // MigrationVersion returns the latest applied Goose version.
 func MigrationVersion(db *gorm.DB) (int64, error) {
@@ -70,7 +70,7 @@ func ValidateSchema(db *gorm.DB) error {
 		{"payment_transactions", []string{"payment_id", "amount", "status", "promo_code", "visitor_id", "source"}},
 		{"payment_receipts", []string{"amount", "status", "promo_code"}},
 		{"payment_orders", []string{"order_id", "amount", "status", "promo_code", "visitor_id"}},
-		{"course_pricings", []string{"basic_price", "basic_old_price", "accelerator_price", "accelerator_old_price", "vip_price", "vip_old_price", "basic_enabled", "accelerator_enabled", "vip_enabled", "bank_name"}},
+		{"course_pricings", []string{"basic_price", "basic_old_price", "basic_feedback_price", "basic_feedback_old_price", "accelerator_price", "accelerator_old_price", "vip_price", "vip_old_price", "basic_enabled", "basic_feedback_enabled", "accelerator_enabled", "vip_enabled", "sales_close_at", "bank_name"}},
 		{"outbox_events", []string{"event_type", "payload", "status", "last_error"}},
 		{"experiment_assignments", []string{"experiment", "variant", "visitor_id"}},
 		{"bot_sessions", []string{"telegram_id", "state", "price_experiment", "vip_price_experiment"}},

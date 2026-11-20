@@ -470,8 +470,13 @@ func NormalizePromoTiers(raw string) string {
 }
 
 // AppliesToTier reports whether the promo may be used for the given tier.
-// An empty ApplicableTiers means the promo works for every tier.
+// An empty ApplicableTiers means the promo works for every eligible tier.
+// Promo codes are never applicable to the standalone basic_feedback offer.
 func (p PromoCode) AppliesToTier(tier string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(tier))
+	if normalized == "basic_feedback" || normalized == "basic_plus" {
+		return false
+	}
 	if strings.TrimSpace(p.ApplicableTiers) == "" {
 		return true
 	}

@@ -12,7 +12,7 @@ export interface UserProfile {
   role: "student" | "admin";
   has_access: boolean;
   access_granted_at?: string;
-  tier?: "basic" | "accelerator" | "vip";
+  tier?: "basic" | "basic_feedback" | "accelerator" | "vip";
   paid_amount?: number;
   promo_code?: string;
   receipt_status?: "pending" | "approved" | "rejected" | "none" | string;
@@ -140,13 +140,18 @@ export interface PlacesStats {
 export interface CoursePricing {
   basic_price?: number;
   basic_old_price?: number;
+  basic_feedback_price?: number;
+  basic_feedback_old_price?: number;
   accelerator_price: number;
   accelerator_old_price: number;
   vip_price: number;
   vip_old_price: number;
   basic_enabled?: boolean;
+  basic_feedback_enabled?: boolean;
   accelerator_enabled?: boolean;
   vip_enabled?: boolean;
+  sales_close_at?: string | null;
+  sales_closed?: boolean;
   bank_name?: string;
   updated_at?: string;
 }

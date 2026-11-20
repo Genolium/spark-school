@@ -4,6 +4,8 @@ import React, { useState, useEffect } from "react";
 import { Clock, AlertCircle, ArrowUpRight, Flame, ShieldAlert, CheckCircle2 } from "lucide-react";
 import { motion } from "framer-motion";
 
+import { DEFAULT_SALES_CLOSE_AT } from "@/lib/pricing-defaults";
+
 interface TimeLeft {
   days: number;
   hours: number;
@@ -12,12 +14,9 @@ interface TimeLeft {
   isExpired: boolean;
 }
 
-// Deadline: 20 ноября 2026 года в 23:59:59 по Московскому времени (UTC+3)
-const DEADLINE_TARGET = new Date("2026-11-20T23:59:59+03:00").getTime();
-
-function calculateTimeLeft(): TimeLeft {
+function calculateTimeLeft(targetMs: number): TimeLeft {
   const now = new Date().getTime();
-  const difference = DEADLINE_TARGET - now;
+  const difference = targetMs - now;
 
   if (difference <= 0) {
     return {
@@ -42,26 +41,47 @@ interface DeadlineCountdownProps {
   variant?: "banner" | "card" | "hero";
   className?: string;
   onOpenPayment?: () => void;
+  salesCloseAt?: string | null;
+  salesClosed?: boolean;
+  onExpire?: () => void;
 }
 
 export function DeadlineCountdown({
   variant = "card",
   className = "",
   onOpenPayment,
+  salesCloseAt = DEFAULT_SALES_CLOSE_AT,
+  salesClosed = false,
+  onExpire,
 }: DeadlineCountdownProps) {
+  const targetMs = salesCloseAt ? new Date(salesCloseAt).getTime() : NaN;
+  const hasTimer = !Number.isNaN(targetMs);
   const [mounted, setMounted] = useState(false);
-  const [timeLeft, setTimeLeft] = useState<TimeLeft>(calculateTimeLeft());
+  const [timeLeft, setTimeLeft] = useState<TimeLeft>(() =>
+    hasTimer ? calculateTimeLeft(targetMs) : { days: 0, hours: 0, minutes: 0, seconds: 0, isExpired: false }
+  );
 
   useEffect(() => {
     setMounted(true);
-    setTimeLeft(calculateTimeLeft());
+    if (!hasTimer) return;
 
-    const timer = setInterval(() => {
-      setTimeLeft(calculateTimeLeft());
-    }, 1000);
+    const tick = () => {
+      const next = calculateTimeLeft(targetMs);
+      setTimeLeft(next);
+      if (next.isExpired) {
+        onExpire?.();
+      }
+    };
 
+    tick();
+    const timer = setInterval(tick, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [hasTimer, targetMs, onExpire]);
+
+  // If no timer is set and sales are open (e.g., Stage 2 reopened without a timer), hide the banner
+  if (!hasTimer && !salesClosed) {
+    return null;
+  }
 
   // SSR hydration placeholder
   if (!mounted) {
@@ -69,14 +89,14 @@ export function DeadlineCountdown({
       <div className={`p-5 rounded-2xl bento-card-dark border border-emerald-500/20 text-center ${className}`}>
         <div className="flex items-center justify-center gap-2 text-xs font-mono text-emerald-600 dark:text-emerald-400">
           <Clock className="w-4 h-4 animate-spin" />
-          <span>Загрузка таймера дедлайна...</span>
+          <span>Загрузка таймера...</span>
         </div>
       </div>
     );
   }
 
-  // EXPIRED STATE: Приём заявок закрыт
-  if (timeLeft.isExpired) {
+  // EXPIRED / CLOSED STATE: Продажи закрыты до второго этапа
+  if (salesClosed || (hasTimer && timeLeft.isExpired)) {
     return (
       <motion.div
         initial={{ opacity: 0, y: 10 }}
@@ -91,14 +111,13 @@ export function DeadlineCountdown({
             <div>
               <div className="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full text-[11px] font-mono font-bold uppercase tracking-wider bg-rose-500/20 text-rose-700 dark:text-rose-300 border border-rose-500/30 mb-1.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-rose-500" />
-                Приём заявок завершён
+                Пауза между этапами
               </div>
               <h3 className="font-heading text-lg sm:text-xl font-bold text-slate-900 dark:text-white">
-                Подача заявок на грант SPARK 2027 закрыта
+                Продажи закрыты до второго этапа
               </h3>
               <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-doc mt-1 max-w-xl leading-relaxed">
-                Дедлайн приёма документов (20 ноября 23:59 МСК) истёк. Набор в текущий поток завершён.
-                Напишите так называемому Илю в Telegram, чтобы подать заявку в лист ожидания следующего набора.
+                Набор на первый этап завершён. Доступ у всех уже оплативших участников сохраняется, апгрейд тарифа доступен в Telegram-боте. Напишите так называемому Илю, чтобы попасть в лист ожидания второго этапа.
               </p>
             </div>
           </div>
@@ -109,7 +128,7 @@ export function DeadlineCountdown({
             rel="noopener noreferrer"
             className="w-full sm:w-auto px-5 py-3 rounded-2xl bg-rose-600 hover:bg-rose-700 text-white font-mono text-xs font-bold flex items-center justify-center gap-2 transition-transform active:scale-95 shrink-0 shadow-lg"
           >
-            <span>Написать в Telegram</span>
+            <span>Лист ожидания в Telegram</span>
             <ArrowUpRight className="w-4 h-4" />
           </a>
         </div>
@@ -126,7 +145,7 @@ export function DeadlineCountdown({
         <div className="flex items-center gap-2 px-2 text-xs font-mono">
           <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
           <span className="text-amber-300 font-bold uppercase tracking-wider text-[11px]">
-            Дедлайн: 20 ноября 23:59
+            Закрытие продаж: 21 ноября 00:00 МСК
           </span>
         </div>
         <div className="flex items-center gap-1.5 font-mono text-xs sm:text-sm">
@@ -165,11 +184,11 @@ export function DeadlineCountdown({
           </div>
 
           <h3 className="font-heading text-xl sm:text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
-            До закрытия приёма заявок: <span className="text-emerald-700 dark:text-emerald-400 font-extrabold">20 ноября в 23:59</span>
+            До закрытия продаж 1-го этапа: <span className="text-emerald-700 dark:text-emerald-400 font-extrabold">21 ноября в 00:00 МСК</span>
           </h3>
 
           <p className="text-xs sm:text-sm text-slate-600 dark:text-slate-300 font-doc leading-relaxed">
-            После дедлайна регистрация на грантовую программу SPARK 2027 блокируется организаторами. Успей упаковать сильное резюме американского стандарта и победное эссе до окончания таймера.
+            В 00:00 МСК 21 ноября продажи всех тарифов закрываются до старта второго этапа. Успей занять место и упаковать сильную заявку до окончания таймера.
           </p>
         </div>
 

@@ -108,7 +108,7 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
   const [activatePromo, setActivatePromo] = useState("");
   const [activateAmount, setActivateAmount] = useState("10900");
 
-  const [coursePricing, setCoursePricing] = useState({ basic_price: 3333, accelerator_price: 9990, vip_price: 15990 });
+  const [coursePricing, setCoursePricing] = useState({ basic_price: 3333, basic_feedback_price: 5000, accelerator_price: 9990, vip_price: 15990 });
 
   // Issue Receipt modal state
   const [isIssueModalOpen, setIsIssueModalOpen] = useState(false);
@@ -129,9 +129,10 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
     api.getCoursePricing().then((p) => {
       if (p) {
         setCoursePricing({
-          basic_price: p.basic_price || 3990,
-          accelerator_price: p.accelerator_price || 10900,
-          vip_price: p.vip_price || 14900,
+          basic_price: p.basic_price || 3333,
+          basic_feedback_price: p.basic_feedback_price || 5000,
+          accelerator_price: p.accelerator_price || 10990,
+          vip_price: p.vip_price || 19990,
         });
         setActivateAmount(String(p.accelerator_price || 10900));
       }
@@ -738,10 +739,13 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
             {displayList.map((s) => {
               const isVIP = s.tier === "vip";
               const isBasic = s.tier === "basic";
+              const isBasicFeedback = s.tier === "basic_feedback";
               const defaultTierPrice = isVIP
                 ? coursePricing.vip_price
+                : isBasicFeedback
+                ? (coursePricing.basic_feedback_price || 5000)
                 : isBasic
-                ? 3990
+                ? (coursePricing.basic_price || 3333)
                 : coursePricing.accelerator_price;
               const displayAmount = s.paid_amount
                 ? s.paid_amount.toLocaleString("ru-RU") + " ₽"
@@ -799,12 +803,14 @@ export function StudentsTable({ students, onToggleAccess, onRefresh }: StudentsT
                         className={`px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider inline-flex items-center gap-1 ${
                           isVIP
                             ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border border-amber-500/30"
+                            : isBasicFeedback
+                            ? "bg-sky-500/15 text-sky-700 dark:text-sky-300 border border-sky-500/30"
                             : isBasic
                             ? "bg-slate-500/15 text-slate-700 dark:text-slate-300 border border-slate-500/30"
                             : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30"
                         }`}
                       >
-                        {isVIP ? "★ VIP" : isBasic ? "Базовый" : "Акселератор"}
+                        {isVIP ? "★ VIP" : isBasicFeedback ? "Базовый + 1 ОС" : isBasic ? "Базовый" : "Акселератор"}
                       </span>
                       {s.has_audit_upsell && (
                         <span className="px-2 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-tight bg-indigo-500/15 text-indigo-700 dark:text-indigo-400 border border-indigo-500/30">

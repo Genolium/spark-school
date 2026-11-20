@@ -4,6 +4,7 @@ import (
 	"math"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/spark-school/backend/internal/models"
@@ -28,16 +29,20 @@ func (h *PricingHandler) GetPricing(c *gin.Context) {
 
 // UpdatePricingRequest validates payload for changing course pricing.
 type UpdatePricingRequest struct {
-	BasicPrice          float64 `json:"basic_price"`
-	BasicOldPrice       float64 `json:"basic_old_price"`
-	AcceleratorPrice    float64 `json:"accelerator_price" binding:"required"`
-	AcceleratorOldPrice float64 `json:"accelerator_old_price"`
-	VIPPrice            float64 `json:"vip_price" binding:"required"`
-	VIPOldPrice         float64 `json:"vip_old_price"`
-	BasicEnabled        *bool   `json:"basic_enabled"`
-	AcceleratorEnabled  *bool   `json:"accelerator_enabled"`
-	VIPEnabled          *bool   `json:"vip_enabled"`
-	BankName            string  `json:"bank_name"`
+	BasicPrice            float64 `json:"basic_price"`
+	BasicOldPrice         float64 `json:"basic_old_price"`
+	BasicFeedbackPrice    float64 `json:"basic_feedback_price"`
+	BasicFeedbackOldPrice float64 `json:"basic_feedback_old_price"`
+	AcceleratorPrice      float64 `json:"accelerator_price" binding:"required"`
+	AcceleratorOldPrice   float64 `json:"accelerator_old_price"`
+	VIPPrice              float64 `json:"vip_price" binding:"required"`
+	VIPOldPrice           float64 `json:"vip_old_price"`
+	BasicEnabled          *bool   `json:"basic_enabled"`
+	BasicFeedbackEnabled  *bool   `json:"basic_feedback_enabled"`
+	AcceleratorEnabled    *bool   `json:"accelerator_enabled"`
+	VIPEnabled            *bool   `json:"vip_enabled"`
+	SalesCloseAt          *string `json:"sales_close_at"`
+	BankName              string  `json:"bank_name"`
 }
 
 // UpdatePricing updates course pricing in DB (admin only).
@@ -49,8 +54,17 @@ func (h *PricingHandler) UpdatePricing(c *gin.Context) {
 		return
 	}
 
+	existing := models.GetCoursePricing(h.db)
+
 	if req.BasicPrice <= 0 {
 		req.BasicPrice = 3333.00
+	}
+	if req.BasicFeedbackPrice <= 0 {
+		if existing.BasicFeedbackPrice > 0 {
+			req.BasicFeedbackPrice = existing.BasicFeedbackPrice
+		} else {
+			req.BasicFeedbackPrice = 5000.00
+		}
 	}
 
 	if req.AcceleratorPrice <= 0 {
@@ -74,6 +88,9 @@ func (h *PricingHandler) UpdatePricing(c *gin.Context) {
 	if req.BasicOldPrice <= req.BasicPrice {
 		req.BasicOldPrice = math.Round((req.BasicPrice*1.4)/100) * 100
 	}
+	if req.BasicFeedbackOldPrice <= req.BasicFeedbackPrice {
+		req.BasicFeedbackOldPrice = math.Round((req.BasicFeedbackPrice*1.38)/100) * 100
+	}
 	if req.AcceleratorOldPrice <= req.AcceleratorPrice {
 		req.AcceleratorOldPrice = math.Round((req.AcceleratorPrice*1.4)/100) * 100
 	}
@@ -86,10 +103,13 @@ func (h *PricingHandler) UpdatePricing(c *gin.Context) {
 		bankName = "БСПБ (Банк «Санкт-Петербург»)"
 	}
 
-	existing := models.GetCoursePricing(h.db)
 	basicEnabled := existing.BasicEnabled
 	if req.BasicEnabled != nil {
 		basicEnabled = *req.BasicEnabled
+	}
+	basicFeedbackEnabled := existing.BasicFeedbackEnabled
+	if req.BasicFeedbackEnabled != nil {
+		basicFeedbackEnabled = *req.BasicFeedbackEnabled
 	}
 	acceleratorEnabled := existing.AcceleratorEnabled
 	if req.AcceleratorEnabled != nil {
@@ -100,18 +120,40 @@ func (h *PricingHandler) UpdatePricing(c *gin.Context) {
 		vipEnabled = *req.VIPEnabled
 	}
 
+	salesCloseAt := existing.SalesCloseAt
+	salesCloseAtSet := false
+	if req.SalesCloseAt != nil {
+		salesCloseAtSet = true
+		trimmed := strings.TrimSpace(*req.SalesCloseAt)
+		if trimmed == "" {
+			salesCloseAt = nil
+		} else {
+			parsed, err := time.Parse(time.RFC3339, trimmed)
+			if err != nil {
+				c.JSON(http.StatusBadRequest, gin.H{"error": "Неверный формат даты закрытия продаж (ожидается RFC3339)"})
+				return
+			}
+			salesCloseAt = &parsed
+		}
+	}
+
 	newPricing := models.CoursePricing{
-		BasicPrice:          req.BasicPrice,
-		BasicOldPrice:       req.BasicOldPrice,
-		AcceleratorPrice:    req.AcceleratorPrice,
-		AcceleratorOldPrice: req.AcceleratorOldPrice,
-		VIPPrice:            req.VIPPrice,
-		VIPOldPrice:         req.VIPOldPrice,
-		BasicEnabled:        basicEnabled,
-		AcceleratorEnabled:  acceleratorEnabled,
-		VIPEnabled:          vipEnabled,
-		BankName:            bankName,
-		TierFlagsSet:        true,
+		BasicPrice:            req.BasicPrice,
+		BasicOldPrice:         req.BasicOldPrice,
+		BasicFeedbackPrice:    req.BasicFeedbackPrice,
+		BasicFeedbackOldPrice: req.BasicFeedbackOldPrice,
+		AcceleratorPrice:      req.AcceleratorPrice,
+		AcceleratorOldPrice:   req.AcceleratorOldPrice,
+		VIPPrice:              req.VIPPrice,
+		VIPOldPrice:           req.VIPOldPrice,
+		BasicEnabled:          basicEnabled,
+		BasicFeedbackEnabled:  basicFeedbackEnabled,
+		AcceleratorEnabled:    acceleratorEnabled,
+		VIPEnabled:            vipEnabled,
+		SalesCloseAt:          salesCloseAt,
+		SalesCloseAtSet:       salesCloseAtSet,
+		BankName:              bankName,
+		TierFlagsSet:          true,
 	}
 
 	updated, err := models.UpdateCoursePricing(h.db, newPricing)
